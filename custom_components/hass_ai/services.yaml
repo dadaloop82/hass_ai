@@ -1,0 +1,4 @@
+identify_important_entities:
+  name: Identify Important Entities
+  description: "Analyze all entities and mark the most important ones using AI."
+  fields: {}

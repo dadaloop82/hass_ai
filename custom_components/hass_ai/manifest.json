@@ -1,0 +1,13 @@
+{
+  "domain": "hass_ai",
+  "name": "HASS AI",
+  "version": "0.1.0",
+  "documentation": "https://github.com/dadaloop82/hass_ai",
+  "issue_tracker": "https://github.com/dadaloop82/hass_ai/issues",
+  "dependencies": [],
+  "codeowners": ["@dadaloop82"],
+  "requirements": [],
+  "iot_class": "local_polling",
+  "integration_type": "helper",
+  "config_flow": true
+}
