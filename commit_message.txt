@@ -1,1 +1,1 @@
-fix(deps): Loosen google-generativeai requirement to resolve conflict
+fix(deps): Make google-generativeai an optional, on-demand dependency
