@@ -2,9 +2,9 @@
 
 **HASS AI** is a custom integration for Home Assistant that acts as an intelligence layer for your built-in conversation agent (Assist).
 
-It works by first analyzing all your entities to understand their purpose and importance. Then, it provides a service that injects this context into your prompts before sending them to the conversation agent you have already configured in Home Assistant.
+It works by first analyzing all your entities to understand their purpose and importance. Then, it provides a service that injects this context into your prompts before sending them to the conversation agent you have already configured in Home Assistant. **This means it works seamlessly with the agent you already use, whether it's a local model, OpenAI (ChatGPT), or Google Generative AI.**
 
-This allows for more powerful and context-aware commands, regardless of whether you use OpenAI, Google, or another provider.
+This allows for more powerful and context-aware commands, regardless of which AI provider you choose.
 
 ## Features
 
@@ -21,7 +21,7 @@ This allows for more powerful and context-aware commands, regardless of whether 
 
 ## Getting Started
 
-1.  Ensure you have a conversation agent (like OpenAI, Google Generative AI, etc.) configured in Home Assistant under **Settings > Devices & Services > Assist**.
+1.  **Configure a Conversation Agent**: Before you begin, ensure you have a default conversation agent set up in Home Assistant. Go to **Settings > Devices & Services > Assist** and choose your preferred agent (e.g., OpenAI, Google, a local model).
 2.  Install the HASS AI integration via HACS.
 3.  Restart Home Assistant.
 4.  The integration is ready. You can now use the `hass_ai.prompt` service in your automations and scripts.

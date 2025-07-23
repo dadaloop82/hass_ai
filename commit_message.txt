@@ -1,1 +1,1 @@
-fix(deps): Make google-generativeai an optional, on-demand dependency
+refactor(core): Integrate with HA Assist and remove direct dependencies
