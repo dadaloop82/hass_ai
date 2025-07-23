@@ -12,7 +12,6 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         """Handle a flow initialized by the user."""
-        # Check if an entry already exists
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
 

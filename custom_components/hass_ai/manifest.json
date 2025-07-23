@@ -1,11 +1,21 @@
 {
   "domain": "hass_ai",
   "name": "HASS AI",
-  "config_flow": true,
+  "version": "0.4.0",
   "documentation": "https://github.com/dadaloop82/hass-ai",
   "issue_tracker": "https://github.com/dadaloop82/hass-ai/issues",
-  "version": "0.3.0",
   "codeowners": ["@dadaloop82"],
-  "requirements": [],
-  "iot_class": "cloud_poll"
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "frontend_panels": {
+    "hass-ai-panel": {
+      "title": "HASS AI",
+      "url_path": "hass-ai-panel",
+      "icon": "mdi:brain",
+      "require_admin": true,
+      "embed_iframe": false,
+      "module_url": "/local/hass_ai/panel.js"
+    }
+  }
 }
+

@@ -1,1 +1,1 @@
-feat(ux): Improve user feedback on installation and analysis
+feat(core): Implement interactive control panel for entity weights
