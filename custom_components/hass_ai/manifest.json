@@ -3,7 +3,7 @@
   "name": "HASS AI",
   "version": "0.0.1",
   "documentation": "https://github.com/dadaloop82/hass_ai",
-  "requirements": [],
+  "requirements": ["openai>=1.0.0", "google-generativeai>=0.2.0"],
   "dependencies": [],
   "codeowners": ["@dadaloop82"],
   "config_flow": true,

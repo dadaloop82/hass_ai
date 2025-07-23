@@ -1,46 +1,30 @@
-"""Integrazione HASS AI - Selezione intelligente entità tramite Gemini."""
+"""The HASS AI integration."""
+from __future__ import annotations
 
-import logging
-from homeassistant.const import CONF_API_KEY
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-DOMAIN = "hass_ai"
-_LOGGER = logging.getLogger(__name__)
+from .const import DOMAIN
+from .coordinator import HassAiCoordinator
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Setup base (non tramite config flow)."""
-    _LOGGER.info("Inizializzazione HASS AI")
+PLATFORMS: list[str] = []
 
-    # Registriamo un dizionario in hass.data per memorizzare dati/istanze
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up HASS AI from a config entry."""
+    coordinator = HassAiCoordinator(hass, entry)
+    await coordinator.async_config_entry_first_refresh()
+
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Registrazione servizio manuale per avviare analisi entità
-    async def handle_identify_important_entities(call):
-        _LOGGER.info("Richiesta di analisi entità importante ricevuta (placeholder)")
-
-        # Qui collegheremo il client Gemini e logica
-        # Per ora è solo test
-        hass.bus.fire(f"{DOMAIN}_entities_identified", {"important_entities": ["light.living_room", "climate.bedroom"]})
-
-    hass.services.async_register(DOMAIN, "identify_important_entities", handle_identify_important_entities)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
-async def async_setup_entry(hass: HomeAssistant, entry):
-    """Set up hass_ai from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    api_key = entry.data.get(CONF_API_KEY)
-    hass.data[DOMAIN]["api_key"] = api_key
-
-    _LOGGER.info("HASS AI configurato con API key.")
-
-    # TODO: inizializza il client Gemini con api_key qui
-
-    return True
-
-async def async_unload_entry(hass: HomeAssistant, entry):
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    if DOMAIN in hass.data:
-        hass.data.pop(DOMAIN)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id)
 
-    return True
+    return unload_ok
