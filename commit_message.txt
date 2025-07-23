@@ -1,1 +1,1 @@
-feat(frontend): Implement interactive table in control panel
+fix(core): Fix blank panel bug and improve documentation

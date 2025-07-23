@@ -1,7 +1,7 @@
 {
   "domain": "hass_ai",
   "name": "HASS AI",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "documentation": "https://github.com/dadaloop82/hass-ai",
   "issue_tracker": "https://github.com/dadaloop82/hass-ai/issues",
   "codeowners": ["@dadaloop82"],
@@ -14,7 +14,7 @@
       "icon": "mdi:brain",
       "require_admin": true,
       "embed_iframe": false,
-      "module_url": "/local/hass_ai/panel.js"
+      "module_url": "/api/hass_ai/static/panel.js"
     }
   }
 }
