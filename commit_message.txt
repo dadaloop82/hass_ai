@@ -1,1 +1,1 @@
-fix(core): Correct config flow UI and ensure entity analysis runs
+fix(core): Correct Italian translation and fix startup crash (KeyError)

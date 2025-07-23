@@ -62,6 +62,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+from homeassistant.components import persistent_notification
+
 async def _analyze_and_store_entities(hass: HomeAssistant, store: storage.Store) -> None:
     """Analyze all entities and store their importance."""
     _LOGGER.info("Starting entity analysis...")
@@ -78,6 +80,14 @@ async def _analyze_and_store_entities(hass: HomeAssistant, store: storage.Store)
 
     await store.async_save(intelligence_data)
     _LOGGER.info(f"Entity analysis complete. {len(intelligence_data)} entities processed.")
+
+    # Create a persistent notification to confirm completion
+    persistent_notification.async_create(
+        hass,
+        f"HASS AI has completed its analysis of {len(intelligence_data)} entities. You can now use the `hass_ai.prompt` service.",
+        title="HASS AI Analysis Complete",
+        notification_id="hass_ai_analysis_complete",
+    )
 
 
 def _get_entity_importance(state: State) -> dict:

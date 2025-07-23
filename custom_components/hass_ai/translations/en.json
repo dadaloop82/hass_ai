@@ -2,8 +2,8 @@
     "config": {
         "step": {
             "user": {
-                "title": "HASS AI",
-                "description": "This will set up HASS AI to work with your default Assist agent. There is no further configuration needed."
+                "title": "Welcome to HASS AI",
+                "description": "You are about to set up HASS AI. After installation, two things will happen:\n\n1. A background analysis of all your entities will be performed to understand their importance.\n2. Services (e.g., hass_ai.prompt) will become available to interact with your Home Assistant Assist.\n\nNo further configuration is required. Click Submit to continue."
             }
         },
         "abort": {

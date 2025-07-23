@@ -2,8 +2,8 @@
     "config": {
         "step": {
             "user": {
-                "title": "HASS AI",
-                "description": "Questo configurerà HASS AI per funzionare con il tuo agente di conversazione predefinito (Assist). Non è richiesta alcuna configurazione aggiuntiva."
+                "title": "Benvenuto in HASS AI",
+                "description": "Stai per configurare HASS AI. Dopo l'installazione, succederanno due cose:\n\n1. Verrà eseguita un'analisi in background di tutte le tue entità per capirne l'importanza.\n2. Verranno resi disponibili i servizi (es. hass_ai.prompt) per interagire con il tuo assistente Home Assistant.\n\nNon è richiesta alcuna configurazione aggiuntiva. Clicca Invia per continuare."
             }
         },
         "abort": {
