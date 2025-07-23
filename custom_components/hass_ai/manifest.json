@@ -4,7 +4,7 @@
   "config_flow": true,
   "documentation": "https://github.com/dadaloop82/hass-ai",
   "issue_tracker": "https://github.com/dadaloop82/hass-ai/issues",
-  "version": "0.1.1alpha",
+  "version": "0.1.2",
   "codeowners": ["@dadaloop82"],
   "requirements": ["openai>=1.0.0", "google-generativeai>=0.2.0"],
   "iot_class": "cloud_poll"
