@@ -1,22 +1,22 @@
 # HASS AI - Home Assistant Artificial Intelligence
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
-
-Bring the power of Artificial Intelligence to your Home Assistant instance. This integration analyzes your entities, identifies what's important, and provides a foundation for building powerful, context-aware automations.
+**HASS AI** is a custom integration for Home Assistant designed to bring a new level of intelligence to your smart home. It analyzes your entities, understands their purpose, and provides a foundation for smarter, more automated control of your home.
 
 ## Features
 
-- **AI-Powered Entity Analysis**: Automatically identifies important entities and attributes for home automation.
-- **Flexible AI Provider**: Choose between OpenAI (ChatGPT) and Google (Gemini) to power the analysis.
-- **Interactive Configuration**: A user-friendly configuration flow to set up the integration, select entities, and view AI-driven insights.
-- **HACS Compatible**: Easy installation and updates via the Home Assistant Community Store (HACS).
-
-## Getting Started
-
-1.  **Installation**: Add this repository to HACS or manually copy the `custom_components/hass_ai` directory to your Home Assistant configuration.
-2.  **Configuration**: Go to **Settings > Devices & Services**, click **Add Integration**, and search for **HASS AI**.
-3.  **Setup**: Follow the on-screen instructions to select your AI provider, enter your API key, and start the initial entity screening.
+- **Entity Intelligence Analysis**: Automatically scans all your Home Assistant entities and assigns an "importance" score (from 1 to 5) based on their domain, device class, naming, and other properties. This creates a semantic understanding of your home.
+- **Service-Based Analysis**: Trigger the analysis at any time through the `hass_ai.analyze_entities` service call.
+- **Persistent Storage**: The results of the analysis are saved in your Home Assistant storage, creating a persistent "brain" for your smart home.
 
 ## How It Works
 
-The integration fetches all your Home Assistant entities and sends them to the selected AI for analysis. The AI's task is to determine which entities and their specific attributes are most relevant for automation. The results are then stored in the integration's configuration, ready to be used by your automations or other services.
+The core of HASS AI is the `analyze_entities` service. When called, it iterates through all your devices and sensors, applying a dynamic weighting algorithm to determine which entities are most critical for intelligent control. The results, including the score and the reasoning behind it, are stored in a `.storage/hass_ai_intelligence.json` file.
+
+This intelligence layer can then be used as a foundation for more advanced automations, dashboards, and voice control.
+
+## Getting Started
+
+1.  Install the integration.
+2.  Restart Home Assistant.
+3.  Go to **Developer Tools > Services** and call the `hass_ai.analyze_entities` service.
+4.  The intelligence file will be created, and your HASS AI is ready to be used by other components or automations.

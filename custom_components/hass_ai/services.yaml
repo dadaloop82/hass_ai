@@ -1,4 +1,4 @@
-identify_important_entities:
-  name: Identify Important Entities
-  description: "Analyze all entities and mark the most important ones using AI."
+analyze_entities:
+  name: Analyze Entities
+  description: Scans all Home Assistant entities, evaluates their importance for intelligent control, and saves the analysis.
   fields: {}
