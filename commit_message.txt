@@ -1,1 +1,1 @@
-fix(core): Correct Italian translation and fix startup crash (KeyError)
+feat(ux): Improve user feedback on installation and analysis

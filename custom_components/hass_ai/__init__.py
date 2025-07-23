@@ -62,32 +62,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-from homeassistant.components import persistent_notification
+"""The HASS AI integration."""
+from __future__ import annotations
+import logging
 
-async def _analyze_and_store_entities(hass: HomeAssistant, store: storage.Store) -> None:
-    """Analyze all entities and store their importance."""
-    _LOGGER.info("Starting entity analysis...")
-    entity_registry = er.async_get(hass)
-    intelligence_data = {}
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 
-    for state in hass.states.async_all():
-        entity_entry = entity_registry.async_get(state.entity_id)
-        if entity_entry and entity_entry.disabled_by:
-            continue
+from .const import DOMAIN
 
-        importance = _get_entity_importance(state)
-        intelligence_data[state.entity_id] = importance
+_LOGGER = logging.getLogger(__name__)
 
-    await store.async_save(intelligence_data)
-    _LOGGER.info(f"Entity analysis complete. {len(intelligence_data)} entities processed.")
+# Define the platforms that this integration will support
+PLATFORMS: list[str] = ["number", "switch"]
 
-    # Create a persistent notification to confirm completion
-    persistent_notification.async_create(
-        hass,
-        f"HASS AI has completed its analysis of {len(intelligence_data)} entities. You can now use the `hass_ai.prompt` service.",
-        title="HASS AI Analysis Complete",
-        notification_id="hass_ai_analysis_complete",
-    )
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up HASS AI from a config entry."""
+    # Store the config entry so it can be accessed by the platforms
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry
+
+    # Forward the setup to the number and switch platforms
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    # Unload the platforms
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id)
+
+    return unload_ok
+
 
 
 def _get_entity_importance(state: State) -> dict:
