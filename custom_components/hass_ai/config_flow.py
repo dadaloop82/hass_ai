@@ -2,6 +2,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.const import CONF_API_KEY
+from homeassistant.helpers import package
 
 from .const import DOMAIN, AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI, AI_PROVIDERS
 from .options_flow import HassAiOptionsFlowHandler
@@ -21,18 +22,23 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle a flow initialized by the user."""
         errors = {}
         if user_input is not None:
-            # Here you could add API key validation against the selected provider
-            # For now, we just store it.
+            if user_input["ai_provider"] == AI_PROVIDER_GEMINI:
+                if not await package.async_install_package(self.hass, "google-generativeai"):
+                    errors["base"] = "install_failed"
+                    return self.async_show_form(
+                        step_id="user", data_schema=self._get_schema(), errors=errors
+                    )
+
             return self.async_create_entry(
                 title=f"HASS AI ({user_input['ai_provider']})", data=user_input
             )
 
-        # Schema for the user form
-        data_schema = vol.Schema({
+        return self.async_show_form(
+            step_id="user", data_schema=self._get_schema(), errors=errors
+        )
+
+    def _get_schema(self):
+        return vol.Schema({
             vol.Required("ai_provider", default=AI_PROVIDER_OPENAI): vol.In(AI_PROVIDERS),
             vol.Required(CONF_API_KEY): str,
         })
-
-        return self.async_show_form(
-            step_id="user", data_schema=data_schema, errors=errors
-        )
