@@ -27,12 +27,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register the websocket API
     websocket_api.async_register_command(hass, handle_scan_entities)
     websocket_api.async_register_command(hass, handle_save_overrides)
+    websocket_api.async_register_command(hass, handle_load_overrides)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
     hass.data[DOMAIN][entry.entry_id] = {"store": store}
 
     return True
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/load_overrides",
+})
+@websocket_api.async_response
+async def handle_load_overrides(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to load user-defined overrides."""
+    entry_id = next(iter(hass.data[DOMAIN]))
+    store = hass.data[DOMAIN][entry_id]["store"]
+    overrides = await store.async_load() or {}
+    connection.send_message(websocket_api.result_message(msg["id"], overrides))
 
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/scan_entities",

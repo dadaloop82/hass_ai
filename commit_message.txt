@@ -1,1 +1,1 @@
-feat(core): Implement interactive control panel for entity weights
+feat(core): Implement frontend panel and websocket API for real-time scanning
