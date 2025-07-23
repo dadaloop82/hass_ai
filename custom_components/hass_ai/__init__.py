@@ -19,17 +19,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     
     from homeassistant.components import frontend, websocket_api, http
+from homeassistant.components.http import StaticPathConfig
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HASS AI from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
     # Register a static path for the panel to be served from
-    hass.http.register_static_path(
-        f"/api/{DOMAIN}/static",
-        hass.config.path("custom_components", DOMAIN, "www"),
-        cache_headers=False,
-    )
+    await hass.http.async_register_static_paths([
+        http.StaticPathConfig(
+            f"/api/{DOMAIN}/static",
+            hass.config.path("custom_components", DOMAIN, "www"),
+            cache_headers=False
+        )
+    ])
 
     # Register the websocket API
     websocket_api.async_register_command(hass, handle_scan_entities)

@@ -1,1 +1,1 @@
-fix(core): Fix blank panel bug and improve documentation
+fix(frontend): Correctly serve and load panel javascript
