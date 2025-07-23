@@ -1,1 +1,1 @@
-docs: Clarify Assist provider compatibility in README
+fix(core): Correct config flow UI and ensure entity analysis runs

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, State, callback
+from homeassistant.core import HomeAssistant, ServiceCall, State
 from homeassistant.helpers import entity_registry as er, storage
 
 from .const import DOMAIN
@@ -13,25 +13,15 @@ PLATFORMS: list[str] = []
 STORAGE_VERSION = 1
 INTELLIGENCE_STORAGE_KEY = f"{DOMAIN}_intelligence"
 
-
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the HASS AI component."""
-    hass.data.setdefault(DOMAIN, {})
-    
-    async def handle_analyze(call: ServiceCall) -> None:
-        """Service handler to (re)-analyze all entities."""
-        store = hass.data[DOMAIN].get("intelligence_store")
-        if store:
-            await _analyze_and_store_entities(hass, store)
-    
-    hass.services.async_register(DOMAIN, "analyze_entities", handle_analyze)
-    
-    return True
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HASS AI from a config entry."""
+    # Ensure the domain data dict exists
+    hass.data.setdefault(DOMAIN, {})
+    
     intelligence_store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_STORAGE_KEY)
-    hass.data[DOMAIN]["intelligence_store"] = intelligence_store
+    hass.data[DOMAIN][entry.entry_id] = {
+        "intelligence_store": intelligence_store
+    }
 
     # Start initial analysis in the background
     hass.async_create_task(_analyze_and_store_entities(hass, intelligence_store))
@@ -61,8 +51,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await hass.services.async_call(
             "conversation", "process", {"text": context_prompt}, blocking=True
         )
+    
+    async def handle_analyze(call: ServiceCall) -> None:
+        """Service handler to (re)-analyze all entities."""
+        await _analyze_and_store_entities(hass, intelligence_store)
 
     hass.services.async_register(DOMAIN, "prompt", handle_prompt)
+    hass.services.async_register(DOMAIN, "analyze_entities", handle_analyze)
 
     return True
 
@@ -128,5 +123,6 @@ def _get_entity_importance(state: State) -> dict:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     hass.services.async_remove(DOMAIN, "prompt")
-    hass.data.pop(DOMAIN)
+    hass.services.async_remove(DOMAIN, "analyze_entities")
+    hass.data[DOMAIN].pop(entry.entry_id)
     return True

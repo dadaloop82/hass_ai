@@ -2,43 +2,18 @@
     "config": {
         "step": {
             "user": {
-                "title": "HASS AI Setup",
-                "description": "Choose your preferred AI provider and enter the API key.",
-                "data": {
-                    "ai_provider": "AI Provider",
-                    "api_key": "API Key"
-                }
+                "title": "HASS AI",
+                "description": "Questo configurerà HASS AI per funzionare con il tuo agente di conversazione predefinito (Assist). Non è richiesta alcuna configurazione aggiuntiva."
             }
         },
-        "error": {
-            "cannot_connect": "Failed to connect, please check your API key and network.",
-            "invalid_auth": "Invalid authentication, please check your API key."
-        },
         "abort": {
-            "already_configured": "Device is already configured"
+            "already_configured": "HASS AI è già configurato."
         }
     },
     "options": {
         "step": {
             "init": {
-                "title": "HASS AI Options",
-                "menu": {
-                    "screening": "Start Entity Screening",
-                    "reconfigure": "Reconfigure API"
-                }
-            },
-            "reconfigure": {
-                "title": "Reconfigure API",
-                "data": {
-                    "ai_provider": "AI Provider",
-                    "api_key": "API Key"
-                }
-            },
-            "screening": {
-                "title": "Entity Screening",
-                "description": "Found {entities_count} entities. Please select the ones you want the AI to manage. In the next step, the AI will analyze and categorize them.",
-                "data": {
-                }
+                "title": "Opzioni di HASS AI"
             }
         }
     }
