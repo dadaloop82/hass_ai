@@ -18,15 +18,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HASS AI from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
-    # Register the custom panel
-    if DOMAIN not in hass.data.get("frontend_panels", {}):
-        frontend.async_register_built_in_panel(
-            hass, "hass-ai-panel", "HASS AI", "mdi:brain"
-        )
+    # The panel is registered in manifest.json, no need to register it here.
 
     # Register the websocket API
     websocket_api.async_register_command(hass, handle_scan_entities)
     websocket_api.async_register_command(hass, handle_save_overrides)
+    websocket_api.async_register_command(hass, handle_load_overrides)
     websocket_api.async_register_command(hass, handle_load_overrides)
 
     # Store the storage object for later use

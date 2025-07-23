@@ -3,18 +3,11 @@
         "step": {
             "user": {
                 "title": "Benvenuto in HASS AI",
-                "description": "Stai per configurare HASS AI. Dopo l'installazione, succederanno due cose:\n\n1. Verrà eseguita un'analisi in background di tutte le tue entità per capirne l'importanza.\n2. Verranno resi disponibili i servizi (es. hass_ai.prompt) per interagire con il tuo assistente Home Assistant.\n\nNon è richiesta alcuna configurazione aggiuntiva. Clicca Invia per continuare."
+                "description": "Stai per aggiungere il pannello di controllo di HASS AI. Dopo l'installazione, troverai una nuova voce \"HASS AI\" nella barra laterale di Home Assistant.\n\nDa lì, potrai avviare la scansione delle tue entità e insegnare all'IA come funziona la tua casa. Clicca Invia per completare l'installazione."
             }
         },
         "abort": {
             "already_configured": "HASS AI è già configurato."
-        }
-    },
-    "options": {
-        "step": {
-            "init": {
-                "title": "Opzioni di HASS AI"
-            }
         }
     }
 }

@@ -1,1 +1,1 @@
-feat(core): Implement frontend panel and websocket API for real-time scanning
+feat(frontend): Implement interactive table in control panel
