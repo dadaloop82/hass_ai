@@ -1,1 +1,1 @@
-refactor(core): Integrate with HA Assist and remove direct dependencies
+docs: Clarify Assist provider compatibility in README

@@ -9,3 +9,7 @@ prompt:
       example: "Turn off the important lights and lock the doors."
       selector:
         text:
+
+analyze_entities:
+  name: Analyze Entities
+  description: Manually triggers the analysis of all entities to update their importance scores.

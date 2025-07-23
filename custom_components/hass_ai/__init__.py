@@ -5,7 +5,6 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, State, callback
 from homeassistant.helpers import entity_registry as er, storage
-from homeassistant.helpers.service import async_call_from_config
 
 from .const import DOMAIN
 
@@ -15,15 +14,27 @@ STORAGE_VERSION = 1
 INTELLIGENCE_STORAGE_KEY = f"{DOMAIN}_intelligence"
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up HASS AI from a config entry."""
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the HASS AI component."""
     hass.data.setdefault(DOMAIN, {})
     
+    async def handle_analyze(call: ServiceCall) -> None:
+        """Service handler to (re)-analyze all entities."""
+        store = hass.data[DOMAIN].get("intelligence_store")
+        if store:
+            await _analyze_and_store_entities(hass, store)
+    
+    hass.services.async_register(DOMAIN, "analyze_entities", handle_analyze)
+    
+    return True
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up HASS AI from a config entry."""
     intelligence_store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_STORAGE_KEY)
     hass.data[DOMAIN]["intelligence_store"] = intelligence_store
 
-    # Initial analysis of entities
-    await _analyze_and_store_entities(hass, intelligence_store)
+    # Start initial analysis in the background
+    hass.async_create_task(_analyze_and_store_entities(hass, intelligence_store))
 
     async def handle_prompt(call: ServiceCall) -> None:
         """Handle the intelligent prompt service call."""
@@ -33,10 +44,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return
 
         intelligence_data = await intelligence_store.async_load() or {}
-        
-        # Basic context injection
-        # In a real scenario, this would be far more sophisticated, 
-        # potentially using a smaller LLM to select the most relevant entities.
         important_entities = {
             entity_id: data
             for entity_id, data in intelligence_data.items()
@@ -51,12 +58,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         _LOGGER.debug(f"Sending to conversation agent: {context_prompt}")
 
-        # Call the built-in conversation service
         await hass.services.async_call(
-            "conversation",
-            "process",
-            {"text": context_prompt},
-            blocking=True,
+            "conversation", "process", {"text": context_prompt}, blocking=True
         )
 
     hass.services.async_register(DOMAIN, "prompt", handle_prompt)
@@ -84,7 +87,6 @@ async def _analyze_and_store_entities(hass: HomeAssistant, store: storage.Store)
 
 def _get_entity_importance(state: State) -> dict:
     """Calculate the importance of an entity based on its properties."""
-    # This function remains the same as before
     domain = state.domain
     attributes = state.attributes
     entity_id = state.entity_id
