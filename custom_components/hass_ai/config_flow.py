@@ -27,7 +27,11 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_configure(self, user_input=None):
         """Handle the configuration step."""
         data_schema = vol.Schema({
-            vol.Required("scan_interval", default=7): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
+            vol.Required(
+                "scan_interval",
+                default=7,
+                selector={"number": {"min": 1, "max": 30, "unit_of_measurement": "days"}}
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
         })
 
         if user_input is not None:

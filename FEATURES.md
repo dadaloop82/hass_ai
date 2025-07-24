@@ -1,6 +1,6 @@
 # HASS AI Features
 
-## V0.5.7: The Interactive Control Panel & Enhanced Intelligence
+## V0.5.8: The Interactive Control Panel & Enhanced Intelligence
 
 This version introduces the core user experience: a dedicated frontend panel for managing your home's AI model, alongside significant enhancements to the intelligence gathering and presentation.
 
