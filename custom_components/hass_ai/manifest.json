@@ -1,7 +1,7 @@
 {
   "domain": "hass_ai",
   "name": "HASS AI",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "documentation": "https://github.com/dadaloop82/hass-ai",
   "issue_tracker": "https://github.com/dadaloop82/hass-ai/issues",
   "codeowners": ["@dadaloop82"],
