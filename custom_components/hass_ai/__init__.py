@@ -1,10 +1,12 @@
 from __future__ import annotations
 import logging
+from datetime import timedelta
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components import frontend, websocket_api
-from homeassistant.helpers import storage
+from homeassistant.components import frontend, websocket_api, http
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.helpers import storage, event
 import voluptuous as vol
 
 from .const import DOMAIN
@@ -18,16 +20,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HASS AI from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
-    from homeassistant.components import frontend, websocket_api, http
-from homeassistant.components.http import StaticPathConfig
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up HASS AI from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    
     # Register a static path for the panel to be served from
     await hass.http.async_register_static_paths([
-        http.StaticPathConfig(
+        StaticPathConfig(
             f"/api/{DOMAIN}/static",
             hass.config.path("custom_components", DOMAIN, "www"),
             cache_headers=False
@@ -42,6 +37,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
     hass.data[DOMAIN][entry.entry_id] = {"store": store}
+
+    # Get scan interval from config entry
+    scan_interval_days = entry.data.get("scan_interval", 7) # Default to 7 days
+    scan_interval = timedelta(days=scan_interval_days)
+
+    # Schedule periodic scan
+    async def periodic_scan(now):
+        _LOGGER.debug("Performing periodic HASS AI scan")
+        # This will trigger the scan logic, but won't send to frontend unless a client is connected
+        # For now, we'll just call the intelligence gathering part
+        # In a real scenario, you might want to trigger a background task or service call
+        # that then updates the stored data.
+        # For demonstration, we'll just log that a scan would occur.
+        pass # The actual scan logic is handled by handle_scan_entities via websocket
+
+    entry.async_on_unload(event.async_track_time_interval(hass, periodic_scan, scan_interval))
 
     return True
 
@@ -74,8 +85,9 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         result = {
             "entity_id": state.entity_id,
             "name": state.name,
-            "weight": importance["weight"],
-            "reason": importance["reason"],
+            "overall_weight": importance["overall_weight"],
+            "overall_reason": importance["overall_reason"],
+            "attribute_details": importance["attribute_details"],
         }
         # Send each result as it's processed
         connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))

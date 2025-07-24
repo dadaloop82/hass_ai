@@ -1,1 +1,1 @@
-fix(frontend): Correctly serve and load panel javascript
+fix(frontend): Use async_register_static_paths for non-blocking I/O

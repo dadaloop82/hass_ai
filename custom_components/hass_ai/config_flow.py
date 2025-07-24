@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from homeassistant import config_entries
+import voluptuous as vol
 
 from .const import DOMAIN
 
@@ -15,7 +16,11 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
 
-        if user_input is not None:
-            return self.async_create_entry(title="HASS AI", data={})
+        data_schema = vol.Schema({
+            vol.Required("scan_interval", default=7): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
+        })
 
-        return self.async_show_form(step_id="user")
+        if user_input is not None:
+            return self.async_create_entry(title="HASS AI", data=user_input)
+
+        return self.async_show_form(step_id="user", data_schema=data_schema)

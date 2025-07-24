@@ -70,7 +70,7 @@ class HassAiPanel extends LitElement {
     if (!this.overrides[entityId]) {
         this.overrides[entityId] = {};
     }
-    this.overrides[entityId].weight = weight;
+    this.overrides[entityId].overall_weight = weight; // Changed to overall_weight
     this._debouncedSave();
   }
 
@@ -109,6 +109,7 @@ class HassAiPanel extends LitElement {
                 <th>AI Weight</th>
                 <th>Reason</th>
                 <th>Your Weight</th>
+                <th>Attribute Details</th>
               </tr>
             </thead>
             <tbody>
@@ -123,11 +124,11 @@ class HassAiPanel extends LitElement {
                       ></ha-switch>
                     </td>
                     <td>${entity.name}</td>
-                    <td>${entity.weight}</td>
-                    <td>${entity.reason}</td>
+                    <td>${entity.overall_weight}</td>
+                    <td>${entity.overall_reason}</td>
                     <td>
                       <ha-select
-                        .value=${this.overrides[entity.entity_id]?.weight ?? entity.weight}
+                        .value=${this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight}
                         data-entity-id=${entity.entity_id}
                         @selected=${this._handleWeightChange}
                       >
@@ -137,6 +138,15 @@ class HassAiPanel extends LitElement {
                         <mwc-list-item value="4">4</mwc-list-item>
                         <mwc-list-item value="5">5</mwc-list-item>
                       </ha-select>
+                    </td>
+                    <td>
+                      ${Object.entries(entity.attribute_details).map(
+                        ([attr_key, attr_info]) => html`
+                          <div>
+                            <strong>${attr_key}</strong>: Weight ${attr_info.weight} (${attr_info.reason})
+                          </div>
+                        `
+                      )}
                     </td>
                   </tr>
                 `
@@ -162,6 +172,7 @@ class HassAiPanel extends LitElement {
         padding: 8px 12px;
         border-bottom: 1px solid var(--divider-color);
         text-align: left;
+        vertical-align: top; /* Align content to the top */
       }
       th {
         font-weight: bold;
