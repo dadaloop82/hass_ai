@@ -25,8 +25,25 @@ Once tuned, this refined intelligence model can be leveraged by other automation
 
 ## Getting Started
 
-1.  Install the HASS AI integration via HACS and restart Home Assistant.
-2.  Add the "HASS AI" integration from the **Settings > Devices & Services** page. This will guide you through the initial setup, including selecting your preferred AI provider and entering any necessary API keys.
-3.  A new **HASS AI** item will appear in your sidebar. Click it to open the control panel.
-4.  Click the **"Start New Scan"** button within the panel to perform the initial analysis of your entities. Observe the real-time feedback on the scanning process and the insights gained.
-5.  Customize the weights and enable/disable entities and their properties to fit your needs and preferences. Your changes will be saved automatically.
+### Step 1: Installation
+
+1.  Install the HASS AI integration via HACS (Home Assistant Community Store).
+2.  Restart Home Assistant to ensure all components are loaded correctly.
+
+### Step 2: Initial Configuration
+
+1.  Go to **Settings > Devices & Services** in Home Assistant.
+2.  Click on **"Add Integration"** and search for "HASS AI".
+3.  Follow the on-screen prompts. During this process, you will be asked to configure the **Scan Interval**.
+    *   **Scan Interval**: This setting determines how frequently (in days) HASS AI will automatically perform a background scan of your entities to update its intelligence model. A value of `7` means it will scan once a week. You can set this between `1` and `30` days.
+
+### Step 3: Accessing the HASS AI Panel
+
+1.  After successful configuration, a new **HASS AI** item will automatically appear in your Home Assistant sidebar.
+2.  Click on this item to open the HASS AI control panel.
+
+### Step 4: Performing an Initial Scan and Tuning
+
+1.  Within the HASS AI panel, click the **"Start New Scan"** button to perform an immediate analysis of your entities.
+2.  Observe the real-time feedback as the system scans and populates the table with insights.
+3.  Customize the weights and enable/disable entities and their properties directly within the panel to fit your specific needs and preferences. Your changes will be saved automatically.
