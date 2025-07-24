@@ -17,7 +17,7 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
 
         data_schema = vol.Schema({
-            vol.Required("scan_interval", default=7, description_key="options::scan_interval::description"): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
+            vol.Required("scan_interval", default=7): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
         })
 
         if user_input is not None:
