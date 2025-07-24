@@ -3,11 +3,18 @@
         "step": {
             "user": {
                 "title": "Benvenuto in HASS AI",
-                "description": "Stai per aggiungere l'integrazione HASS AI, che creerà un pannello di controllo dedicato nella barra laterale di Home Assistant.\n\nDa questo pannello potrai avviare la scansione delle tue entità e insegnare all'IA come funziona la tua casa. Clicca Invia per completare l'installazione."
+                "description": "{description_start}\n\n{description_end}",
+                "description_start": "Stai per aggiungere l'integrazione HASS AI, che creerà un pannello di controllo dedicato nella barra laterale di Home Assistant.",
+                "description_end": "Da questo pannello potrai avviare la scansione delle tue entità e insegnare all'IA come funziona la tua casa. Clicca Invia per completare l'installazione."
             }
         },
         "abort": {
             "already_configured": "HASS AI è già configurato."
+        }
+    },
+    "options": {
+        "scan_interval": {
+            "description": "Frequenza delle scansioni delle entità in giorni (1-30)."
         }
     }
 }

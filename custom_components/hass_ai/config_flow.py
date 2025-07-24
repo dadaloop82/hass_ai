@@ -17,10 +17,17 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
 
         data_schema = vol.Schema({
-            vol.Required("scan_interval", default=7, description="Frequency of entity scans in days (1-30)."): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
+            vol.Required("scan_interval", default=7, description_key="options::scan_interval::description"): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
         })
 
         if user_input is not None:
             return self.async_create_entry(title="HASS AI", data=user_input)
 
-        return self.async_show_form(step_id="user", data_schema=data_schema)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            description_placeholders={
+                "description_start": "config::step::user::description_start",
+                "description_end": "config::step::user::description_end",
+            }
+        )
