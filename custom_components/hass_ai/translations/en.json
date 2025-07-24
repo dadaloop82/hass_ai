@@ -3,9 +3,11 @@
         "step": {
             "user": {
                 "title": "Welcome to HASS AI",
-                "description": "{description_start}\n\n{description_end}",
-                "description_start": "You are about to add the HASS AI control panel. After installation, you will find a new \"HASS AI\" item in your Home Assistant sidebar.",
-                "description_end": "From there, you can initiate the scan of your entities and teach the AI how your home works. Click Submit to complete the installation."
+                "description": "You are about to add the HASS AI control panel. After installation, you will find a new \"HASS AI\" item in your Home Assistant sidebar.\n\nFrom there, you can initiate the scan of your entities and teach the AI how your home works. Click Submit to complete the installation."
+            },
+            "configure": {
+                "title": "Configure HASS AI",
+                "description": "Set the frequency for automatic entity scans."
             }
         },
         "abort": {
