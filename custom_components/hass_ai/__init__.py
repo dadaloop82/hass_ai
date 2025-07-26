@@ -11,7 +11,7 @@ from homeassistant.helpers import storage, event
 import voluptuous as vol
 
 from .const import DOMAIN
-from .intelligence import get_entities_importance
+from .intelligence import get_entities_importance_batched
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -97,7 +97,7 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
     filtered_states = [state for state in all_states if not (state.domain == DOMAIN or state.entity_id.startswith(f"{DOMAIN}."))]
 
     # Get importance for all entities in a single AI call
-    importance_results = await get_entities_importance(hass, filtered_states)
+    importance_results = await get_entities_importance_batched(hass, filtered_states)
 
     # Send each result as it's processed
     for result in importance_results:

@@ -1,1 +1,1 @@
-fix: correct JSON syntax error in en.json
+feat: implement single prompt for AI, improve log UI, and localize LLM warning
