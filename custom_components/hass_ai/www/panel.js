@@ -178,17 +178,17 @@ class HassAiPanel extends LitElement {
     `;
   }
 
-  renderLog() {
-    return html`
-      ${Object.values(this.entities).map(entity => html`
-        <div class="log-entry">
-          <strong>${this.hass.localize('component.hass_ai.panel.ai_log_entity')}: ${entity.entity_id}</strong>
-          <pre>${this.hass.localize('component.hass_ai.panel.ai_log_prompt')}: ${entity.prompt}</pre>
-          <pre>${this.hass.localize('component.hass_ai.panel.ai_log_response')}: ${entity.response_text}</pre>
-        </div>
-      `)}
-    `;
-  }
+ renderLog() {
+  return html`
+    ${Object.values(this.entities).map(entity => html`
+      <div class="log-entry">
+        <strong>${this.hass.localize('component.hass_ai.panel.ai_log_entity')}: ${entity.entity_id}</strong>
+        <pre>${this.hass.localize('component.hass_ai.panel.ai_log_prompt')}: ${entity.prompt}</pre>
+        <pre>${this.hass.localize('component.hass_ai.panel.ai_log_response')}: ${entity.response_text}</pre>
+      </div>
+    `)}
+  `;
+}
 
   static get styles() {
     return css`
