@@ -1,1 +1,1 @@
-fix: definitively correct conversation agent check with user-provided code
+fix: use conversation_agent_manager to correctly identify the default agent
