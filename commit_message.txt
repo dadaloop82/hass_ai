@@ -1,1 +1,1 @@
-refactor: remove panel registration from __init__.py
+fix: remove panel removal logic from __init__.py

@@ -114,5 +114,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     # Clean up
     hass.data[DOMAIN].pop(entry.entry_id)
-    frontend.async_remove_panel(hass, "hass-ai-panel")
     return True
