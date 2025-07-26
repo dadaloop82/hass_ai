@@ -29,19 +29,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
     ])
 
-    # Register the panel
-    frontend.async_register_panel(
-        hass,
-        "hass-ai-panel",
-        "hass_ai",
-        "HASS AI",
-        "mdi:brain",
-        require_admin=True,
-        embed_iframe=False,
-        url_path="hass-ai-panel",
-        module_url=f"/api/{DOMAIN}/static/panel.js",
-    )
-
     # Register the websocket API
     websocket_api.async_register_command(hass, handle_scan_entities)
     websocket_api.async_register_command(hass, handle_save_overrides)

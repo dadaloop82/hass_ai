@@ -1,1 +1,1 @@
-fix(frontend): Use async_register_static_paths for non-blocking I/O
+refactor: remove panel registration from __init__.py
