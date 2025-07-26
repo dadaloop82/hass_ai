@@ -19,6 +19,15 @@ INTELLIGENCE_DATA_KEY = f"{DOMAIN}_intelligence_data"
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HASS AI from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+
+    frontend.async_register_panel(
+        hass,
+        "hass-ai-panel",
+        "hass_ai",
+        "HASS AI",
+        "mdi:brain",
+        require_admin=True,
+    )
     
     # Register a static path for the panel to be served from
     await hass.http.async_register_static_paths([
@@ -114,4 +123,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     # Clean up
     hass.data[DOMAIN].pop(entry.entry_id)
+    frontend.async_remove_panel(hass, "hass-ai-panel")
     return True
