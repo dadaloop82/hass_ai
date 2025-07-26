@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components import frontend, websocket_api, http
 from homeassistant.components.http import StaticPathConfig
@@ -15,19 +15,36 @@ from .intelligence import get_entity_importance
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 INTELLIGENCE_DATA_KEY = f"{DOMAIN}_intelligence_data"
+PANEL_URL_PATH = "hass-ai-panel"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HASS AI from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    
-    # Register a static path for the panel to be served from
-    await hass.http.async_register_static_paths([
-        StaticPathConfig(
-            f"/api/{DOMAIN}/static",
-            hass.config.path("custom_components", DOMAIN, "www"),
-            cache_headers=False
-        )
-    ])
+
+    # Register the static path for the panel
+    hass.http.async_register_static_path(
+        f"/api/{DOMAIN}/static",
+        hass.config.path("custom_components", DOMAIN, "www"),
+        cache_headers=False
+    )
+
+    # Register the custom panel
+    frontend.async_register_built_in_panel(
+        hass,
+        component_name="custom",
+        sidebar_title="HASS AI",
+        sidebar_icon="mdi:brain",
+        frontend_url_path=PANEL_URL_PATH,
+        config={
+            "_panel_custom": {
+                "name": "hass-ai-panel",
+                "embed_iframe": False,
+                "trust_external": False,
+                "js_url": f"/api/{DOMAIN}/static/panel.js",
+            }
+        },
+        require_admin=True,
+    )
 
     # Register the websocket API
     websocket_api.async_register_command(hass, handle_scan_entities)
@@ -39,18 +56,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {"store": store}
 
     # Get scan interval from config entry
-    scan_interval_days = entry.data.get("scan_interval", 7) # Default to 7 days
+    scan_interval_days = entry.data.get("scan_interval", 7)
     scan_interval = timedelta(days=scan_interval_days)
 
     # Schedule periodic scan
     async def periodic_scan(now):
         _LOGGER.debug("Performing periodic HASS AI scan")
-        # This will trigger the scan logic, but won't send to frontend unless a client is connected
-        # For now, we'll just call the intelligence gathering part
-        # In a real scenario, you might want to trigger a background task or service call
-        # that then updates the stored data.
-        # For demonstration, we'll just log that a scan would occur.
-        pass # The actual scan logic is handled by handle_scan_entities via websocket
+        pass
 
     entry.async_on_unload(event.async_track_time_interval(hass, periodic_scan, scan_interval))
 
@@ -73,7 +85,6 @@ async def handle_load_overrides(hass: HomeAssistant, connection: websocket_api.A
 @websocket_api.async_response
 async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to scan entities and send results back in real-time."""
-    
     connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
 
     all_states = hass.states.async_all()
@@ -89,7 +100,6 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
             "overall_reason": importance["overall_reason"],
             "attribute_details": importance["attribute_details"],
         }
-        # Send each result as it's processed
         connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
         
     connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_complete"}))
@@ -101,7 +111,6 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
 @websocket_api.async_response
 async def handle_save_overrides(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to save user-defined overrides."""
-    # Find the active config entry to get the store object
     entry_id = next(iter(hass.data[DOMAIN]))
     store = hass.data[DOMAIN][entry_id]["store"]
     
@@ -109,9 +118,8 @@ async def handle_save_overrides(hass: HomeAssistant, connection: websocket_api.A
     
     connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
 
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Clean up
+    frontend.async_remove_panel(hass, PANEL_URL_PATH)
     hass.data[DOMAIN].pop(entry.entry_id)
     return True
