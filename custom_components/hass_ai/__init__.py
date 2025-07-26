@@ -76,12 +76,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 })
 @websocket_api.async_response
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Handle the command to check if using default conversation agent."""
+    """Handle the command to check the default conversation agent."""
     try:
-        # L'agente corrente non è più esposto direttamente, quindi assumiamo 'homeassistant' se non diversamente impostato
-        agent = hass.data.get("conversation_agent")
-        agent_id = getattr(agent, "id", None) if agent else None
-        is_default_agent = agent_id in (None, "homeassistant")
+        agent = await conversation.async_get_default_agent(hass)
+        agent_id = agent.id if agent else "homeassistant"
+        is_default_agent = agent_id == "homeassistant"
 
         connection.send_message(
             websocket_api.result_message(msg["id"], {
