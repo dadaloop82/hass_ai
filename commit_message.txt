@@ -1,1 +1,1 @@
-feat: integrate with Home Assistant's conversation AI for entity analysis
+feat: add check for default conversation agent

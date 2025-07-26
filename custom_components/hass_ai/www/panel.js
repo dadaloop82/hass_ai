@@ -37,6 +37,15 @@ class HassAiPanel extends LitElement {
   async _runScan() {
     this.loading = true;
     this.entities = {};
+
+    const agentCheck = await this.hass.callWS({ type: "hass_ai/check_agent" });
+    if (agentCheck.is_default_agent) {
+        this.loading = false;
+        alert(this.language === 'it' 
+            ? "L'agente di conversazione predefinito non è un LLM. Per favore, imposta un agente come Google Gemini o ChatGPT per usare questa funzione."
+            : "The default conversation agent is not an LLM. Please set an agent like Google Gemini or ChatGPT to use this feature.");
+        return;
+    }
     
     await this.hass.connection.subscribeMessage(
       (message) => this._handleScanUpdate(message),

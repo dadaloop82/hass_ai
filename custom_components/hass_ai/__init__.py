@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components import frontend, websocket_api, http
+from homeassistant.components import frontend, websocket_api, http, conversation
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.helpers import storage, event
 import voluptuous as vol
@@ -52,6 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_scan_entities)
     websocket_api.async_register_command(hass, handle_save_overrides)
     websocket_api.async_register_command(hass, handle_load_overrides)
+    websocket_api.async_register_command(hass, handle_check_agent)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -69,6 +70,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(event.async_track_time_interval(hass, periodic_scan, scan_interval))
 
     return True
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/check_agent",
+})
+@websocket_api.async_response
+async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to check the default conversation agent."""
+    agent_id = conversation.get_default_agent(hass)
+    is_default_agent = agent_id == "homeassistant"
+    connection.send_message(websocket_api.result_message(msg["id"], {"is_default_agent": is_default_agent}))
 
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/load_overrides",
