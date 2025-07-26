@@ -1,1 +1,1 @@
-fix: correct javascript module loading
+fix: resolve deprecation warning in config flow and improve intro text
