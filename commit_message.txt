@@ -1,1 +1,1 @@
-feat: improve agent check and error handling in frontend
+feat: implement robust, whitelist-based agent check

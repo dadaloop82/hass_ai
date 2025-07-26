@@ -76,16 +76,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 })
 @websocket_api.async_response
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Check if the Home Assistant default conversation agent is active."""
+    """Check if the current conversation agent is a supported LLM."""
     try:
-        manager = hass.data["conversation_agent_manager"]
+        manager = hass.data.get("conversation_agent_manager")
+        if not manager:
+            raise ValueError("conversation_agent_manager not found")
+
         agent = await manager.async_get_agent()
-        agent_id = agent.id if agent else "homeassistant"
+        if not agent:
+            raise ValueError("No active agent found")
+
+        agent_id = getattr(agent, "id", "unknown")
         is_default_agent = agent_id == "homeassistant"
+
+        # Puoi estendere questa lista a piacere
+        supported_llms = ("google_gemini", "chatgpt", "openai", "local_llm")
+
+        is_supported_llm = any(llm in agent_id.lower() for llm in supported_llms)
 
         connection.send_message(websocket_api.result_message(msg["id"], {
             "is_default_agent": is_default_agent,
             "agent_id": agent_id,
+            "is_supported_llm": is_supported_llm,
         }))
     except Exception as e:
         _LOGGER.exception("Error checking conversation agent")
