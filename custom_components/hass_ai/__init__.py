@@ -76,15 +76,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 })
 @websocket_api.async_response
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Check if the current conversation agent is the default one (homeassistant)."""
+    """Check if the Home Assistant default conversation agent is active."""
     try:
-        agent = await conversation.async_get_agent(hass)
-        agent_id = getattr(agent, "id", "unknown")
-        is_default_agent = agent_id == "homeassistant"
+        # Verifica se l'agente corrente è quello predefinito
+        agent_id = None
+        if "conversation_agent" in hass.data:
+            agent = hass.data["conversation_agent"]
+            agent_id = getattr(agent, "id", None)
+
+        is_default_agent = agent_id in (None, "homeassistant")
 
         connection.send_message(websocket_api.result_message(msg["id"], {
             "is_default_agent": is_default_agent,
-            "agent_id": agent_id,
+            "agent_id": agent_id or "homeassistant",
         }))
     except Exception as e:
         _LOGGER.exception("Error checking conversation agent")
