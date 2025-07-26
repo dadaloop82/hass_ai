@@ -36,35 +36,14 @@ class HassAiPanel extends LitElement {
   }
 
   async _runScan() {
-  this.loading = true;
-  this.entities = {};
+    this.loading = true;
+    this.entities = {};
 
-  let agentCheck;
-  try {
-    agentCheck = await this.hass.callWS({ type: "hass_ai/check_agent" });
-    this.agentInfo = agentCheck;  // salva l'informazione qui
-  } catch (e) {
-    this.loading = false;
-    alert(this.language === 'it'
-      ? "Errore nel controllare l'agente di conversazione."
-      : "Error checking conversation agent.");
-    return;
+    await this.hass.connection.subscribeMessage(
+      (message) => this._handleScanUpdate(message),
+      { type: "hass_ai/scan_entities" }
+    );
   }
-
-  if (!agentCheck.is_supported_llm) {
-    this.loading = false;
-    const supported_keywords = ["google", "gemini", "chatgpt", "openai"];
-    alert(this.language === 'it'
-      ? `L'agente di conversazione attivo non è un LLM supportato. Imposta un agente che contenga una delle seguenti parole chiave: ${supported_keywords.join(', ')}`
-      : `The active conversation agent is not a supported LLM. Please set an agent that contains one of the following keywords: ${supported_keywords.join(', ')}`);
-    return;
-  }
-
-  await this.hass.connection.subscribeMessage(
-    (message) => this._handleScanUpdate(message),
-    { type: "hass_ai/scan_entities" }
-  );
-}
 
 
   _handleScanUpdate(message) {
@@ -138,15 +117,13 @@ class HassAiPanel extends LitElement {
 
     return html`
       <ha-card .header=${t.title}>
-         ${this.agentInfo ? html`
-          <p><strong>Agente rilevato:</strong> ${this.agentInfo.agent_id || "N/D"}</p>
-          <p><strong>Supportato:</strong> ${this.agentInfo.is_supported_llm ? "Sì" : "No"}</p>
-        ` : ""}
-
-        <mwc-button raised @click=${this._runScan} .disabled=${this.loading}>
-          ${this.loading ? t.scanning_button : t.scan_button}
-        </mwc-button>
-      </div>
+        <div class="card-content">
+          <p>${t.description}</p>
+          <p class="warning-message">${this.language === 'it' ? 'Questo sistema funziona solo con Large Language Models (LLM) come Google Gemini o OpenAI ChatGPT. Assicurati che il tuo agente di conversazione predefinito sia configurato correttamente.' : 'This system only works with Large Language Models (LLMs) like Google Gemini or OpenAI ChatGPT. Please ensure your default conversation agent is configured correctly.'}</p>
+          <mwc-button raised @click=${this._runScan} .disabled=${this.loading}>
+            ${this.loading ? t.scanning_button : t.scan_button}
+          </mwc-button>
+        </div>
 
         <div class="table-container">
           <table>

@@ -1,1 +1,1 @@
-feat: display active agent info in the panel UI
+feat: remove dynamic agent check and add static LLM requirement warning
