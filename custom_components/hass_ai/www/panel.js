@@ -51,9 +51,10 @@ class HassAiPanel extends LitElement {
 
     if (!agentCheck.is_supported_llm) {
       this.loading = false;
+      const supported_keywords = ["google", "gemini", "chatgpt", "openai"];
       alert(this.language === 'it'
-        ? "L'agente di conversazione attivo non è un LLM supportato. Imposta Gemini, ChatGPT o simili per usare questa funzione."
-        : "The active conversation agent is not a supported LLM. Please set Gemini, ChatGPT, or a similar agent to use this feature.");
+        ? `L'agente di conversazione attivo non è un LLM supportato. Imposta un agente che contenga una delle seguenti parole chiave: ${supported_keywords.join(', ')}`
+        : `The active conversation agent is not a supported LLM. Please set an agent that contains one of the following keywords: ${supported_keywords.join(', ')}`);
       return;
     }
 

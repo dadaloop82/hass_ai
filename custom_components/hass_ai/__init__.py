@@ -92,9 +92,9 @@ async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.Acti
         agent_id = getattr(agent, "id", "unknown")
         is_default_agent = agent_id == "homeassistant"
 
-        agent_id_clean = agent_id.lower().replace("-", "_").replace(" ", "")
-        supported_llms = ["google_gemini", "chatgpt", "openai", "local_llm"]
-        is_supported_llm = any(llm in agent_id_clean for llm in supported_llms)
+        agent_id_clean = agent_id.lower()
+        supported_keywords = ["google", "gemini", "chatgpt", "openai"]
+        is_supported_llm = any(keyword in agent_id_clean for keyword in supported_keywords)
 
         connection.send_message(websocket_api.result_message(msg["id"], {
             "is_default_agent": is_default_agent,
@@ -106,7 +106,7 @@ async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.Acti
         connection.send_message(
             websocket_api.error_message(msg["id"], "agent_error", str(e))
         )
-        
+
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/load_overrides",
 })

@@ -1,1 +1,1 @@
-fix: correct usage of async_get_agent in agent check
+feat: improve agent check and error messages
