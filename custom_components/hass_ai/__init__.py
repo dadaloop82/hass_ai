@@ -94,13 +94,12 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         if state.domain == DOMAIN or state.entity_id.startswith(f"{DOMAIN}."):
             continue
         
-        importance = get_entity_importance(state)
+        importance = await get_entity_importance(hass, state)
         result = {
             "entity_id": state.entity_id,
             "name": state.name,
             "overall_weight": importance["overall_weight"],
             "overall_reason": importance["overall_reason"],
-            "attribute_details": importance["attribute_details"],
         }
         connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
         

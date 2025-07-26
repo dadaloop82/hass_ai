@@ -97,10 +97,9 @@ class HassAiPanel extends LitElement {
         enabled: "Abilitato",
         entity: "Entità",
         ai_weight: "Peso IA",
-        reason: "Motivazione",
+        reason: "Motivazione AI",
         your_weight: "Tuo Peso",
-        weight_legend: "(1=Basso, 5=Critico)",
-        attribute_details: "Dettagli Attributi"
+        weight_legend: "(0=Ignora, 5=Essenziale)",
     } : {
         title: "HASS AI Control Panel",
         description: "Analyze your entities, teach the AI, and customize weights to optimize your smart home.",
@@ -109,10 +108,9 @@ class HassAiPanel extends LitElement {
         enabled: "Enabled",
         entity: "Entity",
         ai_weight: "AI Weight",
-        reason: "Reason",
+        reason: "AI Reason",
         your_weight: "Your Weight",
-        weight_legend: "(1=Low, 5=Critical)",
-        attribute_details: "Attribute Details"
+        weight_legend: "(0=Ignore, 5=Essential)",
     };
 
     return html`
@@ -133,7 +131,6 @@ class HassAiPanel extends LitElement {
                 <th>${t.ai_weight}</th>
                 <th>${t.reason}</th>
                 <th>${t.your_weight} <span class="legend">${t.weight_legend}</span></th>
-                <th>${t.attribute_details}</th>
               </tr>
             </thead>
             <tbody>
@@ -156,17 +153,8 @@ class HassAiPanel extends LitElement {
                         data-entity-id=${entity.entity_id}
                         @selected=${this._handleWeightChange}
                       >
-                        ${[1,2,3,4,5].map(i => html`<mwc-list-item .value=${i}>${i}</mwc-list-item>`)}
+                        ${[0,1,2,3,4,5].map(i => html`<mwc-list-item .value=${i}>${i}</mwc-list-item>`)}
                       </ha-select>
-                    </td>
-                    <td>
-                      ${Object.entries(entity.attribute_details).map(
-                        ([attr_key, attr_info]) => attr_info.weight > 1 ? html`
-                          <div>
-                            <strong>${attr_key}</strong>: ${attr_info.reason} (+${attr_info.weight - 1})
-                          </div>
-                        ` : ''
-                      )}
                     </td>
                   </tr>
                 `

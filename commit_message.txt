@@ -1,1 +1,1 @@
-fix: resolve deprecation warning in config flow and improve intro text
+feat: integrate with Home Assistant's conversation AI for entity analysis
