@@ -1,1 +1,1 @@
-fix: use correct async_get_default_agent API call
+fix: implement more robust conversation agent check
