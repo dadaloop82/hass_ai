@@ -26,3 +26,4 @@
     "panel": {
         "llm_warning": "This system only works with Large Language Models (LLMs) like Google Gemini or OpenAI ChatGPT. Please ensure your default conversation agent is configured correctly."
     }
+}
