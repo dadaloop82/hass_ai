@@ -11,7 +11,7 @@ from homeassistant.helpers import storage, event
 import voluptuous as vol
 
 from .const import DOMAIN
-from .intelligence import get_entity_importance
+from .intelligence import get_entities_importance
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -92,27 +92,18 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
     connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
 
     all_states = hass.states.async_all()
-    for state in all_states:
-        if state.domain == DOMAIN or state.entity_id.startswith(f"{DOMAIN}."):
-            continue
+    
+    # Filter out hass_ai entities
+    filtered_states = [state for state in all_states if not (state.domain == DOMAIN or state.entity_id.startswith(f"{DOMAIN}."))]
 
-        importance = await get_entity_importance(hass, state)
-        result = {
-            "entity_id": state.entity_id,
-            "name": state.name,
-            "overall_weight": importance["overall_weight"],
-            "overall_reason": importance["overall_reason"],
-            "prompt": importance.get("prompt"),
-            "response_text": importance.get("response_text"),
-        }
-        connection.send_message(websocket_api.event_message(msg["id"], {
-            "type": "entity_result",
-            "result": result
-        }))
+    # Get importance for all entities in a single AI call
+    importance_results = await get_entities_importance(hass, filtered_states)
 
-    connection.send_message(websocket_api.event_message(msg["id"], {
-        "type": "scan_complete"
-    }))
+    # Send each result as it's processed
+    for result in importance_results:
+        connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
+        
+    connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_complete"}))
 
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/save_overrides",

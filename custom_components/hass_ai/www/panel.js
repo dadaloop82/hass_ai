@@ -119,7 +119,7 @@ class HassAiPanel extends LitElement {
       <ha-card .header=${t.title}>
         <div class="card-content">
           <p>${t.description}</p>
-          <p class="warning-message">${this.language === 'it' ? 'Questo sistema funziona solo con Large Language Models (LLM) come Google Gemini o OpenAI ChatGPT. Assicurati che il tuo agente di conversazione predefinito sia configurato correttamente.' : 'This system only works with Large Language Models (LLMs) like Google Gemini or OpenAI ChatGPT. Please ensure your default conversation agent is configured correctly.'}</p>
+          <p class="warning-message">${this.hass.localize('component.hass_ai.panel.llm_warning')}</p>
           <mwc-button raised @click=${this._runScan} .disabled=${this.loading}>
             ${this.loading ? t.scanning_button : t.scan_button}
           </mwc-button>
@@ -168,7 +168,7 @@ class HassAiPanel extends LitElement {
       </ha-card>
 
       <ha-card header="AI Communication Log">
-        <div class="card-content">
+        <div class="card-content log-scroll-container">
           ${this.renderLog()}
         </div>
       </ha-card>
@@ -223,6 +223,31 @@ class HassAiPanel extends LitElement {
         background-color: var(--primary-color);
         color: var(--text-primary-color);
         font-weight: bold;
+      }
+      .log-scroll-container {
+        max-height: 200px; /* Adjust as needed */
+        overflow-y: auto;
+        border: 1px solid var(--divider-color);
+        padding: 8px;
+        background-color: var(--card-background-color);
+      }
+      .log-entry {
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px dashed var(--divider-color);
+      }
+      .log-entry:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+      .log-entry pre {
+        white-space: pre-wrap;
+        word-break: break-all;
+        background-color: var(--code-background-color);
+        padding: 5px;
+        border-radius: 4px;
+        font-size: 0.85em;
       }
     `;
   }

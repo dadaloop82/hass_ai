@@ -18,5 +18,7 @@
                 }
             }
         }
+    },
+    "panel": {
+        "llm_warning": "Questo sistema funziona solo con Large Language Models (LLM) come Google Gemini o OpenAI ChatGPT. Assicurati che il tuo agente di conversazione predefinito sia configurato correttamente."
     }
-}
