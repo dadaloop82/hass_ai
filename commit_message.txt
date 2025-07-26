@@ -1,1 +1,1 @@
-fix: use conversation_agent_manager to correctly identify the default agent
+feat: improve agent check and error handling in frontend
