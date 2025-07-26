@@ -1,1 +1,1 @@
-feat: add check for default conversation agent
+fix: correct invalid JSON in Italian translation file
