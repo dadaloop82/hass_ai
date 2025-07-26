@@ -1,7 +1,3 @@
-const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
-const html = LitElement.prototype.html;
-const css = LitElement.prototype.css;
-
 class HassAiPanel extends LitElement {
   static get properties() {
     return {
@@ -22,7 +18,7 @@ class HassAiPanel extends LitElement {
     this.loading = false;
     this.overrides = {};
     this.saveTimeout = null;
-    this.language = 'en'; // Default language
+    this.language = 'en';
   }
 
   connectedCallback() {
@@ -45,12 +41,10 @@ class HassAiPanel extends LitElement {
     );
   }
 
-
   _handleScanUpdate(message) {
     if (message.type === "entity_result") {
       const entity = message.result;
-      this.entities[entity.entity_id] = entity;
-      this.requestUpdate("entities");
+      this.entities = { ...this.entities, [entity.entity_id]: entity };
     }
     if (message.type === "scan_complete") {
       this.loading = false;
@@ -154,14 +148,14 @@ class HassAiPanel extends LitElement {
                   <td>${entity.overall_reason}</td>
                   <td>
                     <mwc-select
-                    .value=${String(this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight)}
-                    data-entity-id=${entity.entity_id}
-                    @selectedIndexChanged=${this._handleWeightChange}
-                  >
-                    ${[0, 1, 2, 3, 4, 5].map(i => html`
-                      <mwc-list-item value="${i}">${i}</mwc-list-item>
-                    `)}
-                  </mwc-select>
+                      .value=${String(this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight)}
+                      data-entity-id=${entity.entity_id}
+                      @selectedIndexChanged=${this._handleWeightChange}
+                    >
+                      ${[0, 1, 2, 3, 4, 5].map(i => html`
+                        <mwc-list-item value="${i}">${i}</mwc-list-item>
+                      `)}
+                    </mwc-select>
                   </td>
                 </tr>
               `)}
@@ -178,17 +172,17 @@ class HassAiPanel extends LitElement {
     `;
   }
 
- renderLog() {
-  return html`
-    ${Object.values(this.entities).map(entity => html`
+  renderLog() {
+    const logs = Object.values(this.entities).map(entity => html`
       <div class="log-entry">
         <strong>${this.hass.localize('component.hass_ai.panel.ai_log_entity')}: ${entity.entity_id}</strong>
         <pre>${this.hass.localize('component.hass_ai.panel.ai_log_prompt')}: ${entity.prompt}</pre>
         <pre>${this.hass.localize('component.hass_ai.panel.ai_log_response')}: ${entity.response_text}</pre>
       </div>
-    `)}
-  `;
-}
+    `);
+
+    return html`${logs}`;
+  }
 
   static get styles() {
     return css`
@@ -212,8 +206,8 @@ class HassAiPanel extends LitElement {
         background-color: var(--table-header-background-color, var(--primary-background-color));
       }
       mwc-select {
-  width: 90px;
-}
+        width: 90px;
+      }
       .legend {
         font-size: 0.9em;
         font-weight: normal;
@@ -228,7 +222,7 @@ class HassAiPanel extends LitElement {
         font-weight: bold;
       }
       .log-scroll-container {
-        max-height: 200px; /* Adjust as needed */
+        max-height: 200px;
         overflow-y: auto;
         border: 1px solid var(--divider-color);
         padding: 8px;
