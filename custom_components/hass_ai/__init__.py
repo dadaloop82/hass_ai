@@ -22,11 +22,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     # Register the static path for the panel
-    hass.http.async_register_static_path(
-        f"/api/{DOMAIN}/static",
-        hass.config.path("custom_components", DOMAIN, "www"),
-        cache_headers=False
-    )
+    await hass.http.async_register_static_paths([
+        http.StaticPathConfig(
+            f"/api/{DOMAIN}/static",
+            hass.config.path("custom_components", DOMAIN, "www"),
+            cache_headers=False
+        )
+    ])
 
     # Register the custom panel
     frontend.async_register_built_in_panel(
