@@ -23,7 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register the static path for the panel
     await hass.http.async_register_static_paths([
-        http.StaticPathConfig(
+        StaticPathConfig(
             f"/api/{DOMAIN}/static",
             hass.config.path("custom_components", DOMAIN, "www"),
             cache_headers=False
@@ -62,10 +62,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     scan_interval_days = entry.data.get("scan_interval", 7)
     scan_interval = timedelta(days=scan_interval_days)
 
-    # Schedule periodic scan (placeholder)
+    # Schedule periodic scan
     async def periodic_scan(now):
         _LOGGER.debug("Performing periodic HASS AI scan")
-        pass
+        pass  # Implement scan logic if needed
 
     entry.async_on_unload(event.async_track_time_interval(hass, periodic_scan, scan_interval))
 
@@ -78,8 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Check if the current conversation agent is the default one (homeassistant)."""
     try:
-        # Usa l'API pubblica di HA per ottenere l'agente attivo
-        agent = await hass.components.conversation.get_agent(hass)
+        agent = await conversation.async_get_agent(hass)
         agent_id = getattr(agent, "id", "unknown")
         is_default_agent = agent_id == "homeassistant"
 
@@ -144,7 +143,9 @@ async def handle_save_overrides(hass: HomeAssistant, connection: websocket_api.A
     """Handle the command to save user-defined overrides."""
     entry_id = next(iter(hass.data[DOMAIN]))
     store = hass.data[DOMAIN][entry_id]["store"]
+
     await store.async_save(msg["overrides"])
+
     connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
