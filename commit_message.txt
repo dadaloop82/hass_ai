@@ -1,1 +1,1 @@
-refactor: register panel programmatically
+fix: correct manifest file
