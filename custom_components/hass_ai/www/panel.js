@@ -186,20 +186,6 @@ class HassAiPanel extends LitElement {
       `)}
     `;
   }
-    `;
-  }
-
-  renderLog() {
-    return html`
-      ${Object.values(this.entities).map(entity => html`
-        <div class="log-entry">
-          <strong>Entity: ${entity.entity_id}</strong>
-          <pre>Prompt: ${entity.prompt}</pre>
-          <pre>Response: ${entity.response_text}</pre>
-        </div>
-      `)}
-    `;
-  }
 
   static get styles() {
     return css`
