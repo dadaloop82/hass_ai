@@ -77,36 +77,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 })
 @websocket_api.async_response
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Check if the current conversation agent is a supported LLM."""
     try:
-        agent = async_get_agent(hass)  # ❌ Niente await qui
-
+        agent = async_get_agent(hass)
         if not agent:
             connection.send_message(websocket_api.result_message(msg["id"], {
                 "is_default_agent": True,
                 "agent_id": "none",
                 "is_supported_llm": False,
+                "debug_agent_repr": repr(agent),   # DEBUG
             }))
             return
 
         agent_id = getattr(agent, "id", "unknown")
-        is_default_agent = agent_id == "homeassistant"
-
+        
+        # Logga o invia in risposta l'agent_id per debug
+        _LOGGER.info(f"[hass_ai] Agent ID: {agent_id}")
+        
         agent_id_clean = agent_id.lower()
-        supported_keywords = ["google", "gemini", "chatgpt", "openai"]
+        supported_keywords = ["google", "gemini", "chatgpt", "openai", "local"]
         is_supported_llm = any(keyword in agent_id_clean for keyword in supported_keywords)
 
         connection.send_message(websocket_api.result_message(msg["id"], {
-            "is_default_agent": is_default_agent,
+            "is_default_agent": agent_id == "homeassistant",
             "agent_id": agent_id,
             "is_supported_llm": is_supported_llm,
+            "debug_agent_repr": repr(agent),  # DEBUG
         }))
     except Exception as e:
         _LOGGER.warning(f"[hass_ai] Agent check failed: {e}")
         connection.send_message(
             websocket_api.error_message(msg["id"], "agent_error", str(e))
         )
-
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/load_overrides",
 })

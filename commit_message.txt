@@ -1,1 +1,1 @@
-feat: improve agent check and error messages
+feat: display active agent info in the panel UI
