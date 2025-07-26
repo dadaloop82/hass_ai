@@ -3,13 +3,7 @@
         "step": {
             "user": {
                 "title": "Benvenuto in HASS AI",
-                "description": "Stai per configurare HASS AI, un'integrazione progettata per portare un nuovo livello di intelligenza alla tua casa domotica. L'obiettivo è capire automaticamente quali dei tuoi dispositivi sono più importanti per l'automazione domestica.
-
-Dopo questa configurazione iniziale, un nuovo pannello "HASS AI" sarà aggiunto alla barra laterale. Da lì, potrai eseguire una scansione per vedere come l'IA ha pesato le tue entità e quindi modificare i suoi suggerimenti per adattarli perfettamente alle tue esigenze. Nel prossimo passo, configurerai l'intervallo di scansione automatica."
-            },
-            "configure": {
-                "title": "Configura HASS AI",
-                "description": "Imposta la frequenza per le scansioni automatiche delle entità."
+                "description": "Stai per configurare HASS AI, un'integrazione progettata per portare un nuovo livello di intelligenza alla tua casa domotica. L'obiettivo è capire automaticamente quali dei tuoi dispositivi sono più importanti per l'automazione domestica.\n\nDopo questa configurazione iniziale, un nuovo pannello \"HASS AI\" sarà aggiunto alla barra laterale. Da lì, potrai eseguire una scansione per vedere come l'IA ha pesato le tue entità e quindi modificare i suoi suggerimenti per adattarli perfettamente alle tue esigenze. Nel prossimo passo, configurerai l'intervallo di scansione automatica."
             }
         },
         "abort": {
