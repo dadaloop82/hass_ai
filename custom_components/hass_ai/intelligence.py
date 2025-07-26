@@ -31,11 +31,22 @@ async def get_entities_importance_batched(
             f"Entities:\n" + "\n".join(entity_details)
         )
 
-        try:
-            agent_response = await conversation.async_converse(hass, prompt, None, "en")
-            response_text = agent_response.response.speech["plain"]["speech"]
+        _LOGGER.info(f"Processing batch {i // batch_size + 1} of {len(states) // batch_size + (1 if len(states) % batch_size > 0 else 0)} with {len(batch_states)} entities.")
+        _LOGGER.debug(f"Prompt for batch: {prompt}")
 
-            # Attempt to parse the response as JSON
+        try:
+            # Simulate AI response for testing
+            simulated_response_text = json.dumps([
+                {"entity_id": s.entity_id, "rating": (i % 5) + 1, "reason": f"Simulated reason for {s.entity_id}."}
+                for i, s in enumerate(batch_states)
+            ])
+            response_text = simulated_response_text
+            _LOGGER.debug(f"Simulated AI response: {response_text}")
+
+            # Original AI call (commented out for simulation)
+            # agent_response = await conversation.async_converse(hass, prompt, None, "en")
+            # response_text = agent_response.response.speech["plain"]["speech"]
+
             parsed_response = json.loads(response_text)
 
             if isinstance(parsed_response, list):
@@ -45,8 +56,8 @@ async def get_entities_importance_batched(
                             "entity_id": item["entity_id"],
                             "overall_weight": int(item["rating"]),
                             "overall_reason": item["reason"],
-                            "prompt": prompt, # Store the single prompt for all entities in this batch
-                            "response_text": response_text, # Store the single response for all entities in this batch
+                            "prompt": prompt,
+                            "response_text": response_text,
                         })
                     else:
                         _LOGGER.warning(f"Malformed item in AI response: {item}")
