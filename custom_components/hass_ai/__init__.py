@@ -5,6 +5,7 @@ from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components import frontend, websocket_api, http, conversation
+from homeassistant.components.conversation import async_get_agent
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.helpers import storage, event
 import voluptuous as vol
@@ -78,21 +79,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Check if the current conversation agent is a supported LLM."""
     try:
-        manager = hass.data.get("conversation_agent_manager")
-        if not manager:
-            raise ValueError("conversation_agent_manager not found")
-
-        agent = await manager.async_get_agent()
+        agent = await async_get_agent(hass)
         if not agent:
-            raise ValueError("No active agent found")
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "is_default_agent": True,
+                "agent_id": "none",
+                "is_supported_llm": False,
+            }))
+            return
 
         agent_id = getattr(agent, "id", "unknown")
         is_default_agent = agent_id == "homeassistant"
 
-        # Puoi estendere questa lista a piacere
-        supported_llms = ("google_gemini", "chatgpt", "openai", "local_llm")
-
-        is_supported_llm = any(llm in agent_id.lower() for llm in supported_llms)
+        # Normalizza ID per confronti robusti
+        agent_id_clean = agent_id.lower().replace("-", "_").replace(" ", "")
+        supported_llms = ["google_gemini", "chatgpt", "openai", "local_llm"]
+        is_supported_llm = any(llm in agent_id_clean for llm in supported_llms)
 
         connection.send_message(websocket_api.result_message(msg["id"], {
             "is_default_agent": is_default_agent,
@@ -100,7 +102,7 @@ async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.Acti
             "is_supported_llm": is_supported_llm,
         }))
     except Exception as e:
-        _LOGGER.exception("Error checking conversation agent")
+        _LOGGER.warning(f"[hass_ai] Agent check failed: {e}")
         connection.send_message(
             websocket_api.error_message(msg["id"], "agent_error", str(e))
         )

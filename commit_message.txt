@@ -1,1 +1,1 @@
-feat: implement robust, whitelist-based agent check
+fix: implement definitive and robust agent check provided by user
