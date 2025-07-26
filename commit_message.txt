@@ -1,1 +1,1 @@
-fix: implement definitive and robust agent check provided by user
+fix: correct usage of async_get_agent in agent check
