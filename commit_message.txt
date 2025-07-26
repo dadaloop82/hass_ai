@@ -1,1 +1,1 @@
-feat: implement single prompt for AI, improve log UI, and localize LLM warning
+fix: re-tagging due to existing tag
