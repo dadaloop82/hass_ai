@@ -32,6 +32,8 @@ async def get_entity_importance(
             return {
                 "overall_weight": rating,
                 "overall_reason": reason,
+                "prompt": prompt,
+                "response_text": response_text,
             }
 
     except Exception as e:

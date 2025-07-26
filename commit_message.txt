@@ -1,1 +1,1 @@
-fix: correct persistent JSON syntax error in it.json
+fix: correct agent API call and add AI communication log

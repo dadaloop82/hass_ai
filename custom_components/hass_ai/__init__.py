@@ -77,7 +77,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 @websocket_api.async_response
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to check the default conversation agent."""
-    agent_id = conversation.get_default_agent(hass)
+    agent = conversation.default_agent.get_agent(hass)
+    agent_id = agent.id if agent else None
     is_default_agent = agent_id == "homeassistant"
     connection.send_message(websocket_api.result_message(msg["id"], {"is_default_agent": is_default_agent}))
 
@@ -111,6 +112,8 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
             "name": state.name,
             "overall_weight": importance["overall_weight"],
             "overall_reason": importance["overall_reason"],
+            "prompt": importance.get("prompt"),
+            "response_text": importance.get("response_text"),
         }
         connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
         

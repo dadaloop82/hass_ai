@@ -172,7 +172,25 @@ class HassAiPanel extends LitElement {
           </table>
         </div>
       </ha-card>
+
+      <ha-card header="AI Communication Log">
+        <div class="card-content">
+            ${this.renderLog()}
+        </div>
+      </ha-card>
     `;
+  }
+
+  renderLog() {
+      return html`
+        ${Object.values(this.entities).map(entity => html`
+            <div class="log-entry">
+                <strong>Entity: ${entity.entity_id}</strong>
+                <pre>Prompt: ${entity.prompt}</pre>
+                <pre>Response: ${entity.response_text}</pre>
+            </div>
+        `)}
+      `;
   }
 
   static get styles() {
