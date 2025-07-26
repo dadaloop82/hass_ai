@@ -1,3 +1,6 @@
+import '@material/mwc-select';
+import '@material/mwc-list/mwc-list-item';
+
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
