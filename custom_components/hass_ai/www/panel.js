@@ -67,15 +67,18 @@ class HassAiPanel extends LitElement {
     this._debouncedSave();
   }
 
- _handleWeightChange(ev) {
-  const entityId = ev.target.dataset.entityId;
-  const weight = parseInt(ev.detail.value, 10);
-  if (!this.overrides[entityId]) {
-    this.overrides[entityId] = {};
+  _handleWeightChange(ev) {
+    const selectEl = ev.target;
+    const entityId = selectEl.dataset.entityId;
+    const selectedIndex = selectEl.selectedIndex;
+    const weight = parseInt(selectEl.children[selectedIndex].getAttribute("value"), 10);
+
+    if (!this.overrides[entityId]) {
+      this.overrides[entityId] = {};
+    }
+    this.overrides[entityId].overall_weight = weight;
+    this._debouncedSave();
   }
-  this.overrides[entityId].overall_weight = weight;
-  this._debouncedSave();
-}
 
   _debouncedSave() {
     clearTimeout(this.saveTimeout);
@@ -150,15 +153,15 @@ class HassAiPanel extends LitElement {
                   <td><span class="weight-badge">${entity.overall_weight}</span></td>
                   <td>${entity.overall_reason}</td>
                   <td>
-                    <ha-select
+                    <mwc-select
                     .value=${String(this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight)}
                     data-entity-id=${entity.entity_id}
-                    @value-changed=${this._handleWeightChange}
+                    @selectedIndexChanged=${this._handleWeightChange}
                   >
                     ${[0, 1, 2, 3, 4, 5].map(i => html`
                       <mwc-list-item value="${i}">${i}</mwc-list-item>
                     `)}
-                  </ha-select>
+                  </mwc-select>
                   </td>
                 </tr>
               `)}
@@ -208,9 +211,9 @@ class HassAiPanel extends LitElement {
         font-weight: bold;
         background-color: var(--table-header-background-color, var(--primary-background-color));
       }
-      ha-select {
-        width: 90px;
-      }
+      mwc-select {
+  width: 90px;
+}
       .legend {
         font-size: 0.9em;
         font-weight: normal;
