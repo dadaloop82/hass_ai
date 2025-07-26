@@ -1,1 +1,1 @@
-fix: use async_register_static_paths with StaticPathConfig
+feat: overhaul panel UI/UX and internationalization

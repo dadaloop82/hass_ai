@@ -15,9 +15,12 @@
         }
     },
     "options": {
-        "scan_interval": {
-            "name": "Intervallo di scansione",
-            "description": "Frequenza delle scansioni delle entità in giorni (1-30)."
+        "step": {
+            "init": {
+                "data": {
+                    "scan_interval": "Intervallo di scansione (giorni)"
+                }
+            }
         }
     }
 }

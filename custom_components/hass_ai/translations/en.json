@@ -15,9 +15,12 @@
         }
     },
     "options": {
-        "scan_interval": {
-            "name": "Scan Interval",
-            "description": "Frequency of entity scans in days (1-30)."
+        "step": {
+            "init": {
+                "data": {
+                    "scan_interval": "Scan Interval (days)"
+                }
+            }
         }
     }
 }

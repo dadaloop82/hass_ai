@@ -1,8 +1,4 @@
-const LitElement = Object.getPrototypeOf(
-  customElements.get("ha-panel-lovelace")
-);
-const html = LitElement.prototype.html;
-const css = LitElement.prototype.css;
+import { LitElement, html, css } from 'https://unpkg.com/lit-element@2.4.0/lit-element.js?module';
 
 class HassAiPanel extends LitElement {
   static get properties() {
@@ -13,6 +9,7 @@ class HassAiPanel extends LitElement {
       panel: { type: Object },
       entities: { state: true },
       loading: { state: true },
+      language: { state: true },
     };
   }
 
@@ -22,10 +19,12 @@ class HassAiPanel extends LitElement {
     this.loading = false;
     this.overrides = {};
     this.saveTimeout = null;
+    this.language = 'en'; // Default language
   }
 
   connectedCallback() {
     super.connectedCallback();
+    this.language = this.hass.language || 'en';
     this._loadOverrides();
   }
 
@@ -70,7 +69,7 @@ class HassAiPanel extends LitElement {
     if (!this.overrides[entityId]) {
         this.overrides[entityId] = {};
     }
-    this.overrides[entityId].overall_weight = weight; // Changed to overall_weight
+    this.overrides[entityId].overall_weight = weight;
     this._debouncedSave();
   }
 
@@ -82,21 +81,44 @@ class HassAiPanel extends LitElement {
   }
 
   render() {
-    const sortedEntities = Object.values(this.entities).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    const sortedEntities = Object.values(this.entities).sort((a, b) => {
+        const aWeight = this.overrides[a.entity_id]?.overall_weight ?? a.overall_weight;
+        const bWeight = this.overrides[b.entity_id]?.overall_weight ?? b.overall_weight;
+        return bWeight - aWeight;
+    });
+
+    const t = this.language === 'it' ? {
+        title: "Pannello di Controllo HASS AI",
+        description: "Analizza le tue entità, insegna all'IA e personalizza i pesi per ottimizzare la tua domotica.",
+        scan_button: "Avvia Nuova Scansione",
+        scanning_button: "Scansione...",
+        enabled: "Abilitato",
+        entity: "Entità",
+        ai_weight: "Peso IA",
+        reason: "Motivazione",
+        your_weight: "Tuo Peso",
+        weight_legend: "(1=Basso, 5=Critico)",
+        attribute_details: "Dettagli Attributi"
+    } : {
+        title: "HASS AI Control Panel",
+        description: "Analyze your entities, teach the AI, and customize weights to optimize your smart home.",
+        scan_button: "Start New Scan",
+        scanning_button: "Scanning...",
+        enabled: "Enabled",
+        entity: "Entity",
+        ai_weight: "AI Weight",
+        reason: "Reason",
+        your_weight: "Your Weight",
+        weight_legend: "(1=Low, 5=Critical)",
+        attribute_details: "Attribute Details"
+    };
 
     return html`
-      <ha-card header="HASS AI Entity Control Panel">
+      <ha-card .header=${t.title}>
         <div class="card-content">
-          <p>
-            Here you can see the analysis of your entities. The AI provides a
-            baseline weight, and you have the final say. Disable entities you
-            want the AI to ignore, and adjust weights for those you want to
-            prioritize differently.
-          </p>
+          <p>${t.description}</p>
           <mwc-button raised @click=${this._runScan} .disabled=${this.loading}>
-            ${this.loading ? "Scanning..." : "Start New Scan"}
+            ${this.loading ? t.scanning_button : t.scan_button}
           </mwc-button>
         </div>
 
@@ -104,12 +126,12 @@ class HassAiPanel extends LitElement {
           <table>
             <thead>
               <tr>
-                <th>Enabled</th>
-                <th>Entity</th>
-                <th>AI Weight</th>
-                <th>Reason</th>
-                <th>Your Weight</th>
-                <th>Attribute Details</th>
+                <th>${t.enabled}</th>
+                <th>${t.entity}</th>
+                <th>${t.ai_weight}</th>
+                <th>${t.reason}</th>
+                <th>${t.your_weight} <span class="legend">${t.weight_legend}</span></th>
+                <th>${t.attribute_details}</th>
               </tr>
             </thead>
             <tbody>
@@ -123,8 +145,8 @@ class HassAiPanel extends LitElement {
                         @change=${this._handleToggle}
                       ></ha-switch>
                     </td>
-                    <td>${entity.name}</td>
-                    <td>${entity.overall_weight}</td>
+                    <td>${entity.name || entity.entity_id}</td>
+                    <td><span class="weight-badge">${entity.overall_weight}</span></td>
                     <td>${entity.overall_reason}</td>
                     <td>
                       <ha-select
@@ -132,20 +154,16 @@ class HassAiPanel extends LitElement {
                         data-entity-id=${entity.entity_id}
                         @selected=${this._handleWeightChange}
                       >
-                        <mwc-list-item value="1">1</mwc-list-item>
-                        <mwc-list-item value="2">2</mwc-list-item>
-                        <mwc-list-item value="3">3</mwc-list-item>
-                        <mwc-list-item value="4">4</mwc-list-item>
-                        <mwc-list-item value="5">5</mwc-list-item>
+                        ${[1,2,3,4,5].map(i => html`<mwc-list-item .value=${i}>${i}</mwc-list-item>`)}
                       </ha-select>
                     </td>
                     <td>
                       ${Object.entries(entity.attribute_details).map(
-                        ([attr_key, attr_info]) => html`
+                        ([attr_key, attr_info]) => attr_info.weight > 1 ? html`
                           <div>
-                            <strong>${attr_key}</strong>: Weight ${attr_info.weight} (${attr_info.reason})
+                            <strong>${attr_key}</strong>: ${attr_info.reason} (+${attr_info.weight - 1})
                           </div>
-                        `
+                        ` : ''
                       )}
                     </td>
                   </tr>
@@ -167,18 +185,33 @@ class HassAiPanel extends LitElement {
       table {
         width: 100%;
         border-collapse: collapse;
+        margin-top: 16px;
       }
       th, td {
-        padding: 8px 12px;
+        padding: 12px 16px;
         border-bottom: 1px solid var(--divider-color);
         text-align: left;
-        vertical-align: top; /* Align content to the top */
+        vertical-align: top;
       }
       th {
         font-weight: bold;
+        background-color: var(--table-header-background-color, var(--primary-background-color));
       }
       ha-select {
-        width: 80px;
+        width: 90px;
+      }
+      .legend {
+          font-size: 0.9em;
+          font-weight: normal;
+          color: var(--secondary-text-color);
+      }
+      .weight-badge {
+          display: inline-block;
+          padding: 4px 8px;
+          border-radius: 12px;
+          background-color: var(--primary-color);
+          color: var(--text-primary-color);
+          font-weight: bold;
       }
     `;
   }
