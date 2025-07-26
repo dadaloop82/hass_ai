@@ -77,10 +77,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 @websocket_api.async_response
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to check the default conversation agent."""
-    agent = conversation.default_agent.get_agent(hass)
-    agent_id = agent.id if agent else None
-    is_default_agent = agent_id == "homeassistant"
-    connection.send_message(websocket_api.result_message(msg["id"], {"is_default_agent": is_default_agent}))
+    try:
+        agent = await conversation.async_get_default_agent(hass)
+        agent_id = agent.id if agent else None
+        is_default_agent = agent_id == "homeassistant"
+        connection.send_message(websocket_api.result_message(msg["id"], {"is_default_agent": is_default_agent}))
+    except Exception as e:
+        _LOGGER.exception("Failed to get conversation agent")
+        connection.send_message(websocket_api.error_message(msg["id"], "agent_error", str(e)))
 
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/load_overrides",
