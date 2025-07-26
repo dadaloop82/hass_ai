@@ -1,1 +1,1 @@
-feat: overhaul panel UI/UX and internationalization
+fix: correct javascript module loading
