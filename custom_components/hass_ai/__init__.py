@@ -62,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     scan_interval_days = entry.data.get("scan_interval", 7)
     scan_interval = timedelta(days=scan_interval_days)
 
-    # Schedule periodic scan
+    # Schedule periodic scan (placeholder)
     async def periodic_scan(now):
         _LOGGER.debug("Performing periodic HASS AI scan")
         pass
@@ -76,19 +76,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 })
 @websocket_api.async_response
 async def handle_check_agent(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Check if the Home Assistant default conversation agent is active."""
+    """Check if the current conversation agent is the default one (homeassistant)."""
     try:
-        # Verifica se l'agente corrente è quello predefinito
-        agent_id = None
-        if "conversation_agent" in hass.data:
-            agent = hass.data["conversation_agent"]
-            agent_id = getattr(agent, "id", None)
-
-        is_default_agent = agent_id in (None, "homeassistant")
+        # Usa l'API pubblica di HA per ottenere l'agente attivo
+        agent = await hass.components.conversation.get_agent(hass)
+        agent_id = getattr(agent, "id", "unknown")
+        is_default_agent = agent_id == "homeassistant"
 
         connection.send_message(websocket_api.result_message(msg["id"], {
             "is_default_agent": is_default_agent,
-            "agent_id": agent_id or "homeassistant",
+            "agent_id": agent_id,
         }))
     except Exception as e:
         _LOGGER.exception("Error checking conversation agent")
@@ -119,7 +116,7 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
     for state in all_states:
         if state.domain == DOMAIN or state.entity_id.startswith(f"{DOMAIN}."):
             continue
-        
+
         importance = await get_entity_importance(hass, state)
         result = {
             "entity_id": state.entity_id,
@@ -129,9 +126,14 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
             "prompt": importance.get("prompt"),
             "response_text": importance.get("response_text"),
         }
-        connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
-        
-    connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_complete"}))
+        connection.send_message(websocket_api.event_message(msg["id"], {
+            "type": "entity_result",
+            "result": result
+        }))
+
+    connection.send_message(websocket_api.event_message(msg["id"], {
+        "type": "scan_complete"
+    }))
 
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/save_overrides",
@@ -142,9 +144,7 @@ async def handle_save_overrides(hass: HomeAssistant, connection: websocket_api.A
     """Handle the command to save user-defined overrides."""
     entry_id = next(iter(hass.data[DOMAIN]))
     store = hass.data[DOMAIN][entry_id]["store"]
-    
     await store.async_save(msg["overrides"])
-    
     connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

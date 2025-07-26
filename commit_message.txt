@@ -1,1 +1,1 @@
-fix: implement definitive conversation agent check
+fix: apply user-provided corrections to __init__.py
