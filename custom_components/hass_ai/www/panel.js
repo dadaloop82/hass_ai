@@ -1,3 +1,5 @@
+import { LitElement, html, css } from "lit";
+
 class HassAiPanel extends LitElement {
   static get properties() {
     return {
