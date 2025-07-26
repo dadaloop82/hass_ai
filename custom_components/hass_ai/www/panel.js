@@ -167,7 +167,7 @@ class HassAiPanel extends LitElement {
         </div>
       </ha-card>
 
-      <ha-card header="${this.hass.localize('component.hass_ai.panel.ai_log_title')}">
+      <ha-card .header=${this.hass.localize('component.hass_ai.panel.ai_log_title')}>
         <div class="card-content log-scroll-container">
           ${this.renderLog()}
         </div>
