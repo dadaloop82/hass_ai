@@ -67,15 +67,15 @@ class HassAiPanel extends LitElement {
     this._debouncedSave();
   }
 
-  _handleWeightChange(ev) {
-    const entityId = ev.target.dataset.entityId;
-    const weight = parseInt(ev.target.value, 10);
-    if (!this.overrides[entityId]) {
-      this.overrides[entityId] = {};
-    }
-    this.overrides[entityId].overall_weight = weight;
-    this._debouncedSave();
+ _handleWeightChange(ev) {
+  const entityId = ev.target.dataset.entityId;
+  const weight = parseInt(ev.detail.value, 10);
+  if (!this.overrides[entityId]) {
+    this.overrides[entityId] = {};
   }
+  this.overrides[entityId].overall_weight = weight;
+  this._debouncedSave();
+}
 
   _debouncedSave() {
     clearTimeout(this.saveTimeout);
@@ -151,14 +151,14 @@ class HassAiPanel extends LitElement {
                   <td>${entity.overall_reason}</td>
                   <td>
                     <ha-select
-                      .value=${this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight}
-                      data-entity-id=${entity.entity_id}
-                      @selected=${this._handleWeightChange}
-                    >
-                      ${[0, 1, 2, 3, 4, 5].map(i => html`
-                        <mwc-list-item .value=${i}>${i}</mwc-list-item>
-                      `)}
-                    </ha-select>
+                    .value=${String(this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight)}
+                    data-entity-id=${entity.entity_id}
+                    @value-changed=${this._handleWeightChange}
+                  >
+                    ${[0, 1, 2, 3, 4, 5].map(i => html`
+                      <mwc-list-item value="${i}">${i}</mwc-list-item>
+                    `)}
+                  </ha-select>
                   </td>
                 </tr>
               `)}
