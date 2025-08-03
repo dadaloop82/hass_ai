@@ -1,5 +1,8 @@
 
 
+import "https://unpkg.com/@material/mwc-select@0.25.3/mwc-select.js?module";
+import "https://unpkg.com/@material/mwc-list@0.25.3/mwc-list-item.js?module";
+
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -125,7 +128,7 @@ class HassAiPanel extends LitElement {
         <div class="card-content">
           <p>${t.description}</p>
           <p class="warning-message">${this.hass.localize('component.hass_ai.panel.llm_warning')}</p>
-          <mwc-button raised @click=${this._runScan} .disabled=${this.loading}>
+          <ha-button raised @click=${this._runScan} .disabled=${this.loading}>
             ${this.loading ? t.scanning_button : t.scan_button}
           </mwc-button>
         </div>
