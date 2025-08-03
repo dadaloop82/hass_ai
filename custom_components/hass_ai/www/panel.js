@@ -1,7 +1,6 @@
 
 
-import "https://unpkg.com/@material/mwc-select@0.25.3/mwc-select.js?module";
-import "https://unpkg.com/@material/mwc-list@0.25.3/mwc-list-item.js?module";
+
 
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;

@@ -44,6 +44,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "embed_iframe": False,
                 "trust_external": False,
                 "module_url": f"/api/{DOMAIN}/static/panel.js",
+                "extra_module_url": [
+                    "https://unpkg.com/@material/mwc-select@0.25.3/mwc-select.js?module",
+                    "https://unpkg.com/@material/mwc-list@0.25.3/mwc-list-item.js?module",
+                    "https://unpkg.com/@material/mwc-button@0.25.3/mwc-button.js?module"
+                ],
             },
             "type": "module",
         },
