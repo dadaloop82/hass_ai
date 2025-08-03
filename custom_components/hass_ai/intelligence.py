@@ -2,13 +2,13 @@ from __future__ import annotations
 import logging
 import json
 
-from homeassistant.core import State
+from homeassistant.core import HomeAssistant, State
 from homeassistant.components import conversation
 
 _LOGGER = logging.getLogger(__name__)
 
 async def get_entities_importance_batched(
-    hass: conversation.AbstractConversationAgent, 
+    hass: HomeAssistant, 
     states: list[State],
     batch_size: int = 10 # Process 10 entities at a time
 ) -> list[dict]:
