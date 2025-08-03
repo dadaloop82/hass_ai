@@ -1,5 +1,4 @@
-import '@material/mwc-select';
-import '@material/mwc-list/mwc-list-item';
+
 
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
@@ -156,15 +155,15 @@ class HassAiPanel extends LitElement {
                   <td><span class="weight-badge">${entity.overall_weight}</span></td>
                   <td>${entity.overall_reason}</td>
                   <td>
-                    <mwc-select
+                    <ha-select
                     .value=${String(this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight)}
                     data-entity-id=${entity.entity_id}
-                    @selectedIndexChanged=${this._handleWeightChange}
+                    @selected=${this._handleWeightChange}
                   >
                     ${[0, 1, 2, 3, 4, 5].map(i => html`
-                      <mwc-list-item value="${i}">${i}</mwc-list-item>
+                      <ha-list-item value="${i}">${i}</ha-list-item>
                     `)}
-                  </mwc-select>
+                  </ha-select>
                   </td>
                 </tr>
               `)}
@@ -214,9 +213,7 @@ class HassAiPanel extends LitElement {
         font-weight: bold;
         background-color: var(--table-header-background-color, var(--primary-background-color));
       }
-      mwc-select {
-  width: 90px;
-}
+      
       .legend {
         font-size: 0.9em;
         font-weight: normal;
