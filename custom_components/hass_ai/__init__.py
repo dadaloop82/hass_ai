@@ -43,9 +43,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "name": "hass-ai-panel",
                 "embed_iframe": False,
                 "trust_external": False,
-                "js_url": f"/api/{DOMAIN}/static/panel.js",
-                "type": "module",
-            }
+                "module_url": f"/api/{DOMAIN}/static/panel.js",
+            },
+            "type": "module",
         },
         require_admin=True,
     )
