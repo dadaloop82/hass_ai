@@ -116,6 +116,19 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
     try:
         connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
 
+        # Get the first config entry for this integration
+        config_entry = None
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            config_entry = entry
+            break
+        
+        # Get AI configuration
+        ai_provider = "conversation"
+        api_key = None
+        if config_entry:
+            ai_provider = config_entry.data.get("ai_provider", "conversation")
+            api_key = config_entry.data.get("api_key")
+
         all_states = hass.states.async_all()
         
         # Filter out hass_ai entities and system entities
@@ -128,10 +141,12 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
             )
         ]
 
-        _LOGGER.info(f"Starting scan of {len(filtered_states)} entities")
+        _LOGGER.info(f"Starting scan of {len(filtered_states)} entities using {ai_provider}")
 
         # Get importance for all entities in batches
-        importance_results = await get_entities_importance_batched(hass, filtered_states)
+        importance_results = await get_entities_importance_batched(
+            hass, filtered_states, 10, ai_provider, api_key
+        )
 
         # Send each result as it's processed
         for result in importance_results:

@@ -1,7 +1,3 @@
-import "https://unpkg.com/@material/mwc-select@0.25.3/mwc-select.js?module";
-import "https://unpkg.com/@material/mwc-list@0.25.3/mwc-list-item.js?module";
-import "https://unpkg.com/@material/mwc-button@0.25.3/mwc-button.js?module";
-
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -148,9 +144,9 @@ class HassAiPanel extends LitElement {
             <ha-icon icon="mdi:alert"></ha-icon>
             ${t.warning}
           </div>
-          <mwc-button raised @click=${this._runScan} .disabled=${this.loading}>
+          <ha-button raised @click=${this._runScan} .disabled=${this.loading}>
             ${this.loading ? t.scanning_button : t.scan_button}
-          </mwc-button>
+          </ha-button>
         </div>
 
         ${Object.keys(this.entities).length > 0 ? html`
@@ -184,15 +180,15 @@ class HassAiPanel extends LitElement {
                     <td><span class="weight-badge weight-${entity.overall_weight}">${entity.overall_weight}</span></td>
                     <td><span class="reason-text">${entity.overall_reason}</span></td>
                     <td>
-                      <mwc-select
+                      <ha-select
                         .value=${String(this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight)}
                         data-entity-id=${entity.entity_id}
-                        @selectedIndexChanged=${this._handleWeightChange}
+                        @selectionChanged=${this._handleWeightChange}
                       >
                         ${[0, 1, 2, 3, 4, 5].map(i => html`
-                          <mwc-list-item value="${i}">${i}</mwc-list-item>
+                          <ha-list-item value="${i}">${i}</ha-list-item>
                         `)}
-                      </mwc-select>
+                      </ha-select>
                     </td>
                   </tr>
                 `)}
@@ -290,7 +286,7 @@ class HassAiPanel extends LitElement {
         font-style: italic;
         color: var(--secondary-text-color);
       }
-      mwc-select {
+      ha-select {
         width: 90px;
       }
       .legend {
@@ -369,7 +365,7 @@ class HassAiPanel extends LitElement {
       ha-card {
         margin-bottom: 16px;
       }
-      mwc-button {
+      ha-button {
         margin: 8px 0;
       }
       ha-icon {

@@ -40,6 +40,19 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         _LOGGER.info(f"Starting entity scan service with filter: '{entity_filter}' and batch size: {batch_size}")
         
         try:
+            # Get the first config entry for this integration
+            config_entry = None
+            for entry in hass.config_entries.async_entries(DOMAIN):
+                config_entry = entry
+                break
+            
+            # Get AI configuration
+            ai_provider = "conversation"
+            api_key = None
+            if config_entry:
+                ai_provider = config_entry.data.get("ai_provider", "conversation")
+                api_key = config_entry.data.get("api_key")
+            
             all_states = hass.states.async_all()
             
             # Apply entity filter if provided
@@ -59,9 +72,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     )
                 ]
             
-            results = await get_entities_importance_batched(hass, filtered_states, batch_size)
+            results = await get_entities_importance_batched(
+                hass, filtered_states, batch_size, ai_provider, api_key
+            )
             
-            _LOGGER.info(f"Entity scan completed: {len(results)} entities analyzed")
+            _LOGGER.info(f"Entity scan completed: {len(results)} entities analyzed using {ai_provider}")
             
             # Store results in hass.data for access by other components
             if DOMAIN not in hass.data:

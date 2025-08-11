@@ -46,7 +46,9 @@ ENTITY_IMPORTANCE_MAP = {
 async def get_entities_importance_batched(
     hass: HomeAssistant, 
     states: list[State],
-    batch_size: int = 10  # Process 10 entities at a time
+    batch_size: int = 10,  # Process 10 entities at a time
+    ai_provider: str = "conversation",
+    api_key: str = None
 ) -> list[dict]:
     """Calculate the importance of multiple entities using the conversation agent in batches."""
     
@@ -99,9 +101,16 @@ async def get_entities_importance_batched(
         )
 
         try:
-            # Use conversation agent for AI analysis
-            agent_response = await conversation.async_converse(hass, prompt, None, "en")
-            response_text = agent_response.response.speech["plain"]["speech"]
+            # Choose AI provider based on configuration
+            if ai_provider == "conversation":
+                response_text = await _query_conversation_agent(hass, prompt)
+            elif ai_provider == "OpenAI" and OPENAI_AVAILABLE and api_key:
+                response_text = await _query_openai(prompt, api_key)
+            elif ai_provider == "Gemini" and GOOGLE_AI_AVAILABLE and api_key:
+                response_text = await _query_gemini(prompt, api_key)
+            else:
+                _LOGGER.warning(f"AI provider {ai_provider} not available, falling back to conversation agent")
+                response_text = await _query_conversation_agent(hass, prompt)
 
             # Clean response text (remove markdown formatting if present)
             response_text = response_text.strip()
@@ -182,3 +191,35 @@ def _create_fallback_result(entity_id: str, batch_num: int) -> dict:
         "analysis_method": "domain_fallback",
         "batch_number": batch_num,
     }
+
+
+async def _query_conversation_agent(hass: HomeAssistant, prompt: str) -> str:
+    """Query the Home Assistant conversation agent."""
+    agent_response = await conversation.async_converse(hass, prompt, None, "en")
+    return agent_response.response.speech["plain"]["speech"]
+
+
+async def _query_openai(prompt: str, api_key: str) -> str:
+    """Query OpenAI API."""
+    if not OPENAI_AVAILABLE:
+        raise Exception("OpenAI library not available")
+    
+    client = openai.AsyncOpenAI(api_key=api_key)
+    response = await client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=2000,
+        temperature=0.1
+    )
+    return response.choices[0].message.content
+
+
+async def _query_gemini(prompt: str, api_key: str) -> str:
+    """Query Google Gemini API."""
+    if not GOOGLE_AI_AVAILABLE:
+        raise Exception("Google Generative AI library not available")
+    
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-pro')
+    response = await model.generate_content_async(prompt)
+    return response.text
