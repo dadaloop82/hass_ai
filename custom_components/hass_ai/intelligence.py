@@ -284,14 +284,20 @@ async def _query_local_agent(hass: HomeAssistant, prompt: str) -> str:
     try:
         _LOGGER.info(f"🤖 Querying local conversation agent via HA services...")
         
-        # List available agents for debugging
-        try:
-            agents = await conversation.async_get_conversation_agents(hass)
-            _LOGGER.info(f"🔍 Available conversation agents: {list(agents.keys())}")
-            for agent_key, agent_info in agents.items():
-                _LOGGER.info(f"  - {agent_key}: {agent_info}")
-        except Exception as e:
-            _LOGGER.warning(f"⚠️ Could not list conversation agents: {e}")
+        # Try to detect available conversation agents by looking at entities
+        conversation_agents = []
+        for entity_id in hass.states.async_entity_ids("conversation"):
+            if entity_id != "conversation.home_assistant":  # Skip default agent
+                conversation_agents.append(entity_id)
+                _LOGGER.info(f"🔍 Found conversation agent: {entity_id}")
+        
+        # Use the first non-default agent found, or None for default
+        agent_id = conversation_agents[0] if conversation_agents else None
+        
+        if agent_id:
+            _LOGGER.info(f"🎯 Using conversation agent: {agent_id}")
+        else:
+            _LOGGER.warning(f"⚠️ No custom conversation agents found, using default (may not work well)")
         
         # Use Home Assistant service to process conversation
         _LOGGER.info(f"� Sending conversation via service (prompt length: {len(prompt)} chars)")
@@ -300,6 +306,10 @@ async def _query_local_agent(hass: HomeAssistant, prompt: str) -> str:
             "text": prompt,
             "language": hass.config.language
         }
+        
+        # Add agent_id if we found a custom agent
+        if agent_id:
+            service_data["agent_id"] = agent_id
         
         # Call the conversation.process service
         response = await hass.services.async_call(
