@@ -3,7 +3,7 @@
         "step": {
             "user": {
                 "title": "Benvenuto in HASS AI",
-                "description": "Stai per configurare HASS AI, un'integrazione progettata per portare un nuovo livello di intelligenza alla tua casa smart. Il suo obiettivo è comprendere automaticamente quali dei tuoi dispositivi sono più importanti per la domotica.\n\nDopo questa configurazione iniziale, un nuovo pannello \"HASS AI\" sarà aggiunto alla barra laterale. Da lì potrai eseguire una scansione per vedere come l'AI ha valutato le tue entità e poi sovrascrivere i suoi suggerimenti per adattarli perfettamente alle tue esigenze.\n\n**Agente Locale**: Usa l'agente conversazione integrato di Home Assistant (nessuna chiave API richiesta)\n**OpenAI/Gemini**: Provider AI esterni (chiave API richiesta)",
+                "description": "⚠️ IMPORTANTE: Configura un agente LLM locale nel tuo Home Assistant\n\nL'Agente Locale richiede una LLM configurata (es. Ollama con Gemma/Llama) per analizzare le entità. Il semplice 'Assist' di Home Assistant non è sufficiente.\n\nPer configurare Ollama: vai in Impostazioni > Dispositivi e servizi > Aggiungi integrazione > Ollama, poi configura un agente conversazione.\n\nDopo questa configurazione iniziale, un nuovo pannello \"HASS AI\" sarà aggiunto alla barra laterale per visualizzare i risultati dell'analisi AI.",
                 "data": {
                     "ai_provider": "Provider AI",
                     "scan_interval": "Intervallo di scansione (giorni)"
@@ -29,17 +29,10 @@
         "step": {
             "init": {
                 "title": "Opzioni HASS AI",
+                "description": "⚠️ IMPORTANTE: L'Agente Locale richiede una LLM configurata\n\nAssicurati di avere configurato Ollama o un'altra LLM nel tuo Home Assistant per il corretto funzionamento dell'analisi AI.",
                 "data": {
                     "scan_interval": "Intervallo di scansione (giorni)",
-                    "ai_provider": "Provider AI",
-                    "change_api_key": "Cambia Chiave API"
-                }
-            },
-            "api_key": {
-                "title": "Aggiorna Chiave API",
-                "description": "Inserisci la tua chiave API per {provider}. {description}",
-                "data": {
-                    "api_key": "Chiave API"
+                    "ai_provider": "Provider AI"
                 }
             }
         }

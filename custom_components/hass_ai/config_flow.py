@@ -4,7 +4,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 import voluptuous as vol
 
-from .const import DOMAIN, AI_PROVIDERS, AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI, AI_PROVIDER_LOCAL
+from .const import DOMAIN, AI_PROVIDERS, AI_PROVIDER_LOCAL
 
 class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Hass AI config flow."""
@@ -18,21 +18,35 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             # Store the provider and scan interval
-            self._ai_provider = user_input.get("ai_provider", AI_PROVIDER_LOCAL)
-            self._scan_interval = user_input.get("scan_interval", 7)
+            ai_provider = user_input.get("ai_provider", AI_PROVIDER_LOCAL)
+            scan_interval = user_input.get("scan_interval", 7)
             
-            # If Local Agent is selected, skip API key step
-            if self._ai_provider == AI_PROVIDER_LOCAL:
-                return self.async_create_entry(
-                    title="HASS AI", 
-                    data={
-                        "ai_provider": self._ai_provider,
-                        "scan_interval": self._scan_interval
-                    }
-                )
-            else:
-                # For external providers, go to API key step
-                return await self.async_step_api_key()
+            # Only Local Agent is supported
+            return self.async_create_entry(
+                title="HASS AI", 
+                data={
+                    "ai_provider": ai_provider,
+                    "scan_interval": scan_interval
+                }
+            )
+
+        # Determine description based on language
+        if self.hass.config.language == "it":
+            description = (
+                "⚠️ IMPORTANTE: Configura un agente LLM locale nel tuo Home Assistant\n\n"
+                "L'Agente Locale richiede una LLM configurata (es. Ollama con Gemma/Llama) "
+                "per analizzare le entità. Il semplice 'Assist' di Home Assistant non è sufficiente.\n\n"
+                "Per configurare Ollama: vai in Impostazioni > Dispositivi e servizi > "
+                "Aggiungi integrazione > Ollama, poi configura un agente conversazione."
+            )
+        else:
+            description = (
+                "⚠️ IMPORTANT: Configure a local LLM agent in your Home Assistant\n\n"
+                "Local Agent requires a configured LLM (e.g., Ollama with Gemma/Llama) "
+                "to analyze entities. Home Assistant's simple 'Assist' is not sufficient.\n\n"
+                "To configure Ollama: go to Settings > Devices & Services > "
+                "Add Integration > Ollama, then configure a conversation agent."
+            )
 
         return self.async_show_form(
             step_id="user",
@@ -40,54 +54,9 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required("ai_provider", default=AI_PROVIDER_LOCAL): vol.In(AI_PROVIDERS),
                 vol.Optional("scan_interval", default=7): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
             }),
-        )
-
-    async def async_step_api_key(self, user_input=None):
-        """Handle API key configuration for external AI providers."""
-        errors = {}
-        
-        if user_input is not None:
-            api_key = user_input.get("api_key", "").strip()
-            
-            if not api_key:
-                errors["api_key"] = "required"
-            else:
-                # Create the entry with API key
-                return self.async_create_entry(
-                    title="HASS AI", 
-                    data={
-                        "ai_provider": self._ai_provider,
-                        "api_key": api_key,
-                        "scan_interval": self._scan_interval
-                    }
-                )
-
-        # Determine description based on provider and language
-        if self.hass.config.language == "it":
-            if self._ai_provider == AI_PROVIDER_OPENAI:
-                description = "Inserisci la tua chiave API OpenAI. Puoi ottenerla da https://platform.openai.com/api-keys"
-            elif self._ai_provider == AI_PROVIDER_GEMINI:
-                description = "Inserisci la tua chiave API Google AI Studio. Puoi ottenerla da https://aistudio.google.com/app/apikey"
-            else:
-                description = "Inserisci la tua chiave API per il provider AI selezionato."
-        else:
-            if self._ai_provider == AI_PROVIDER_OPENAI:
-                description = "Enter your OpenAI API key. You can get it from https://platform.openai.com/api-keys"
-            elif self._ai_provider == AI_PROVIDER_GEMINI:
-                description = "Enter your Google AI Studio API key. You can get it from https://aistudio.google.com/app/apikey"
-            else:
-                description = "Enter your API key for the selected AI provider."
-
-        return self.async_show_form(
-            step_id="api_key",
-            data_schema=vol.Schema({
-                vol.Required("api_key"): str,
-            }),
             description_placeholders={
-                "provider": self._ai_provider,
                 "description": description
             },
-            errors=errors,
         )
 
     @staticmethod
@@ -98,87 +67,43 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class HassAiOptionsFlowHandler(config_entries.OptionsFlow):
-    """Hass AI options flow handler."""
+    """Handle options flow for HASS AI."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
-        """Manage the options."""
+        """Handle options flow."""
         if user_input is not None:
-            ai_provider = user_input.get("ai_provider", AI_PROVIDER_OPENAI)
-            
-            # Check if same provider without API key change
-            if (ai_provider == self.config_entry.data.get("ai_provider") and 
-                user_input.get("change_api_key") is not True):
-                return self.async_create_entry(title="", data=user_input)
-            else:
-                # Store the provider and move to API key step
-                self._new_options = user_input
-                self._ai_provider = ai_provider
-                return await self.async_step_api_key()
+            return self.async_create_entry(title="", data=user_input)
 
-        scan_interval = self.config_entry.options.get("scan_interval", 7)
-        ai_provider = self.config_entry.data.get("ai_provider", AI_PROVIDER_OPENAI)
-        
-        schema = {
-            vol.Required("scan_interval", default=scan_interval): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
-            vol.Required("ai_provider", default=ai_provider): vol.In(AI_PROVIDERS),
-            vol.Optional("change_api_key", default=False): bool,
-        }
+        # Get current values
+        ai_provider = self.config_entry.data.get("ai_provider", AI_PROVIDER_LOCAL)
+        scan_interval = self.config_entry.options.get("scan_interval", 
+                                                     self.config_entry.data.get("scan_interval", 7))
+
+        # Determine description based on language
+        if self.hass.config.language == "it":
+            description = (
+                "⚠️ IMPORTANTE: L'Agente Locale richiede una LLM configurata\n\n"
+                "Assicurati di avere configurato Ollama o un'altra LLM nel tuo "
+                "Home Assistant per il corretto funzionamento dell'analisi AI."
+            )
+        else:
+            description = (
+                "⚠️ IMPORTANT: Local Agent requires a configured LLM\n\n"
+                "Make sure you have Ollama or another LLM configured in your "
+                "Home Assistant for proper AI analysis functionality."
+            )
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(schema),
-        )
-
-    async def async_step_api_key(self, user_input=None):
-        """Handle API key configuration for external AI providers."""
-        errors = {}
-        
-        if user_input is not None:
-            api_key = user_input.get("api_key", "").strip()
-            
-            if not api_key:
-                errors["api_key"] = "required"
-            else:
-                # Update config entry data with new API key
-                new_data = {**self.config_entry.data}
-                new_data["ai_provider"] = self._ai_provider
-                new_data["api_key"] = api_key
-                
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry, data=new_data
-                )
-                
-                return self.async_create_entry(title="", data=self._new_options)
-
-        # Determine description based on provider and language
-        if self.hass.config.language == "it":
-            if self._ai_provider == AI_PROVIDER_OPENAI:
-                description = "Inserisci la tua chiave API OpenAI. Puoi ottenerla da https://platform.openai.com/api-keys"
-            elif self._ai_provider == AI_PROVIDER_GEMINI:
-                description = "Inserisci la tua chiave API Google AI Studio. Puoi ottenerla da https://aistudio.google.com/app/apikey"
-            else:
-                description = "Inserisci la tua chiave API per il provider AI selezionato."
-        else:
-            if self._ai_provider == AI_PROVIDER_OPENAI:
-                description = "Enter your OpenAI API key. You can get it from https://platform.openai.com/api-keys"
-            elif self._ai_provider == AI_PROVIDER_GEMINI:
-                description = "Enter your Google AI Studio API key. You can get it from https://aistudio.google.com/app/apikey"
-            else:
-                description = "Enter your API key for the selected AI provider."
-            description = "Enter your API key for the selected AI provider."
-
-        return self.async_show_form(
-            step_id="api_key",
             data_schema=vol.Schema({
-                vol.Required("api_key"): str,
+                vol.Required("ai_provider", default=ai_provider): vol.In(AI_PROVIDERS),
+                vol.Optional("scan_interval", default=scan_interval): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
             }),
             description_placeholders={
-                "provider": self._ai_provider,
                 "description": description
             },
-            errors=errors,
         )

@@ -2,12 +2,10 @@
 
 DOMAIN = "hass_ai"
 
-# AI Provider options
-AI_PROVIDER_OPENAI = "OpenAI"
-AI_PROVIDER_GEMINI = "Gemini"
+# AI Provider options - Only Local Agent supported
 AI_PROVIDER_LOCAL = "Local Agent"
 
-AI_PROVIDERS = [AI_PROVIDER_LOCAL, AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI]
+AI_PROVIDERS = [AI_PROVIDER_LOCAL]
 
 # Default values
 DEFAULT_SCAN_INTERVAL = 7  # days

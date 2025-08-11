@@ -4,29 +4,12 @@ import json
 import asyncio
 from typing import Optional
 
-from .const import AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI, AI_PROVIDER_LOCAL
+from .const import AI_PROVIDER_LOCAL
 from homeassistant.core import HomeAssistant, State
 from homeassistant.components import conversation, websocket_api
 from homeassistant.exceptions import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
-
-# Try to import AI libraries, but don't fail if they're not available
-try:
-    import openai
-    OPENAI_AVAILABLE = True
-    _LOGGER.info("✅ OpenAI library successfully imported")
-except ImportError as e:
-    OPENAI_AVAILABLE = False
-    _LOGGER.warning(f"❌ OpenAI library not available: {e}")
-
-try:
-    import google.generativeai as genai
-    GOOGLE_AI_AVAILABLE = True
-    _LOGGER.info("✅ Google Generative AI library successfully imported")
-except ImportError as e:
-    GOOGLE_AI_AVAILABLE = False
-    _LOGGER.warning(f"❌ Google Generative AI library not available: {e}")
 
 # Entity importance categories for better classification
 ENTITY_IMPORTANCE_MAP = {
@@ -177,31 +160,19 @@ async def get_entities_importance_batched(
                     "data": debug_data
                 }))
             
-            # Choose AI provider based on configuration
+            # Use Local Agent only
             if ai_provider == AI_PROVIDER_LOCAL:
                 response_text = await _query_local_agent(hass, prompt)
                 _LOGGER.debug(f"Local Agent response for batch {batch_num}: {response_text[:200]}...")
-            elif ai_provider == AI_PROVIDER_OPENAI and OPENAI_AVAILABLE and api_key:
-                response_text = await _query_openai(prompt, api_key)
-                _LOGGER.debug(f"OpenAI response for batch {batch_num}: {response_text[:200]}...")
-            elif ai_provider == AI_PROVIDER_GEMINI and GOOGLE_AI_AVAILABLE and api_key:
-                response_text = await _query_gemini(prompt, api_key)
-                _LOGGER.debug(f"Gemini response for batch {batch_num}: {response_text[:200]}...")
             else:
-                _LOGGER.error(f"AI provider {ai_provider} not available or missing API key")
+                _LOGGER.error(f"AI provider {ai_provider} not supported. Only Local Agent is available.")
                 # Send debug info about provider unavailable
                 if connection and msg_id:
-                    suggestion = ""
-                    if ai_provider == "Gemini" and not GOOGLE_AI_AVAILABLE and OPENAI_AVAILABLE:
-                        suggestion = " Suggerimento: Prova a cambiare il provider ad OpenAI nelle impostazioni dell'integrazione."
-                    elif ai_provider == "OpenAI" and not OPENAI_AVAILABLE and GOOGLE_AI_AVAILABLE:
-                        suggestion = " Suggerimento: Prova a cambiare il provider a Gemini nelle impostazioni dell'integrazione."
-                    
                     debug_data = {
                         "aiProvider": ai_provider,
                         "currentBatch": batch_num,
-                        "lastPrompt": f"ERRORE: Provider {ai_provider} non disponibile!",
-                        "lastResponse": f"OpenAI disponibile: {OPENAI_AVAILABLE}, Gemini disponibile: {GOOGLE_AI_AVAILABLE}, Chiave API presente: {bool(api_key)}.{suggestion}"
+                        "lastPrompt": f"ERRORE: Provider {ai_provider} non supportato!",
+                        "lastResponse": "Solo l'Agente Locale è disponibile. Assicurati di avere configurato una LLM come Ollama."
                     }
                     connection.send_message(websocket_api.event_message(msg_id, {
                         "type": "debug_info", 
@@ -306,32 +277,6 @@ def _create_fallback_result(entity_id: str, batch_num: int) -> dict:
         "analysis_method": "domain_fallback",
         "batch_number": batch_num,
     }
-
-
-async def _query_openai(prompt: str, api_key: str) -> str:
-    """Query OpenAI API."""
-    if not OPENAI_AVAILABLE:
-        raise Exception("OpenAI library not available")
-    
-    client = openai.AsyncOpenAI(api_key=api_key)
-    response = await client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=2000,
-        temperature=0.1
-    )
-    return response.choices[0].message.content
-
-
-async def _query_gemini(prompt: str, api_key: str) -> str:
-    """Query Google Gemini API."""
-    if not GOOGLE_AI_AVAILABLE:
-        raise Exception("Google Generative AI library not available")
-    
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-pro')
-    response = await model.generate_content_async(prompt)
-    return response.text
 
 
 async def _query_local_agent(hass: HomeAssistant, prompt: str) -> str:
