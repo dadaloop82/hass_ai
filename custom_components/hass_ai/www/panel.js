@@ -146,9 +146,16 @@ class HassAiPanel extends LitElement {
     }
     if (message.type === "token_limit_exceeded") {
       this.loading = false;
+      this.scanProgress = {
+        ...this.scanProgress,
+        show: false, // Hide progress on token limit
+        isComplete: false,
+        status: 'error'
+      };
       
-      // Show token limit error dialog
-      this._showTokenLimitDialog(message.data);
+      // Show elegant token limit notification
+      this._showTokenLimitNotification(message.data);
+      this.requestUpdate();
     }
     if (message.type === "scan_complete") {
       this.loading = false;
@@ -253,27 +260,70 @@ class HassAiPanel extends LitElement {
     }, 6000);
   }
 
-  _showTokenLimitDialog(data) {
-    // Create a simple alert-style dialog instead of complex DOM manipulation
-    const message = `🚨 Token Limit Exceeded
-
-Scan stopped at batch ${data.batch}
-
-${data.message}
-
-AI Response:
-${data.response}
-
-💡 Quick Solutions:
-• Reduce batch size in HASS AI settings (try 5-8 entities)
-• Increase max_tokens in your conversation agent
-• Use a different conversation agent with higher limits`;
-
-    // Use browser alert for now (more reliable)
-    alert(message);
+  _showTokenLimitNotification(data) {
+    // Create elegant token limit notification
+    const toast = document.createElement('div');
+    toast.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="font-size: 24px;">🚨</div>
+        <div>
+          <div style="font-weight: 600; margin-bottom: 4px;">Token Limit Raggiunti</div>
+          <div style="font-size: 14px; opacity: 0.9;">Scansione fermata al batch ${data.batch}. Riprova con batch più piccoli.</div>
+        </div>
+      </div>
+    `;
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #f44336;
+      color: white;
+      padding: 16px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 9999;
+      font-size: 15px;
+      max-width: 400px;
+      transform: translateX(100%);
+      transition: transform 0.4s ease-out;
+      cursor: pointer;
+    `;
     
-    // Also log to console for debugging
-    console.log('HASS AI Token Limit:', data);
+    // Make it clickable to dismiss
+    toast.addEventListener('click', () => {
+      toast.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.remove();
+        }
+      }, 400);
+    });
+    
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => {
+      toast.style.transform = 'translateX(0)';
+    }, 100);
+    
+    // Auto-remove after 8 seconds (longer for error messages)
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+          if (toast.parentNode) {
+            toast.remove();
+          }
+        }, 400);
+      }
+    }, 8000);
+    
+    // Log details to console for debugging
+    console.log('🚨 HASS AI Token Limit Details:', {
+      batch: data.batch,
+      message: data.message,
+      response: data.response
+    });
   }
 
   _handleToggle(ev) {
