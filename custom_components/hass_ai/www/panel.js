@@ -154,7 +154,7 @@ class HassAiPanel extends LitElement {
       this.loading = false;
       this.scanProgress = {
         ...this.scanProgress,
-        show: true,
+        show: false, // Hide progress immediately on completion
         isComplete: true,
         status: 'complete',
         message: `🎉 Scansione completata! Analizzate ${Object.keys(this.entities).length} entità`
@@ -166,11 +166,8 @@ class HassAiPanel extends LitElement {
         entityCount: Object.keys(this.entities).length
       };
       
-      // Hide completion message after 5 seconds
-      setTimeout(() => {
-        this.scanProgress.show = false;
-        this.requestUpdate();
-      }, 5000);
+      // Show completion notification
+      this._showCompletionNotification(Object.keys(this.entities).length);
       
       this.requestUpdate();
     }
@@ -215,6 +212,45 @@ class HassAiPanel extends LitElement {
         }
       }, 300);
     }, 4000);
+  }
+
+  _showCompletionNotification(entityCount) {
+    // Create completion toast notification
+    const toast = document.createElement('div');
+    toast.textContent = `🎉 Scansione completata! Analizzate ${entityCount} entità`;
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #4caf50;
+      color: white;
+      padding: 16px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 9999;
+      font-size: 16px;
+      font-weight: 500;
+      max-width: 350px;
+      transform: translateX(100%);
+      transition: transform 0.4s ease-out;
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => {
+      toast.style.transform = 'translateX(0)';
+    }, 100);
+    
+    // Auto-remove after 6 seconds
+    setTimeout(() => {
+      toast.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.remove();
+        }
+      }, 400);
+    }, 6000);
   }
 
   _showTokenLimitDialog(data) {
@@ -307,8 +343,8 @@ ${data.response}
       <ha-card .header=${t.title}>
         <div class="card-content">
           <p>${t.description}</p>
-          <ha-button raised @click=${this._runScan} .disabled=${this.loading}>
-            ${this.loading ? t.scanning_button : t.scan_button}
+          <ha-button raised @click=${this._runScan} .disabled=${this.loading || (this.scanProgress.show && !this.scanProgress.isComplete)}>
+            ${this.loading || this.scanProgress.show ? t.scanning_button : t.scan_button}
           </ha-button>
           
           ${this.lastScanInfo.entityCount > 0 ? html`
@@ -326,19 +362,20 @@ ${data.response}
                 ${this.scanProgress.message}
               </div>
               
-              ${this.scanProgress.totalEntities > 0 ? html`
-                <div class="progress-bar-container">
-                  <div class="progress-bar">
-                    <div class="progress-fill" 
-                         style="width: ${Math.round((this.scanProgress.entitiesProcessed / this.scanProgress.totalEntities) * 100)}%">
-                    </div>
-                  </div>
-                  <div class="progress-text">
-                    ${this.scanProgress.entitiesProcessed} / ${this.scanProgress.totalEntities} entità
-                    ${this.scanProgress.currentBatch > 0 ? `(Batch ${this.scanProgress.currentBatch})` : ''}
+              <div class="progress-bar-container">
+                <div class="progress-bar">
+                  <div class="progress-fill" 
+                       style="width: ${this.scanProgress.totalEntities > 0 ? Math.round((this.scanProgress.entitiesProcessed / this.scanProgress.totalEntities) * 100) : 0}%">
                   </div>
                 </div>
-              ` : ''}
+                <div class="progress-text">
+                  ${this.scanProgress.totalEntities > 0 ? 
+                    `${this.scanProgress.entitiesProcessed} / ${this.scanProgress.totalEntities} entità` :
+                    'Inizializzazione...'
+                  }
+                  ${this.scanProgress.currentBatch > 0 ? ` (Batch ${this.scanProgress.currentBatch})` : ''}
+                </div>
+              </div>
               
               ${this.scanProgress.status === 'requesting' ? html`
                 <div class="status-indicator">🔄 Invio richiesta...</div>
@@ -346,13 +383,6 @@ ${data.response}
               
               ${this.scanProgress.status === 'processing' ? html`
                 <div class="status-indicator">⚙️ Elaborazione risposta...</div>
-              ` : ''}
-              
-              ${this.scanProgress.isComplete ? html`
-                <div class="completion-message">
-                  <strong>✅ Scansione terminata!</strong><br>
-                  Ecco i risultati dell'analisi delle tue entità:
-                </div>
               ` : ''}
             </div>
           ` : ''}
@@ -407,14 +437,6 @@ ${data.response}
         ` : ''}
       </ha-card>
     `;
-  }
-
-  renderLog(t) {
-    const hasEntries = Object.keys(this.entities).length > 0;
-    
-    if (!hasEntries) {
-      return html`<p class="no-data">${t.no_scan}</p>`;
-    }
   }
 
   static get styles() {
@@ -631,35 +653,6 @@ ${data.response}
       }
       ha-icon {
         --mdc-icon-size: 20px;
-      }
-      .debug-section {
-        margin-top: 24px;
-        padding: 16px;
-        border: 1px solid var(--primary-color);
-        border-radius: 8px;
-        background: var(--card-background-color);
-        font-family: monospace;
-      }
-      .debug-section h3 {
-        margin: 0 0 12px 0;
-        color: var(--primary-color);
-      }
-      .debug-provider {
-        margin-bottom: 8px;
-        font-weight: bold;
-      }
-      .debug-prompt, .debug-response {
-        margin-bottom: 12px;
-      }
-      .debug-prompt pre, .debug-response pre {
-        background: var(--primary-background-color);
-        padding: 8px;
-        border-radius: 4px;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        max-height: 200px;
-        overflow-y: auto;
-        font-size: 12px;
       }
     `;
   }
