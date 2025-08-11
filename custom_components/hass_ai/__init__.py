@@ -89,18 +89,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info(f"HASS AI integration loaded successfully with scan interval: {scan_interval_days} days")
     
-    # Check AI libraries availability
-    try:
-        import openai
-        _LOGGER.info("✅ OpenAI library available for AI analysis")
-    except ImportError:
-        _LOGGER.warning("❌ OpenAI library not available - install with: pip install openai>=1.0.0")
-    
-    try:
-        import google.generativeai
-        _LOGGER.info("✅ Google Generative AI library available for AI analysis")
-    except ImportError:
-        _LOGGER.warning("❌ Google Generative AI library not available - install with: pip install google-generativeai>=0.3.0")
+    _LOGGER.info("🏠 HASS AI v1.7.0 - Local Agent Only mode")
+    _LOGGER.info("🤖 Only local conversation agents supported - no external dependencies required")
     
     return True
 
