@@ -33,16 +33,53 @@ class HassAiPanel extends LitElement {
       isComplete: false,
       status: 'idle' // 'idle', 'requesting', 'processing', 'complete'
     };
+    this.lastScanInfo = {
+      timestamp: null,
+      entityCount: 0
+    };
   }
 
   connectedCallback() {
     super.connectedCallback();
     this.language = this.hass.language || 'en';
     this._loadOverrides();
+    this._loadAiResults();
   }
 
   async _loadOverrides() {
     this.overrides = await this.hass.callWS({ type: "hass_ai/load_overrides" });
+  }
+
+  async _loadAiResults() {
+    try {
+      const response = await this.hass.callWS({ type: "hass_ai/load_ai_results" });
+      
+      // Check if response contains metadata
+      if (response && typeof response === 'object') {
+        // If it's the new format with metadata
+        if (response.results) {
+          this.entities = response.results;
+          this.lastScanInfo = {
+            timestamp: response.last_scan_timestamp,
+            entityCount: response.total_entities || Object.keys(response.results).length
+          };
+        } else {
+          // Old format - just the results
+          this.entities = response;
+          this.lastScanInfo = {
+            timestamp: null,
+            entityCount: Object.keys(response).length
+          };
+        }
+        
+        if (Object.keys(this.entities).length > 0) {
+          console.log(`📂 Loaded ${Object.keys(this.entities).length} saved AI analysis results`);
+          this.requestUpdate();
+        }
+      }
+    } catch (error) {
+      console.log('No previous AI results found:', error);
+    }
   }
 
   async _runScan() {
@@ -121,6 +158,12 @@ class HassAiPanel extends LitElement {
         isComplete: true,
         status: 'complete',
         message: `🎉 Scansione completata! Analizzate ${Object.keys(this.entities).length} entità`
+      };
+      
+      // Update last scan info
+      this.lastScanInfo = {
+        timestamp: new Date().toISOString(),
+        entityCount: Object.keys(this.entities).length
       };
       
       // Hide completion message after 5 seconds
@@ -268,6 +311,15 @@ ${data.response}
             ${this.loading ? t.scanning_button : t.scan_button}
           </ha-button>
           
+          ${this.lastScanInfo.entityCount > 0 ? html`
+            <div class="last-scan-info">
+              📊 Ultima scansione: ${this.lastScanInfo.entityCount} entità analizzate
+              ${this.lastScanInfo.timestamp ? html`
+                <br><small>🕐 ${new Date(this.lastScanInfo.timestamp).toLocaleString()}</small>
+              ` : ''}
+            </div>
+          ` : ''}
+          
           ${this.scanProgress.show ? html`
             <div class="progress-section">
               <div class="progress-message">
@@ -363,6 +415,7 @@ ${data.response}
     if (!hasEntries) {
       return html`<p class="no-data">${t.no_scan}</p>`;
     }
+  }
 
   static get styles() {
     return css`
@@ -437,6 +490,16 @@ ${data.response}
         border-radius: 6px;
         margin-top: 12px;
         text-align: center;
+      }
+      
+      .last-scan-info {
+        background-color: var(--card-background-color, #ffffff);
+        border: 1px solid var(--divider-color, #e0e0e0);
+        border-radius: 6px;
+        padding: 12px;
+        margin: 16px 0;
+        font-size: 14px;
+        color: var(--secondary-text-color);
       }
       
       .warning-message {

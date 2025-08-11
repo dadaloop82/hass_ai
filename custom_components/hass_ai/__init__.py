@@ -17,7 +17,49 @@ from .services import async_setup_services, async_unload_services
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 INTELLIGENCE_DATA_KEY = f"{DOMAIN}_intelligence_data"
+AI_RESULTS_KEY = f"{DOMAIN}_ai_results"
 PANEL_URL_PATH = "hass-ai-panel"
+
+
+async def _save_ai_results(hass: HomeAssistant, results: list[dict]) -> None:
+    """Save AI analysis results to storage."""
+    try:
+        # Get the first config entry for this integration
+        entry_id = next(iter(hass.data[DOMAIN]))
+        
+        # Create a separate store for AI results
+        ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
+        
+        # Prepare data for storage
+        results_data = {
+            "last_scan_timestamp": hass.helpers.utcnow().isoformat(),
+            "total_entities": len(results),
+            "results": {result["entity_id"]: result for result in results}
+        }
+        
+        await ai_results_store.async_save(results_data)
+        _LOGGER.info(f"💾 Saved AI analysis results for {len(results)} entities")
+        
+    except Exception as e:
+        _LOGGER.error(f"Error saving AI results: {e}")
+
+
+async def _load_ai_results(hass: HomeAssistant) -> dict:
+    """Load AI analysis results from storage."""
+    try:
+        ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
+        results_data = await ai_results_store.async_load()
+        
+        if results_data:
+            _LOGGER.info(f"📂 Loaded AI results for {results_data.get('total_entities', 0)} entities from {results_data.get('last_scan_timestamp', 'unknown time')}")
+            return results_data.get("results", {})
+        else:
+            _LOGGER.info("📂 No previous AI results found")
+            return {}
+            
+    except Exception as e:
+        _LOGGER.error(f"Error loading AI results: {e}")
+        return {}
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HASS AI from a config entry."""
@@ -60,6 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_scan_entities)
     websocket_api.async_register_command(hass, handle_save_overrides)
     websocket_api.async_register_command(hass, handle_load_overrides)
+    websocket_api.async_register_command(hass, handle_load_ai_results)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -93,6 +136,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.info("🤖 Only local conversation agents supported - no external dependencies required")
     
     return True
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/load_ai_results",
+})
+@websocket_api.async_response
+async def handle_load_ai_results(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to load saved AI analysis results."""
+    try:
+        ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
+        results_data = await ai_results_store.async_load()
+        
+        if results_data:
+            # Send the full data including metadata
+            connection.send_message(websocket_api.result_message(msg["id"], results_data))
+        else:
+            # Send empty results
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "results": {},
+                "last_scan_timestamp": None,
+                "total_entities": 0
+            }))
+    except Exception as e:
+        _LOGGER.error(f"Error loading AI results: {e}")
+        connection.send_message(websocket_api.error_message(msg["id"], "load_failed", str(e)))
 
 
 @websocket_api.websocket_command({
@@ -161,6 +229,9 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         # Send each result as it's processed
         for result in importance_results:
             connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
+        
+        # Save AI analysis results automatically
+        await _save_ai_results(hass, importance_results)
             
         connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_complete"}))
         _LOGGER.info(f"Scan completed successfully for {len(importance_results)} entities")
