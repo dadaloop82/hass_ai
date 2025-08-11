@@ -221,9 +221,13 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         # Get conversation agent from config
         conversation_agent = entry.data.get(CONF_CONVERSATION_AGENT, "auto")
         
+        # Get language from message, default to English
+        language = msg.get("language", "en")
+        _LOGGER.info(f"Using language: {language}")
+        
         # Get importance for all entities in batches
         importance_results = await get_entities_importance_batched(
-            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"], conversation_agent
+            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"], conversation_agent, language
         )
 
         # Send each result as it's processed

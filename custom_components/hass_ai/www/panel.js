@@ -101,7 +101,10 @@ class HassAiPanel extends LitElement {
 
     await this.hass.connection.subscribeMessage(
       (message) => this._handleScanUpdate(message),
-      { type: "hass_ai/scan_entities" }
+      { 
+        type: "hass_ai/scan_entities",
+        language: this.hass.language || navigator.language || 'en'
+      }
     );
   }
 

@@ -18,6 +18,71 @@ from homeassistant.exceptions import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
 
+def _get_localized_message(message_key: str, language: str, **kwargs) -> str:
+    """Get localized messages based on language."""
+    is_italian = language.startswith('it')
+    
+    messages = {
+        'batch_request': {
+            'it': f"📤 Richiesta inviata per batch {kwargs.get('batch_num')} ({kwargs.get('entities_count')} entità)",
+            'en': f"📤 Request sent for batch {kwargs.get('batch_num')} ({kwargs.get('entities_count')} entities)"
+        },
+        'batch_response': {
+            'it': f"📥 Risposta ottenuta per batch {kwargs.get('batch_num')} ({kwargs.get('entities_count')} entità)",
+            'en': f"📥 Response received for batch {kwargs.get('batch_num')} ({kwargs.get('entities_count')} entities)"
+        }
+    }
+    
+    return messages.get(message_key, {}).get('it' if is_italian else 'en', f"Message key '{message_key}' not found")
+
+def _create_localized_prompt(batch_states: list[State], entity_details: list[str], language: str) -> str:
+    """Create a localized prompt based on the user's language preference."""
+    
+    is_italian = language.startswith('it')
+    
+    if is_italian:
+        return (
+            f"Come esperto di Home Assistant, analizza queste {len(batch_states)} entità e i loro attributi per valutare la loro importanza per le automazioni su una scala da 0-5:\n\n"
+            f"Scala di Valutazione:\n"
+            f"0 = Ignora (diagnostica/non necessaria per automazioni)\n"
+            f"1 = Molto Bassa (raramente utile, principalmente informativa)\n"
+            f"2 = Bassa (occasionalmente utile, piccola comodità)\n"
+            f"3 = Media (comunemente utile, buon potenziale per automazioni)\n"
+            f"4 = Alta (frequentemente importante, valore significativo per automazioni)\n"
+            f"5 = Critica (essenziale per automazioni, sicurezza o protezione)\n\n"
+            f"Considera questi fattori:\n"
+            f"- Tipo di dispositivo e funzionalità (dal dominio e device_class)\n"
+            f"- Attributi che indicano potenziale per automazioni (caratteristiche controllabili)\n"
+            f"- Rilevanza di posizione/area (informazioni stanza, zona)\n"
+            f"- Importanza per sicurezza e protezione\n"
+            f"- Cambiamenti di stato che attivano automazioni utili\n"
+            f"- Complessità dell'integrazione vs valore per automazioni\n\n"
+            f"Analizza sia lo stato dell'entità CHE i suoi attributi per una valutazione completa.\n"
+            f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating' e 'reason'.\n\n"
+            f"Entità da analizzare:\n" + "\n".join(entity_details)
+        )
+    else:
+        return (
+            f"As a Home Assistant expert, analyze these {len(batch_states)} entities and their attributes to rate their automation importance on a scale of 0-5:\n\n"
+            f"Rating Scale:\n"
+            f"0 = Ignore (diagnostic/unnecessary for automations)\n"
+            f"1 = Very Low (rarely useful, mostly informational)\n"
+            f"2 = Low (occasionally useful, minor convenience)\n"
+            f"3 = Medium (commonly useful, good automation potential)\n"
+            f"4 = High (frequently important, significant automation value)\n"
+            f"5 = Critical (essential for automations, security, or safety)\n\n"
+            f"Consider these factors:\n"
+            f"- Device type and functionality (from domain and device_class)\n"
+            f"- Attributes that indicate automation potential (controllable features)\n"
+            f"- Location/area relevance (room, zone information)\n"
+            f"- Security and safety importance\n"
+            f"- State changes that trigger useful automations\n"
+            f"- Integration complexity vs. automation value\n\n"
+            f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
+            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'.\n\n"
+            f"Entities to analyze:\n" + "\n".join(entity_details)
+        )
+
 # Entity importance categories for better classification
 ENTITY_IMPORTANCE_MAP = {
     "climate": 4,  # HVAC controls are typically important
@@ -45,7 +110,8 @@ async def get_entities_importance_batched(
     api_key: str = None,
     connection = None,
     msg_id: str = None,
-    conversation_agent: str = None
+    conversation_agent: str = None,
+    language: str = "en"  # Add language parameter
 ) -> list[dict]:
     """Calculate the importance of multiple entities using external AI providers in batches with dynamic size reduction."""
     
@@ -108,7 +174,7 @@ async def get_entities_importance_batched(
         
         success = await _process_single_batch(
             hass, batch_states, overall_batch_num, ai_provider, 
-            connection, msg_id, conversation_agent, all_results
+            connection, msg_id, conversation_agent, all_results, language
         )
         
         if success:
@@ -193,7 +259,8 @@ async def _process_single_batch(
     connection,
     msg_id: str,
     conversation_agent: str,
-    all_results: list
+    all_results: list,
+    language: str = "en"  # Add language parameter
 ) -> bool:
     """Process a single batch and return True if successful, False if token limit exceeded."""
     
@@ -245,26 +312,8 @@ async def _process_single_batch(
     # Add delay to make AI analysis visible (2-3 seconds per batch)
     await asyncio.sleep(2.5)
     
-    prompt = (
-        f"As a Home Assistant expert, analyze these {len(batch_states)} entities and their attributes to rate their automation importance on a scale of 0-5:\n\n"
-        f"Rating Scale:\n"
-        f"0 = Ignore (diagnostic/unnecessary for automations)\n"
-        f"1 = Very Low (rarely useful, mostly informational)\n"
-        f"2 = Low (occasionally useful, minor convenience)\n"
-        f"3 = Medium (commonly useful, good automation potential)\n"
-        f"4 = High (frequently important, significant automation value)\n"
-        f"5 = Critical (essential for automations, security, or safety)\n\n"
-        f"Consider these factors:\n"
-        f"- Device type and functionality (from domain and device_class)\n"
-        f"- Attributes that indicate automation potential (controllable features)\n"
-        f"- Location/area relevance (room, zone information)\n"
-        f"- Security and safety importance\n"
-        f"- State changes that trigger useful automations\n"
-        f"- Integration complexity vs. automation value\n\n"
-        f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
-        f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'.\n\n"
-        f"Entities to analyze:\n" + "\n".join(entity_details)
-    )
+    # Create localized prompt based on user's language
+    prompt = _create_localized_prompt(batch_states, entity_details, language)
 
     try:
         # Send simple progress info to frontend instead of full debug
@@ -272,7 +321,7 @@ async def _process_single_batch(
             connection.send_message(websocket_api.event_message(msg_id, {
                 "type": "scan_progress", 
                 "data": {
-                    "message": f"📤 Richiesta inviata per batch {batch_num} ({len(batch_states)} entità)",
+                    "message": _get_localized_message('batch_request', language, batch_num=batch_num, entities_count=len(batch_states)),
                     "batch_number": batch_num,
                     "entities_count": len(batch_states)
                 }
@@ -288,7 +337,7 @@ async def _process_single_batch(
                 connection.send_message(websocket_api.event_message(msg_id, {
                     "type": "scan_progress",
                     "data": {
-                        "message": f"📥 Risposta ottenuta per batch {batch_num} ({len(batch_states)} entità)",
+                        "message": _get_localized_message('batch_response', language, batch_num=batch_num, entities_count=len(batch_states)),
                         "batch_number": batch_num,
                         "entities_count": len(batch_states)
                     }
