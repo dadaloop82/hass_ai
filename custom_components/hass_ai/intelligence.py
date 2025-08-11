@@ -4,6 +4,7 @@ import json
 import asyncio
 from typing import Optional
 
+from .const import AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI, AI_PROVIDER_LOCAL
 from homeassistant.core import HomeAssistant, State
 from homeassistant.components import conversation, websocket_api
 from homeassistant.exceptions import HomeAssistantError
@@ -14,16 +15,18 @@ _LOGGER = logging.getLogger(__name__)
 try:
     import openai
     OPENAI_AVAILABLE = True
-except ImportError:
+    _LOGGER.info("✅ OpenAI library successfully imported")
+except ImportError as e:
     OPENAI_AVAILABLE = False
-    _LOGGER.info("OpenAI library not available, falling back to conversation agent")
+    _LOGGER.warning(f"❌ OpenAI library not available: {e}")
 
 try:
     import google.generativeai as genai
     GOOGLE_AI_AVAILABLE = True
-except ImportError:
+    _LOGGER.info("✅ Google Generative AI library successfully imported")
+except ImportError as e:
     GOOGLE_AI_AVAILABLE = False
-    _LOGGER.info("Google Generative AI library not available, falling back to conversation agent")
+    _LOGGER.warning(f"❌ Google Generative AI library not available: {e}")
 
 # Entity importance categories for better classification
 ENTITY_IMPORTANCE_MAP = {
@@ -61,7 +64,8 @@ async def get_entities_importance_batched(
     
     _LOGGER.info(f"Starting AI analysis with provider: {ai_provider}, API key present: {bool(api_key)}")
     
-    if not api_key:
+    # Local agent doesn't need API key
+    if ai_provider != AI_PROVIDER_LOCAL and not api_key:
         _LOGGER.error(f"No API key provided for {ai_provider}! Using fallback classification.")
         # Send debug info about missing API key
         if connection and msg_id:
@@ -174,10 +178,13 @@ async def get_entities_importance_batched(
                 }))
             
             # Choose AI provider based on configuration
-            if ai_provider == "OpenAI" and OPENAI_AVAILABLE and api_key:
+            if ai_provider == AI_PROVIDER_LOCAL:
+                response_text = await _query_local_agent(hass, prompt)
+                _LOGGER.debug(f"Local Agent response for batch {batch_num}: {response_text[:200]}...")
+            elif ai_provider == AI_PROVIDER_OPENAI and OPENAI_AVAILABLE and api_key:
                 response_text = await _query_openai(prompt, api_key)
                 _LOGGER.debug(f"OpenAI response for batch {batch_num}: {response_text[:200]}...")
-            elif ai_provider == "Gemini" and GOOGLE_AI_AVAILABLE and api_key:
+            elif ai_provider == AI_PROVIDER_GEMINI and GOOGLE_AI_AVAILABLE and api_key:
                 response_text = await _query_gemini(prompt, api_key)
                 _LOGGER.debug(f"Gemini response for batch {batch_num}: {response_text[:200]}...")
             else:
@@ -325,3 +332,32 @@ async def _query_gemini(prompt: str, api_key: str) -> str:
     model = genai.GenerativeModel('gemini-pro')
     response = await model.generate_content_async(prompt)
     return response.text
+
+
+async def _query_local_agent(hass: HomeAssistant, prompt: str) -> str:
+    """Query Home Assistant local conversation agent."""
+    try:
+        # Get the conversation agent
+        agent = await conversation.async_get_agent(hass, None)
+        
+        # Create a conversation request
+        conversation_input = conversation.ConversationInput(
+            text=prompt,
+            context=conversation.ConversationContext(),
+            conversation_id=None,
+            device_id=None,
+            language=hass.config.language
+        )
+        
+        # Process the conversation
+        result = await agent.async_process(conversation_input)
+        
+        # Return the response text
+        return result.response.response_type.text
+        
+    except Exception as e:
+        _LOGGER.error(f"Error querying local conversation agent: {e}")
+        # Return a simple structured response as fallback
+        return """[
+{"entity_id": "fallback", "rating": 2, "reason": "Agente locale non disponibile, usando classificazione domain-based"}
+]"""

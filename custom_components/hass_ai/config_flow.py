@@ -4,7 +4,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 import voluptuous as vol
 
-from .const import DOMAIN, AI_PROVIDERS, AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI
+from .const import DOMAIN, AI_PROVIDERS, AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI, AI_PROVIDER_LOCAL
 
 class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Hass AI config flow."""
@@ -17,15 +17,27 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
 
         if user_input is not None:
-            # Store the provider and move to API key step
-            self._ai_provider = user_input.get("ai_provider", AI_PROVIDER_OPENAI)
+            # Store the provider and scan interval
+            self._ai_provider = user_input.get("ai_provider", AI_PROVIDER_LOCAL)
             self._scan_interval = user_input.get("scan_interval", 7)
-            return await self.async_step_api_key()
+            
+            # If Local Agent is selected, skip API key step
+            if self._ai_provider == AI_PROVIDER_LOCAL:
+                return self.async_create_entry(
+                    title="HASS AI", 
+                    data={
+                        "ai_provider": self._ai_provider,
+                        "scan_interval": self._scan_interval
+                    }
+                )
+            else:
+                # For external providers, go to API key step
+                return await self.async_step_api_key()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required("ai_provider", default=AI_PROVIDER_OPENAI): vol.In(AI_PROVIDERS),
+                vol.Required("ai_provider", default=AI_PROVIDER_LOCAL): vol.In(AI_PROVIDERS),
                 vol.Optional("scan_interval", default=7): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
             }),
         )

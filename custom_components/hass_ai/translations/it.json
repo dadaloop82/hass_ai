@@ -3,7 +3,7 @@
         "step": {
             "user": {
                 "title": "Benvenuto in HASS AI",
-                "description": "Stai per configurare HASS AI, un'integrazione progettata per portare un nuovo livello di intelligenza alla tua casa smart. Il suo obiettivo è comprendere automaticamente quali dei tuoi dispositivi sono più importanti per la domotica.\n\nDopo questa configurazione iniziale, un nuovo pannello \"HASS AI\" sarà aggiunto alla barra laterale. Da lì potrai eseguire una scansione per vedere come l'AI ha valutato le tue entità e poi sovrascrivere i suoi suggerimenti per adattarli perfettamente alle tue esigenze.",
+                "description": "Stai per configurare HASS AI, un'integrazione progettata per portare un nuovo livello di intelligenza alla tua casa smart. Il suo obiettivo è comprendere automaticamente quali dei tuoi dispositivi sono più importanti per la domotica.\n\nDopo questa configurazione iniziale, un nuovo pannello \"HASS AI\" sarà aggiunto alla barra laterale. Da lì potrai eseguire una scansione per vedere come l'AI ha valutato le tue entità e poi sovrascrivere i suoi suggerimenti per adattarli perfettamente alle tue esigenze.\n\n**Agente Locale**: Usa l'agente conversazione integrato di Home Assistant (nessuna chiave API richiesta)\n**OpenAI/Gemini**: Provider AI esterni (chiave API richiesta)",
                 "data": {
                     "ai_provider": "Provider AI",
                     "scan_interval": "Intervallo di scansione (giorni)"

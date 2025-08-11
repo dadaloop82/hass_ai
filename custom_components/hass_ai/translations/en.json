@@ -3,7 +3,7 @@
         "step": {
             "user": {
                 "title": "Welcome to HASS AI",
-                "description": "You are about to set up HASS AI, an integration designed to bring a new level of intelligence to your smart home. Its goal is to automatically understand which of your devices are most important for home automation.\n\nAfter this initial setup, a new \"HASS AI\" panel will be added to your sidebar. From there, you can run a scan to see how the AI has weighted your entities and then override its suggestions to perfectly match your needs.",
+                "description": "You are about to set up HASS AI, an integration designed to bring a new level of intelligence to your smart home. Its goal is to automatically understand which of your devices are most important for home automation.\n\nAfter this initial setup, a new \"HASS AI\" panel will be added to your sidebar. From there, you can run a scan to see how the AI has weighted your entities and then override its suggestions to perfectly match your needs.\n\n**Local Agent**: Uses Home Assistant's built-in conversation agent (no API key required)\n**OpenAI/Gemini**: External AI providers (API key required)",
                 "data": {
                     "ai_provider": "AI Provider",
                     "scan_interval": "Scan Interval (days)"
