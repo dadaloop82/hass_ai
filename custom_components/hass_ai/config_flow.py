@@ -50,13 +50,21 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     }
                 )
 
-        # Determine description based on provider
-        if self._ai_provider == AI_PROVIDER_OPENAI:
-            description = "Enter your OpenAI API key. You can get it from https://platform.openai.com/api-keys"
-        elif self._ai_provider == AI_PROVIDER_GEMINI:
-            description = "Enter your Google AI Studio API key. You can get it from https://aistudio.google.com/app/apikey"
+        # Determine description based on provider and language
+        if self.hass.config.language == "it":
+            if self._ai_provider == AI_PROVIDER_OPENAI:
+                description = "Inserisci la tua chiave API OpenAI. Puoi ottenerla da https://platform.openai.com/api-keys"
+            elif self._ai_provider == AI_PROVIDER_GEMINI:
+                description = "Inserisci la tua chiave API Google AI Studio. Puoi ottenerla da https://aistudio.google.com/app/apikey"
+            else:
+                description = "Inserisci la tua chiave API per il provider AI selezionato."
         else:
-            description = "Enter your API key for the selected AI provider."
+            if self._ai_provider == AI_PROVIDER_OPENAI:
+                description = "Enter your OpenAI API key. You can get it from https://platform.openai.com/api-keys"
+            elif self._ai_provider == AI_PROVIDER_GEMINI:
+                description = "Enter your Google AI Studio API key. You can get it from https://aistudio.google.com/app/apikey"
+            else:
+                description = "Enter your API key for the selected AI provider."
 
         return self.async_show_form(
             step_id="api_key",
@@ -134,12 +142,21 @@ class HassAiOptionsFlowHandler(config_entries.OptionsFlow):
                 
                 return self.async_create_entry(title="", data=self._new_options)
 
-        # Determine description based on provider
-        if self._ai_provider == AI_PROVIDER_OPENAI:
-            description = "Enter your OpenAI API key. You can get it from https://platform.openai.com/api-keys"
-        elif self._ai_provider == AI_PROVIDER_GEMINI:
-            description = "Enter your Google AI Studio API key. You can get it from https://aistudio.google.com/app/apikey"
+        # Determine description based on provider and language
+        if self.hass.config.language == "it":
+            if self._ai_provider == AI_PROVIDER_OPENAI:
+                description = "Inserisci la tua chiave API OpenAI. Puoi ottenerla da https://platform.openai.com/api-keys"
+            elif self._ai_provider == AI_PROVIDER_GEMINI:
+                description = "Inserisci la tua chiave API Google AI Studio. Puoi ottenerla da https://aistudio.google.com/app/apikey"
+            else:
+                description = "Inserisci la tua chiave API per il provider AI selezionato."
         else:
+            if self._ai_provider == AI_PROVIDER_OPENAI:
+                description = "Enter your OpenAI API key. You can get it from https://platform.openai.com/api-keys"
+            elif self._ai_provider == AI_PROVIDER_GEMINI:
+                description = "Enter your Google AI Studio API key. You can get it from https://aistudio.google.com/app/apikey"
+            else:
+                description = "Enter your API key for the selected AI provider."
             description = "Enter your API key for the selected AI provider."
 
         return self.async_show_form(

@@ -184,11 +184,17 @@ async def get_entities_importance_batched(
                 _LOGGER.error(f"AI provider {ai_provider} not available or missing API key")
                 # Send debug info about provider unavailable
                 if connection and msg_id:
+                    suggestion = ""
+                    if ai_provider == "Gemini" and not GOOGLE_AI_AVAILABLE and OPENAI_AVAILABLE:
+                        suggestion = " Suggerimento: Prova a cambiare il provider ad OpenAI nelle impostazioni dell'integrazione."
+                    elif ai_provider == "OpenAI" and not OPENAI_AVAILABLE and GOOGLE_AI_AVAILABLE:
+                        suggestion = " Suggerimento: Prova a cambiare il provider a Gemini nelle impostazioni dell'integrazione."
+                    
                     debug_data = {
                         "aiProvider": ai_provider,
                         "currentBatch": batch_num,
                         "lastPrompt": f"ERRORE: Provider {ai_provider} non disponibile!",
-                        "lastResponse": f"OpenAI disponibile: {OPENAI_AVAILABLE}, Gemini disponibile: {GOOGLE_AI_AVAILABLE}, Chiave API presente: {bool(api_key)}"
+                        "lastResponse": f"OpenAI disponibile: {OPENAI_AVAILABLE}, Gemini disponibile: {GOOGLE_AI_AVAILABLE}, Chiave API presente: {bool(api_key)}.{suggestion}"
                     }
                     connection.send_message(websocket_api.event_message(msg_id, {
                         "type": "debug_info", 
