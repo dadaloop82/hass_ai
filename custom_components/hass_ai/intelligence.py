@@ -172,6 +172,16 @@ async def get_entities_importance_batched(
         if state.entity_id not in processed_entity_ids:
             all_results.append(_create_fallback_result(state.entity_id, 0))
 
+    # Send scan completion message to frontend
+    if connection and msg_id:
+        connection.send_message(websocket_api.event_message(msg_id, {
+            "type": "scan_complete",
+            "data": {
+                "total_entities": len(all_results),
+                "message": f"Scansione completata! Analizzate {len(all_results)} entità"
+            }
+        }))
+
     _LOGGER.info(f"🏁 Completed analysis of {len(states)} entities, got {len(all_results)} results")
     return all_results
         

@@ -27,7 +27,11 @@ class HassAiPanel extends LitElement {
       show: false,
       message: '',
       currentBatch: 0,
-      entitiesCount: 0
+      totalBatches: 0,
+      entitiesProcessed: 0,
+      totalEntities: 0,
+      isComplete: false,
+      status: 'idle' // 'idle', 'requesting', 'processing', 'complete'
     };
   }
 
@@ -45,12 +49,16 @@ class HassAiPanel extends LitElement {
     this.loading = true;
     this.entities = {};
     
-    // Show initial simple progress info
+    // Initialize progress tracking
     this.scanProgress = {
       show: true,
       message: '🚀 Avvio scansione...',
       currentBatch: 0,
-      entitiesCount: 0
+      totalBatches: 0,
+      entitiesProcessed: 0,
+      totalEntities: 0,
+      isComplete: false,
+      status: 'idle'
     };
     this.requestUpdate();
 
@@ -65,26 +73,24 @@ class HassAiPanel extends LitElement {
     if (message.type === "entity_result") {
       const entity = message.result;
       this.entities[entity.entity_id] = entity;
+      
+      // Update entities processed count
+      this.scanProgress.entitiesProcessed = Object.keys(this.entities).length;
       this.requestUpdate("entities");
     }
     if (message.type === "scan_progress") {
-      // Update simple progress info
+      // Update detailed progress info
       this.scanProgress = {
+        ...this.scanProgress,
         show: true,
         message: message.data.message,
         currentBatch: message.data.batch_number,
-        entitiesCount: message.data.entities_count
+        status: message.data.message.includes('📤') ? 'requesting' : 'processing'
       };
       this.requestUpdate();
-      
-      // Auto-hide progress after 3 seconds
-      setTimeout(() => {
-        this.scanProgress.show = false;
-        this.requestUpdate();
-      }, 3000);
     }
     if (message.type === "batch_info") {
-      // Update batch progress info
+      // Update batch progress info and calculate totals
       this.scanProgress = {
         ...this.scanProgress,
         currentBatch: message.data.batch_number,
@@ -92,6 +98,7 @@ class HassAiPanel extends LitElement {
         entitiesInBatch: message.data.entities_in_batch,
         remainingEntities: message.data.remaining_entities,
         retryAttempt: message.data.retry_attempt,
+        totalEntities: message.data.entities_in_batch + message.data.remaining_entities,
         show: true
       };
       this.requestUpdate();
@@ -108,7 +115,20 @@ class HassAiPanel extends LitElement {
     }
     if (message.type === "scan_complete") {
       this.loading = false;
-      this.scanProgress.show = false;
+      this.scanProgress = {
+        ...this.scanProgress,
+        show: true,
+        isComplete: true,
+        status: 'complete',
+        message: `🎉 Scansione completata! Analizzate ${Object.keys(this.entities).length} entità`
+      };
+      
+      // Hide completion message after 5 seconds
+      setTimeout(() => {
+        this.scanProgress.show = false;
+        this.requestUpdate();
+      }, 5000);
+      
       this.requestUpdate();
     }
   }
@@ -226,14 +246,7 @@ ${data.response}
       ai_weight: "Peso IA",
       reason: "Motivazione AI",
       your_weight: "Tuo Peso",
-      weight_legend: "(0=Ignora, 5=Critico)",
-      log_title: "Log Analisi",
-      no_scan: "Nessuna scansione eseguita. Clicca 'Avvia Nuova Scansione' per iniziare.",
-      scanned_entities: "Entità analizzate:",
-      method: "Metodo:",
-      batch: "Batch:",
-      showing_first: "Mostrate prime 10 entità di",
-      total: "totali"
+      weight_legend: "(0=Ignora, 5=Critico)"
     } : {
       title: "HASS AI Control Panel",
       description: "Analyze your entities, teach the AI, and customize weights to optimize your smart home. AI provider is configured in integration settings.",
@@ -244,14 +257,7 @@ ${data.response}
       ai_weight: "AI Weight",
       reason: "AI Reason",
       your_weight: "Your Weight",
-      weight_legend: "(0=Ignore, 5=Critical)",
-      log_title: "Analysis Log",
-      no_scan: "No scan performed yet. Click 'Start New Scan' to begin.",
-      scanned_entities: "Entities analyzed:",
-      method: "Method:",
-      batch: "Batch:",
-      showing_first: "Showing first 10 entities of",
-      total: "total"
+      weight_legend: "(0=Ignore, 5=Critical)"
     };
 
     return html`
@@ -267,9 +273,33 @@ ${data.response}
               <div class="progress-message">
                 ${this.scanProgress.message}
               </div>
-              ${this.scanProgress.currentBatch > 0 ? html`
-                <div class="progress-details">
-                  <small>Batch ${this.scanProgress.currentBatch} | ${this.scanProgress.entitiesCount} entità</small>
+              
+              ${this.scanProgress.totalEntities > 0 ? html`
+                <div class="progress-bar-container">
+                  <div class="progress-bar">
+                    <div class="progress-fill" 
+                         style="width: ${Math.round((this.scanProgress.entitiesProcessed / this.scanProgress.totalEntities) * 100)}%">
+                    </div>
+                  </div>
+                  <div class="progress-text">
+                    ${this.scanProgress.entitiesProcessed} / ${this.scanProgress.totalEntities} entità
+                    ${this.scanProgress.currentBatch > 0 ? `(Batch ${this.scanProgress.currentBatch})` : ''}
+                  </div>
+                </div>
+              ` : ''}
+              
+              ${this.scanProgress.status === 'requesting' ? html`
+                <div class="status-indicator">🔄 Invio richiesta...</div>
+              ` : ''}
+              
+              ${this.scanProgress.status === 'processing' ? html`
+                <div class="status-indicator">⚙️ Elaborazione risposta...</div>
+              ` : ''}
+              
+              ${this.scanProgress.isComplete ? html`
+                <div class="completion-message">
+                  <strong>✅ Scansione terminata!</strong><br>
+                  Ecco i risultati dell'analisi delle tue entità:
                 </div>
               ` : ''}
             </div>
@@ -324,12 +354,6 @@ ${data.response}
           </div>
         ` : ''}
       </ha-card>
-
-      <ha-card .header=${t.log_title}>
-        <div class="card-content log-scroll-container">
-          ${this.renderLog(t)}
-        </div>
-      </ha-card>
     `;
   }
 
@@ -339,32 +363,6 @@ ${data.response}
     if (!hasEntries) {
       return html`<p class="no-data">${t.no_scan}</p>`;
     }
-
-    return html`
-      <div class="log-stats">
-        <p><strong>${t.scanned_entities}</strong> ${Object.keys(this.entities).length}</p>
-      </div>
-      ${Object.values(this.entities).slice(0, 10).map(entity => html`
-        <div class="log-entry">
-          <div class="log-header">
-            <strong>Entità:</strong> <code>${entity.entity_id}</code>
-            <span class="weight-badge weight-${entity.overall_weight}">${entity.overall_weight}</span>
-          </div>
-          <div class="log-reason">
-            <strong>Motivazione:</strong> ${entity.overall_reason}
-          </div>
-          <div class="log-meta">
-            <small>${t.method} ${entity.analysis_method || 'ai_conversation'} | ${t.batch} ${entity.batch_number || 'N/A'}</small>
-          </div>
-        </div>
-      `)}
-      ${Object.keys(this.entities).length > 10 ? html`
-        <div class="log-truncated">
-          <small>${t.showing_first} ${Object.keys(this.entities).length} ${t.total}</small>
-        </div>
-      ` : ''}
-    `;
-  }
 
   static get styles() {
     return css`
@@ -391,12 +389,54 @@ ${data.response}
         font-size: 16px;
         font-weight: 500;
         color: var(--primary-text-color);
+        margin-bottom: 12px;
+      }
+      
+      .progress-bar-container {
+        margin: 12px 0;
+      }
+      
+      .progress-bar {
+        width: 100%;
+        height: 8px;
+        background-color: var(--divider-color, #e0e0e0);
+        border-radius: 4px;
+        overflow: hidden;
         margin-bottom: 8px;
       }
       
-      .progress-details {
-        color: var(--secondary-text-color);
+      .progress-fill {
+        height: 100%;
+        background-color: var(--info-color, #2196f3);
+        transition: width 0.3s ease;
+        border-radius: 4px;
+      }
+      
+      .progress-text {
         font-size: 14px;
+        color: var(--secondary-text-color);
+        text-align: center;
+      }
+      
+      .status-indicator {
+        font-size: 14px;
+        color: var(--info-color, #2196f3);
+        margin-top: 8px;
+        animation: pulse 2s infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      
+      .completion-message {
+        background-color: var(--success-color, #4caf50);
+        color: white;
+        padding: 12px;
+        border-radius: 6px;
+        margin-top: 12px;
+        text-align: center;
       }
       
       .warning-message {
