@@ -1,103 +1,103 @@
-# HASS AI - Intelligenza Artificiale per Home Assistant
+# HASS AI - Artificial Intelligence for Home Assistant
 
-**HASS AI** trasforma il tuo Home Assistant in un ambiente veramente intelligente fornendo uno strumento potente e interattivo per gestire come il sistema comprende e priorizza i tuoi dispositivi ed entità. Funziona come un livello di intelligenza avanzato, permettendoti di insegnare al tuo Home Assistant quali entità sono più importanti, su quali proprietà concentrarsi e quali ignorare.
+**HASS AI** transforms your Home Assistant into a truly intelligent environment by providing a powerful, interactive tool to manage how the system understands and prioritizes your devices and entities. It functions as an advanced intelligence layer, allowing you to teach your Home Assistant which entities are most important, which properties to focus on, and which to ignore.
 
-## 🚀 Caratteristiche Principali
+## 🚀 Key Features
 
-- **Analisi AI Automatica**: Valutazione intelligente delle entità basata su tipo, nome, attributi e dati storici
-- **Interfaccia Interattiva**: Panel dedicato con controlli intuitivi per gestire l'importanza delle entità  
-- **Trasparenza Completa**: Spiegazioni chiare del perché ogni entità ha ricevuto un determinato punteggio
-- **Controllo Utente**: Override completo delle valutazioni AI per adattarle alle tue esigenze
-- **Persistenza**: Tutte le personalizzazioni vengono salvate automaticamente
-- **Supporto Multilingua**: Interfaccia disponibile in italiano e inglese
+- **Automatic AI Analysis**: Intelligent entity evaluation based on type, name, attributes, and historical data
+- **Interactive Interface**: Dedicated panel with intuitive controls to manage entity importance  
+- **Complete Transparency**: Clear explanations of why each entity received a specific score
+- **User Control**: Complete override of AI evaluations to adapt them to your needs
+- **Persistence**: All customizations are automatically saved
+- **Multilingual Support**: Interface available in Italian and English
 
-## 🏠 Come Funziona
+## 🏠 How It Works
 
-Il sistema utilizza l'AI locale di Home Assistant (tramite conversation agent) per:
+The system uses Home Assistant's local AI (via conversation agent) to:
 
-1. **Analizzare** tutte le entità del sistema
-2. **Valutare** la loro importanza su una scala 0-5:
-   - 0 = Ignora (diagnostico/non necessario)
-   - 1 = Molto Basso (raramente utile)
-   - 2 = Basso (occasionalmente utile) 
-   - 3 = Medio (comunemente utile)
-   - 4 = Alto (frequentemente importante)
-   - 5 = Critico (essenziale per automazioni)
-3. **Fornire** ragioni dettagliate per ogni valutazione
-4. **Permettere** personalizzazioni complete dall'utente
+1. **Analyze** all system entities
+2. **Evaluate** their importance on a 0-5 scale:
+   - 0 = Ignore (diagnostic/unnecessary)
+   - 1 = Very Low (rarely useful)
+   - 2 = Low (occasionally useful) 
+   - 3 = Medium (commonly useful)
+   - 4 = High (frequently important)
+   - 5 = Critical (essential for automations)
+3. **Provide** detailed reasons for each evaluation
+4. **Allow** complete user customizations
 
-## 📦 Installazione
+## 📦 Installation
 
-### Via HACS (Raccomandato)
+### Via HACS (Recommended)
 
-1. Apri HACS in Home Assistant
-2. Vai su "Integrazioni"
-3. Clicca su "Esplora e scarica repository"
-4. Cerca "HASS AI"
-5. Clicca "Scarica"
-6. Riavvia Home Assistant
-7. Vai su Impostazioni → Dispositivi e Servizi → Aggiungi Integrazione
-8. Cerca "HASS AI" e configurala
+1. Open HACS in Home Assistant
+2. Go to "Integrations"
+3. Click "Explore and Download Repositories"
+4. Search for "HASS AI"
+5. Click "Download"
+6. Restart Home Assistant
+7. Go to Settings → Devices and Services → Add Integration
+8. Search for "HASS AI" and configure it
 
-### Installazione Manuale
+### Manual Installation
 
-1. Scarica questo repository
-2. Copia la cartella `custom_components/hass_ai` nella tua cartella `custom_components`
-3. Riavvia Home Assistant
-4. Aggiungi l'integrazione come sopra
+1. Download this repository
+2. Copy the `custom_components/hass_ai` folder to your `custom_components` folder
+3. Restart Home Assistant
+4. Add the integration as described above
 
-## ⚙️ Configurazione
+## ⚙️ Configuration
 
-### Configurazione Iniziale
+### Initial Setup
 
-Durante la configurazione potrai impostare:
+During configuration you can set:
 
-- **Provider AI**: Attualmente supporta solo il conversation agent integrato
-- **Intervallo Scansione**: Ogni quanti giorni eseguire scansioni automatiche (1-30 giorni)
+- **AI Provider**: Currently supports only the integrated conversation agent
+- **Scan Interval**: How often to run automatic scans (1-30 days)
 
-### Requisiti
+### Requirements
 
-- Home Assistant 2023.4.0 o superiore
-- Conversation agent configurato (Google Gemini, OpenAI, ecc.)
+- Home Assistant 2023.4.0 or higher
+- Configured conversation agent (Google Gemini, OpenAI, etc.)
 
-## 🎯 Utilizzo
+## 🎯 Usage
 
-### 1. Pannello di Controllo
+### 1. Control Panel
 
-Dopo l'installazione, troverai un nuovo pannello "HASS AI" nella barra laterale:
+After installation, you'll find a new "HASS AI" panel in the sidebar:
 
-- **Avvia Scansione**: Analizza tutte le entità del sistema
-- **Tabella Interattiva**: Visualizza e modifica i pesi delle entità
-- **Log di Analisi**: Vedi i dettagli delle valutazioni AI
+- **Start Scan**: Analyze all system entities
+- **Interactive Table**: View and modify entity weights
+- **Analysis Log**: See details of AI evaluations
 
-### 2. Servizi Disponibili
+### 2. Available Services
 
-L'integrazione espone diversi servizi utilizzabili nelle automazioni:
+The integration exposes several services usable in automations:
 
 ```yaml
-# Scansiona tutte le entità
+# Scan all entities
 service: hass_ai.scan_entities
 data:
-  entity_filter: "sensor."  # Opzionale: filtra per tipo
-  batch_size: 10           # Opzionale: entità per batch
+  entity_filter: "sensor."  # Optional: filter by type
+  batch_size: 10           # Optional: entities per batch
 
-# Ottieni importanza di una singola entità
+# Get importance of a single entity
 service: hass_ai.get_entity_importance  
 data:
   entity_id: "light.living_room"
 
-# Reset di tutti gli override
+# Reset all overrides
 service: hass_ai.reset_overrides
 data:
   confirm: true
 ```
 
-### 3. Automazioni di Esempio
+### 3. Example Automations
 
 ```yaml
-# Automazione per scansione periodica personalizzata
+# Automation for custom periodic scanning
 automation:
-  - alias: "HASS AI - Scansione Sensori Settimanale"
+  - alias: "HASS AI - Weekly Sensor Scan"
     trigger:
       - platform: time
         at: "02:00:00"
@@ -111,9 +111,9 @@ automation:
           entity_filter: "sensor."
           batch_size: 15
 
-# Usa i pesi AI nelle tue automazioni
+# Use AI weights in your automations
 automation:
-  - alias: "Spegni Luci Non Importanti"
+  - alias: "Turn Off Unimportant Lights"
     trigger:
       - platform: state
         entity_id: binary_sensor.motion_living_room
@@ -133,19 +133,19 @@ automation:
             {{ unimportant_lights }}
 ```
 
-## 🔧 API e Integrazione
+## 🔧 API and Integration
 
 ### Template Helper
 
-Puoi usare i dati HASS AI nei tuoi template:
+You can use HASS AI data in your templates:
 
 ```yaml
-# Sensor che conta entità critiche attive
+# Sensor that counts active critical entities
 sensor:
   - platform: template
     sensors:
       critical_entities_active:
-        friendly_name: "Entità Critiche Attive"
+        friendly_name: "Critical Entities Active"
         value_template: >
           {% set critical_count = 0 %}
           {% for state in states %}
@@ -158,21 +158,21 @@ sensor:
           {{ critical_count }}
 ```
 
-### Accesso Programmatico
+### Programmatic Access
 
-I dati sono disponibili tramite WebSocket API:
+Data is available via WebSocket API:
 
 ```javascript
-// Carica override esistenti
+// Load existing overrides
 hass.callWS({type: "hass_ai/load_overrides"})
 
-// Avvia scansione con callback in tempo reale
+// Start scan with real-time callbacks
 hass.connection.subscribeMessage(
   (message) => console.log(message),
   {type: "hass_ai/scan_entities"}
 )
 
-// Salva override personalizzati
+// Save custom overrides
 hass.callWS({
   type: "hass_ai/save_overrides", 
   overrides: {

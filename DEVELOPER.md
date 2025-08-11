@@ -1,82 +1,82 @@
-# HASS AI - Guida Sviluppatore
+# HASS AI - Developer Guide
 
-## 📁 Struttura del Progetto
+## 📁 Project Structure
 
 ```
 hass_ai/
 ├── custom_components/hass_ai/
-│   ├── __init__.py              # Entry point principale
-│   ├── config_flow.py           # Configurazione UI 
-│   ├── const.py                 # Costanti
-│   ├── intelligence.py          # Logica AI per analisi entità
-│   ├── services.py              # Servizi esposti
-│   ├── exceptions.py            # Eccezioni custom
-│   ├── manifest.json            # Metadati integrazione
-│   ├── services.yaml            # Definizione servizi UI
+│   ├── __init__.py              # Main entry point
+│   ├── config_flow.py           # UI Configuration 
+│   ├── const.py                 # Constants
+│   ├── intelligence.py          # AI logic for entity analysis
+│   ├── services.py              # Exposed services
+│   ├── exceptions.py            # Custom exceptions
+│   ├── manifest.json            # Integration metadata
+│   ├── services.yaml            # Services UI definition
 │   ├── translations/
-│   │   ├── en.json              # Traduzioni inglese
-│   │   └── it.json              # Traduzioni italiano
+│   │   ├── en.json              # English translations
+│   │   └── it.json              # Italian translations
 │   └── www/
-│       └── panel.js             # Frontend pannello
+│       └── panel.js             # Frontend panel
 ├── README.md
 ├── FEATURES.md
 ├── REQUIREMENTS.md
-├── hacs.json                    # Configurazione HACS
-└── test_config.py               # Test di configurazione
+├── hacs.json                    # HACS configuration
+└── test_config.py               # Configuration tests
 ```
 
-## 🧩 Architettura Componenti
+## 🧩 Component Architecture
 
 ### 1. **__init__.py** - Entry Point
-- Registrazione pannello frontend
-- Setup WebSocket API  
-- Configurazione storage persistente
-- Registrazione servizi
-- Gestione ciclo di vita integrazione
+- Frontend panel registration
+- WebSocket API setup  
+- Persistent storage configuration
+- Services registration
+- Integration lifecycle management
 
-### 2. **intelligence.py** - Motore AI
-- Analisi batch delle entità (configurable batch size)
-- Integrazione con conversation agent 
-- Fallback basato su domini
-- Gestione errori robuста
-- Classificazione importanza 0-5
+### 2. **intelligence.py** - AI Engine
+- Entity batch analysis (configurable batch size)
+- Conversation agent integration 
+- Domain-based fallback
+- Robust error handling
+- Importance classification 0-5
 
-### 3. **config_flow.py** - Configurazione
-- Flow di configurazione iniziale
-- Gestione opzioni avanzate
-- Validazione input utente
-- Support per AI provider multipli
+### 3. **config_flow.py** - Configuration
+- Initial configuration flow
+- Advanced options management
+- User input validation
+- Multiple AI provider support
 
-### 4. **services.py** - API Pubblica
-- `scan_entities`: Scansione automatica
-- `get_entity_importance`: Analisi singola entità  
-- `reset_overrides`: Reset configurazione
-- Validazione schema rigorosa
+### 4. **services.py** - Public API
+- `scan_entities`: Automatic scanning
+- `get_entity_importance`: Single entity analysis  
+- `reset_overrides`: Configuration reset
+- Rigorous schema validation
 
 ### 5. **www/panel.js** - Frontend
-- Interfaccia utente reattiva
-- Comunicazione WebSocket real-time
-- Controlli interattivi per override
-- Supporto multilingua (IT/EN)
+- Reactive user interface
+- Real-time WebSocket communication
+- Interactive override controls
+- Multilingual support (IT/EN)
 - Material Design components
 
-## 🔧 Flusso di Dati
+## 🔧 Data Flow
 
 ```mermaid
 graph TD
-    A[Utente avvia scansione] --> B[WebSocket: scan_entities]
-    B --> C[Filtra entità sistema]
-    C --> D[Batch processing 10 entità]
+    A[User starts scan] --> B[WebSocket: scan_entities]
+    B --> C[Filter system entities]
+    C --> D[Batch processing 10 entities]
     D --> E[Conversation Agent AI]
     E --> F[Parse JSON response]
-    F --> G[Fallback se errore]
-    G --> H[Invia risultato real-time]
-    H --> I[Frontend aggiorna tabella]
-    I --> J[Utente modifica pesi]
-    J --> K[Salva override storage]
+    F --> G[Fallback if error]
+    G --> H[Send real-time result]
+    H --> I[Frontend updates table]
+    I --> J[User modifies weights]
+    J --> K[Save override storage]
 ```
 
-## 🎯 Logica di Valutazione AI
+## 🎯 AI Evaluation Logic
 
 ### Prompt Template
 ```
@@ -92,27 +92,27 @@ Consider: device type, location relevance, automation potential, security import
 Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'."
 ```
 
-### Mappatura Domini (Fallback)
+### Domain Mapping (Fallback)
 ```python
 ENTITY_IMPORTANCE_MAP = {
-    "alarm_control_panel": 5,  # Sicurezza critica
-    "lock": 5,                 # Sicurezza critica  
-    "climate": 4,              # HVAC importante
-    "camera": 4,               # Monitoring importante
-    "device_tracker": 3,       # Presenza utile
-    "light": 3,                # Illuminazione comune
-    "switch": 3,               # Controlli comuni
-    "sensor": 2,               # Dati occasionali
-    "media_player": 2,         # Entertainment opzionale
-    "sun": 1,                  # Raramente usato
+    "alarm_control_panel": 5,  # Critical security
+    "lock": 5,                 # Critical security  
+    "climate": 4,              # Important HVAC
+    "camera": 4,               # Important monitoring
+    "device_tracker": 3,       # Useful presence
+    "light": 3,                # Common lighting
+    "switch": 3,               # Common controls
+    "sensor": 2,               # Occasional data
+    "media_player": 2,         # Optional entertainment
+    "sun": 1,                  # Rarely used
 }
 ```
 
-## 📡 API WebSocket
+## 📡 WebSocket API
 
-### Comandi Disponibili
+### Available Commands
 
-#### 1. Carica Override
+#### 1. Load Overrides
 ```javascript
 {
   "type": "hass_ai/load_overrides"
@@ -120,7 +120,7 @@ ENTITY_IMPORTANCE_MAP = {
 // Response: {"overrides": {...}}
 ```
 
-#### 2. Scansione Entità  
+#### 2. Entity Scanning  
 ```javascript
 {
   "type": "hass_ai/scan_entities"
@@ -130,7 +130,7 @@ ENTITY_IMPORTANCE_MAP = {
 // {"type": "scan_complete"}
 ```
 
-#### 3. Salva Override
+#### 3. Save Overrides
 ```javascript
 {
   "type": "hass_ai/save_overrides",
@@ -143,13 +143,13 @@ ENTITY_IMPORTANCE_MAP = {
 }
 ```
 
-## 🔧 Servizi Home Assistant
+## 🔧 Home Assistant Services
 
 ### hass_ai.scan_entities
 ```yaml
 service: hass_ai.scan_entities
 data:
-  entity_filter: "sensor."    # Opzionale
+  entity_filter: "sensor."    # Optional
   batch_size: 10             # 1-50, default 10
 ```
 
@@ -164,10 +164,10 @@ data:
 ```yaml
 service: hass_ai.reset_overrides  
 data:
-  confirm: true              # Obbligatorio
+  confirm: true              # Required
 ```
 
-## 🗃️ Formato Storage
+## 🗃️ Storage Format
 
 File: `.storage/hass_ai_intelligence_data`
 ```json
@@ -185,81 +185,81 @@ File: `.storage/hass_ai_intelligence_data`
 }
 ```
 
-## 🚀 Deployment e Testing
+## 🚀 Deployment and Testing
 
-### Installazione Dev
+### Development Installation
 ```bash
-# Copia files
+# Copy files
 cp -r custom_components/hass_ai /config/custom_components/
 
-# Riavvia HA  
+# Restart HA  
 service homeassistant restart
 
-# Verifica logs
+# Check logs
 tail -f /config/home-assistant.log | grep hass_ai
 ```
 
-### Test Manuali
-1. Aggiungi integrazione via UI
-2. Configura conversation agent (Gemini/OpenAI)
-3. Apri pannello HASS AI
-4. Avvia scansione test
-5. Verifica risultati e override
-6. Test servizi da Developer Tools
+### Manual Testing
+1. Add integration via UI
+2. Configure conversation agent (Gemini/OpenAI)
+3. Open HASS AI panel
+4. Start test scan
+5. Verify results and overrides
+6. Test services from Developer Tools
 
-### Debug Comune
+### Common Debug
 ```python
-# Abilita debug logging
+# Enable debug logging
 logger:
   logs:
     custom_components.hass_ai: debug
 ```
 
-## 🔮 Roadmap Sviluppo
+## 🔮 Development Roadmap
 
-### Versione Corrente (1.3.0)
-- ✅ Analisi AI batch  
-- ✅ UI panel interattivo
-- ✅ Storage persistente
-- ✅ Servizi API
-- ✅ Supporto multilingua
+### Current Version (1.4.0)
+- ✅ AI batch analysis  
+- ✅ Interactive UI panel
+- ✅ Persistent storage
+- ✅ Services API
+- ✅ Multilingual support
 
-### Prossime Versioni  
-- 🔄 AI provider multipli (OpenAI, Gemini direct)
-- 🔄 Analisi attributi entità
-- 🔄 Machine learning locale
-- 🔄 Dashboard statistiche
-- 🔄 Import/export configurazioni
-- 🔄 API REST estesa
+### Future Versions  
+- 🔄 Multiple AI providers (OpenAI, Gemini direct)
+- 🔄 Entity attribute analysis
+- 🔄 Local machine learning
+- 🔄 Statistics dashboard
+- 🔄 Import/export configurations
+- 🔄 Extended REST API
 
 ## 🐛 Troubleshooting
 
-### Errori Comuni
+### Common Errors
 
 1. **"AI response is not valid JSON"**
-   - Conversation agent non configurato
-   - Provider AI overloaded
-   - Prompt troppo lungo
+   - Conversation agent not configured
+   - AI provider overloaded
+   - Prompt too long
 
 2. **"No conversation agent found"**  
-   - Installa integrazione AI (Google Generative AI, OpenAI)
-   - Configura API key correttamente
+   - Install AI integration (Google Generative AI, OpenAI)
+   - Configure API key correctly
 
-3. **"Frontend panel non carica"**
-   - Verifica file panel.js 
-   - Controlla console browser per errori
-   - Cache browser da svuotare
+3. **"Frontend panel not loading"**
+   - Check panel.js file 
+   - Check browser console for errors
+   - Clear browser cache
 
-4. **"Servizi non disponibili"**
-   - Riavvia Home Assistant
-   - Verifica configurazione YAML
-   - Controlla permissions
+4. **"Services not available"**
+   - Restart Home Assistant
+   - Check YAML configuration
+   - Check permissions
 
-### Log Utili
+### Useful Logs
 ```python
 _LOGGER.debug(f"Processing batch {batch_num}/{total_batches}")
 _LOGGER.info(f"Scan completed: {len(results)} entities")  
 _LOGGER.error(f"AI analysis failed: {error}")
 ```
 
-Questo componente è progettato per essere robusto, espandibile e facile da mantenere seguendo le best practice di Home Assistant.
+This component is designed to be robust, extensible, and easy to maintain following Home Assistant best practices.

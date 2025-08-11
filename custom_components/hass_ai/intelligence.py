@@ -9,6 +9,21 @@ from homeassistant.exceptions import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
 
+# Try to import AI libraries, but don't fail if they're not available
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    _LOGGER.info("OpenAI library not available, falling back to conversation agent")
+
+try:
+    import google.generativeai as genai
+    GOOGLE_AI_AVAILABLE = True
+except ImportError:
+    GOOGLE_AI_AVAILABLE = False
+    _LOGGER.info("Google Generative AI library not available, falling back to conversation agent")
+
 # Entity importance categories for better classification
 ENTITY_IMPORTANCE_MAP = {
     "climate": 4,  # HVAC controls are typically important
