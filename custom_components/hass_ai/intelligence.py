@@ -63,6 +63,18 @@ async def get_entities_importance_batched(
     
     if not api_key:
         _LOGGER.error(f"No API key provided for {ai_provider}! Using fallback classification.")
+        # Send debug info about missing API key
+        if connection and msg_id:
+            debug_data = {
+                "aiProvider": ai_provider,
+                "currentBatch": 0,
+                "lastPrompt": "ERRORE: Nessuna chiave API configurata!",
+                "lastResponse": f"Fallback alla classificazione domain-based perché non è stata trovata la chiave API per {ai_provider}"
+            }
+            connection.send_message(websocket_api.event_message(msg_id, {
+                "type": "debug_info", 
+                "data": debug_data
+            }))
         # Use fallback for all entities if no API key
         all_results = []
         for state in states:
@@ -170,6 +182,18 @@ async def get_entities_importance_batched(
                 _LOGGER.debug(f"Gemini response for batch {batch_num}: {response_text[:200]}...")
             else:
                 _LOGGER.error(f"AI provider {ai_provider} not available or missing API key")
+                # Send debug info about provider unavailable
+                if connection and msg_id:
+                    debug_data = {
+                        "aiProvider": ai_provider,
+                        "currentBatch": batch_num,
+                        "lastPrompt": f"ERRORE: Provider {ai_provider} non disponibile!",
+                        "lastResponse": f"OpenAI disponibile: {OPENAI_AVAILABLE}, Gemini disponibile: {GOOGLE_AI_AVAILABLE}, Chiave API presente: {bool(api_key)}"
+                    }
+                    connection.send_message(websocket_api.event_message(msg_id, {
+                        "type": "debug_info", 
+                        "data": debug_data
+                    }))
                 # Use fallback for all entities in this batch
                 for state in batch_states:
                     all_results.append(_create_fallback_result(state.entity_id, batch_num))
