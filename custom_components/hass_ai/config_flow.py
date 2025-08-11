@@ -4,7 +4,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 import voluptuous as vol
 
-from .const import DOMAIN, AI_PROVIDERS, AI_PROVIDER_CONVERSATION, AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI
+from .const import DOMAIN, AI_PROVIDERS, AI_PROVIDER_OPENAI, AI_PROVIDER_GEMINI
 
 class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Hass AI config flow."""
@@ -17,27 +17,15 @@ class HassAiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
 
         if user_input is not None:
-            ai_provider = user_input.get("ai_provider", AI_PROVIDER_CONVERSATION)
-            
-            # If conversation is selected, proceed directly
-            if ai_provider == AI_PROVIDER_CONVERSATION:
-                return self.async_create_entry(
-                    title="HASS AI", 
-                    data={
-                        "ai_provider": ai_provider,
-                        "scan_interval": user_input.get("scan_interval", 7)
-                    }
-                )
-            else:
-                # Store the provider and move to API key step
-                self._ai_provider = ai_provider
-                self._scan_interval = user_input.get("scan_interval", 7)
-                return await self.async_step_api_key()
+            # Store the provider and move to API key step
+            self._ai_provider = user_input.get("ai_provider", AI_PROVIDER_OPENAI)
+            self._scan_interval = user_input.get("scan_interval", 7)
+            return await self.async_step_api_key()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Optional("ai_provider", default=AI_PROVIDER_CONVERSATION): vol.In([AI_PROVIDER_CONVERSATION] + AI_PROVIDERS),
+                vol.Required("ai_provider", default=AI_PROVIDER_OPENAI): vol.In(AI_PROVIDERS),
                 vol.Optional("scan_interval", default=7): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
             }),
         )
@@ -99,12 +87,11 @@ class HassAiOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
-            ai_provider = user_input.get("ai_provider", AI_PROVIDER_CONVERSATION)
+            ai_provider = user_input.get("ai_provider", AI_PROVIDER_OPENAI)
             
-            # If conversation is selected or same provider without API key change
-            if (ai_provider == AI_PROVIDER_CONVERSATION or 
-                (ai_provider == self.config_entry.data.get("ai_provider") and 
-                 user_input.get("change_api_key") is not True)):
+            # Check if same provider without API key change
+            if (ai_provider == self.config_entry.data.get("ai_provider") and 
+                user_input.get("change_api_key") is not True):
                 return self.async_create_entry(title="", data=user_input)
             else:
                 # Store the provider and move to API key step
@@ -113,16 +100,13 @@ class HassAiOptionsFlowHandler(config_entries.OptionsFlow):
                 return await self.async_step_api_key()
 
         scan_interval = self.config_entry.options.get("scan_interval", 7)
-        ai_provider = self.config_entry.data.get("ai_provider", AI_PROVIDER_CONVERSATION)
+        ai_provider = self.config_entry.data.get("ai_provider", AI_PROVIDER_OPENAI)
         
         schema = {
             vol.Required("scan_interval", default=scan_interval): vol.All(vol.Coerce(int), vol.Range(min=1, max=30)),
-            vol.Required("ai_provider", default=ai_provider): vol.In([AI_PROVIDER_CONVERSATION] + AI_PROVIDERS),
+            vol.Required("ai_provider", default=ai_provider): vol.In(AI_PROVIDERS),
+            vol.Optional("change_api_key", default=False): bool,
         }
-        
-        # Add option to change API key if external provider is currently configured
-        if ai_provider != AI_PROVIDER_CONVERSATION:
-            schema[vol.Optional("change_api_key", default=False)] = bool
 
         return self.async_show_form(
             step_id="init",

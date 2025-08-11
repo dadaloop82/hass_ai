@@ -123,10 +123,10 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
             break
         
         # Get AI configuration
-        ai_provider = "conversation"
+        ai_provider = "OpenAI"
         api_key = None
         if config_entry:
-            ai_provider = config_entry.data.get("ai_provider", "conversation")
+            ai_provider = config_entry.data.get("ai_provider", "OpenAI")
             api_key = config_entry.data.get("api_key")
 
         all_states = hass.states.async_all()

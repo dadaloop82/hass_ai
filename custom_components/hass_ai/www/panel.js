@@ -98,8 +98,7 @@ class HassAiPanel extends LitElement {
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     const t = isItalian ? {
       title: "Pannello di Controllo HASS AI",
-      description: "Analizza le tue entità, insegna all'IA e personalizza i pesi per ottimizzare la tua domotica.",
-      warning: "Questo sistema funziona solo con Large Language Models (LLM) come Google Gemini o OpenAI ChatGPT. Assicurati che il tuo agente di conversazione sia configurato correttamente.",
+      description: "Analizza le tue entità, insegna all'IA e personalizza i pesi per ottimizzare la tua domotica. L'AI provider è configurato nelle impostazioni dell'integrazione.",
       scan_button: "Avvia Nuova Scansione",
       scanning_button: "Scansione in corso...",
       enabled: "Abilitato",
@@ -117,8 +116,7 @@ class HassAiPanel extends LitElement {
       total: "totali"
     } : {
       title: "HASS AI Control Panel",
-      description: "Analyze your entities, teach the AI, and customize weights to optimize your smart home.",
-      warning: "This system only works with Large Language Models (LLMs) like Google Gemini or OpenAI ChatGPT. Please ensure your conversation agent is configured correctly.",
+      description: "Analyze your entities, teach the AI, and customize weights to optimize your smart home. AI provider is configured in integration settings.",
       scan_button: "Start New Scan",
       scanning_button: "Scanning...",
       enabled: "Enabled",
@@ -140,10 +138,6 @@ class HassAiPanel extends LitElement {
       <ha-card .header=${t.title}>
         <div class="card-content">
           <p>${t.description}</p>
-          <div class="warning-message">
-            <ha-icon icon="mdi:alert"></ha-icon>
-            ${t.warning}
-          </div>
           <ha-button raised @click=${this._runScan} .disabled=${this.loading}>
             ${this.loading ? t.scanning_button : t.scan_button}
           </ha-button>

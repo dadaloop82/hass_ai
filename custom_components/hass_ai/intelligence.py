@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import json
+import asyncio
 from typing import Optional
 
 from homeassistant.core import HomeAssistant, State
@@ -47,7 +48,7 @@ async def get_entities_importance_batched(
     hass: HomeAssistant, 
     states: list[State],
     batch_size: int = 10,  # Process 10 entities at a time
-    ai_provider: str = "conversation",
+    ai_provider: str = "OpenAI",
     api_key: str = None
 ) -> list[dict]:
     """Calculate the importance of multiple entities using the conversation agent in batches."""
@@ -68,49 +69,86 @@ async def get_entities_importance_batched(
         # Create detailed entity information for AI analysis
         entity_details = []
         for state in batch_states:
-            # Get basic entity info
-            entity_info = {
-                "entity_id": state.entity_id,
-                "domain": state.domain,
-                "name": state.name or state.entity_id.split(".")[-1],
-                "state": str(state.state),
-                "unit": state.attributes.get("unit_of_measurement", ""),
-                "device_class": state.attributes.get("device_class", ""),
-                "friendly_name": state.attributes.get("friendly_name", "")
-            }
+            # Get comprehensive entity info including key attributes
+            attributes = dict(state.attributes)
             
-            entity_details.append(
-                f"- entity_id: {entity_info['entity_id']}, "
-                f"domain: {entity_info['domain']}, "
-                f"name: {entity_info['friendly_name']}, "
-                f"state: {entity_info['state']}, "
-                f"device_class: {entity_info['device_class']}"
+            # Extract important attributes for analysis
+            important_attrs = {}
+            
+            # Common important attributes
+            attr_keys = [
+                'device_class', 'unit_of_measurement', 'friendly_name', 
+                'supported_features', 'entity_category', 'icon',
+                'room', 'area', 'location', 'zone', 'floor',
+                # Climate specific
+                'temperature', 'target_temperature', 'hvac_mode', 'hvac_modes',
+                # Light specific  
+                'brightness', 'color_mode', 'supported_color_modes',
+                # Sensor specific
+                'state_class', 'last_changed', 'last_updated',
+                # Security specific
+                'device_type', 'tamper', 'battery_level',
+                # Media specific
+                'source', 'volume_level', 'media_title',
+                # Cover specific
+                'current_position', 'position',
+                # Switch/Binary sensor specific
+                'device_class',
+            ]
+            
+            for key in attr_keys:
+                if key in attributes and attributes[key] is not None:
+                    important_attrs[key] = attributes[key]
+            
+            # Create detailed description
+            entity_description = (
+                f"- Entity: {state.entity_id}\n"
+                f"  Domain: {state.domain}\n" 
+                f"  Name: {state.attributes.get('friendly_name', state.entity_id.split('.')[-1])}\n"
+                f"  Current State: {state.state}\n"
+                f"  Attributes: {json.dumps(important_attrs, default=str)}\n"
             )
+            
+            entity_details.append(entity_description)
+        
+        # Add delay to make AI analysis visible (2-3 seconds per batch)
+        await asyncio.sleep(2.5)
         
         prompt = (
-            f"As a Home Assistant expert, analyze these {len(batch_states)} entities and rate their automation importance on a scale of 0-5:\n"
-            f"0 = Ignore (diagnostic/unnecessary)\n"
-            f"1 = Very Low (rarely useful)\n"
-            f"2 = Low (occasionally useful)\n"
-            f"3 = Medium (commonly useful)\n"
-            f"4 = High (frequently important)\n"
-            f"5 = Critical (essential for automations)\n\n"
-            f"Consider: device type, location relevance, automation potential, security importance.\n"
+            f"As a Home Assistant expert, analyze these {len(batch_states)} entities and their attributes to rate their automation importance on a scale of 0-5:\n\n"
+            f"Rating Scale:\n"
+            f"0 = Ignore (diagnostic/unnecessary for automations)\n"
+            f"1 = Very Low (rarely useful, mostly informational)\n"
+            f"2 = Low (occasionally useful, minor convenience)\n"
+            f"3 = Medium (commonly useful, good automation potential)\n"
+            f"4 = High (frequently important, significant automation value)\n"
+            f"5 = Critical (essential for automations, security, or safety)\n\n"
+            f"Consider these factors:\n"
+            f"- Device type and functionality (from domain and device_class)\n"
+            f"- Attributes that indicate automation potential (controllable features)\n"
+            f"- Location/area relevance (room, zone information)\n"
+            f"- Security and safety importance\n"
+            f"- State changes that trigger useful automations\n"
+            f"- Integration complexity vs. automation value\n\n"
+            f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
             f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'.\n\n"
-            f"Entities:\n" + "\n".join(entity_details)
+            f"Entities to analyze:\n" + "\n".join(entity_details)
         )
 
         try:
             # Choose AI provider based on configuration
-            if ai_provider == "conversation":
-                response_text = await _query_conversation_agent(hass, prompt)
-            elif ai_provider == "OpenAI" and OPENAI_AVAILABLE and api_key:
+            if ai_provider == "OpenAI" and OPENAI_AVAILABLE and api_key:
                 response_text = await _query_openai(prompt, api_key)
+                _LOGGER.debug(f"OpenAI response for batch {batch_num}: {response_text[:200]}...")
             elif ai_provider == "Gemini" and GOOGLE_AI_AVAILABLE and api_key:
                 response_text = await _query_gemini(prompt, api_key)
+                _LOGGER.debug(f"Gemini response for batch {batch_num}: {response_text[:200]}...")
             else:
-                _LOGGER.warning(f"AI provider {ai_provider} not available, falling back to conversation agent")
-                response_text = await _query_conversation_agent(hass, prompt)
+                _LOGGER.error(f"AI provider {ai_provider} not available or missing API key")
+                # Use fallback for all entities in this batch
+                for state in batch_states:
+                    all_results.append(_create_fallback_result(state.entity_id, batch_num))
+                continue
 
             # Clean response text (remove markdown formatting if present)
             response_text = response_text.strip()
@@ -148,12 +186,14 @@ async def get_entities_importance_batched(
                     all_results.append(_create_fallback_result(state.entity_id, batch_num))
 
         except json.JSONDecodeError as e:
-            _LOGGER.warning(f"AI response is not valid JSON for batch {batch_num}: {response_text[:200]}... - Error: {e}")
+            _LOGGER.warning(f"AI response is not valid JSON for batch {batch_num} - Raw response: {response_text} - Error: {e}")
+            _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
             # Use fallback for all entities in this batch
             for state in batch_states:
                 all_results.append(_create_fallback_result(state.entity_id, batch_num))
         except Exception as e:
             _LOGGER.error(f"Error querying AI for batch {batch_num}: {e}")
+            _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
             # Use fallback for all entities in this batch
             for state in batch_states:
                 all_results.append(_create_fallback_result(state.entity_id, batch_num))
@@ -187,16 +227,10 @@ def _create_fallback_result(entity_id: str, batch_num: int) -> dict:
     return {
         "entity_id": entity_id,
         "overall_weight": importance,
-        "overall_reason": f"{reason_map[importance]} (AI analysis unavailable, using domain-based classification)",
+        "overall_reason": f"{reason_map[importance]} (using domain-based classification)",
         "analysis_method": "domain_fallback",
         "batch_number": batch_num,
     }
-
-
-async def _query_conversation_agent(hass: HomeAssistant, prompt: str) -> str:
-    """Query the Home Assistant conversation agent."""
-    agent_response = await conversation.async_converse(hass, prompt, None, "en")
-    return agent_response.response.speech["plain"]["speech"]
 
 
 async def _query_openai(prompt: str, api_key: str) -> str:

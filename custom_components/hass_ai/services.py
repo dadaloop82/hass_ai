@@ -47,7 +47,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 break
             
             # Get AI configuration
-            ai_provider = "conversation"
+            ai_provider = "OpenAI"
             api_key = None
             if config_entry:
                 ai_provider = config_entry.data.get("ai_provider", "conversation")
