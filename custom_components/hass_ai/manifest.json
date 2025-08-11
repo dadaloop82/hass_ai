@@ -1,12 +1,12 @@
 {
   "domain": "hass_ai",
   "name": "HASS AI",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "documentation": "https://github.com/dadaloop82/hass_ai",
   "issue_tracker": "https://github.com/dadaloop82/hass_ai/issues",
   "codeowners": ["@dadaloop82"],
   "config_flow": true,
   "iot_class": "local_polling",
-  "requirements": ["openai>=1.0.0", "google-generativeai>=0.3.0"],
+  "requirements": [],
   "dependencies": ["conversation", "http", "frontend"]
 }
