@@ -9,6 +9,13 @@
                     "scan_interval": "Intervallo di scansione (giorni)"
                 }
             },
+            "api_key": {
+                "title": "Configura Chiave API",
+                "description": "Inserisci la tua chiave API per {provider}. {description}",
+                "data": {
+                    "api_key": "Chiave API"
+                }
+            },
             "configure": {
                 "title": "Configura HASS AI", 
                 "description": "Imposta la frequenza per le scansioni automatiche delle entità."
@@ -24,7 +31,15 @@
                 "title": "Opzioni HASS AI",
                 "data": {
                     "scan_interval": "Intervallo di scansione (giorni)",
-                    "ai_provider": "Provider AI"
+                    "ai_provider": "Provider AI",
+                    "change_api_key": "Cambia Chiave API"
+                }
+            },
+            "api_key": {
+                "title": "Aggiorna Chiave API",
+                "description": "Inserisci la tua chiave API per {provider}. {description}",
+                "data": {
+                    "api_key": "Chiave API"
                 }
             }
         }

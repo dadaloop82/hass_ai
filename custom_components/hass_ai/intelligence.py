@@ -5,7 +5,7 @@ import asyncio
 from typing import Optional
 
 from homeassistant.core import HomeAssistant, State
-from homeassistant.components import conversation
+from homeassistant.components import conversation, websocket_api
 from homeassistant.exceptions import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,13 +49,25 @@ async def get_entities_importance_batched(
     states: list[State],
     batch_size: int = 10,  # Process 10 entities at a time
     ai_provider: str = "OpenAI",
-    api_key: str = None
+    api_key: str = None,
+    connection = None,
+    msg_id: str = None
 ) -> list[dict]:
-    """Calculate the importance of multiple entities using the conversation agent in batches."""
+    """Calculate the importance of multiple entities using external AI providers in batches."""
     
     if not states:
         _LOGGER.warning("No entities provided for analysis")
         return []
+    
+    _LOGGER.info(f"Starting AI analysis with provider: {ai_provider}, API key present: {bool(api_key)}")
+    
+    if not api_key:
+        _LOGGER.error(f"No API key provided for {ai_provider}! Using fallback classification.")
+        # Use fallback for all entities if no API key
+        all_results = []
+        for state in states:
+            all_results.append(_create_fallback_result(state.entity_id, 0))
+        return all_results
     
     all_results = []
     total_batches = (len(states) + batch_size - 1) // batch_size
@@ -136,6 +148,19 @@ async def get_entities_importance_batched(
         )
 
         try:
+            # Send debug info to frontend
+            if connection and msg_id:
+                debug_data = {
+                    "aiProvider": ai_provider,
+                    "currentBatch": batch_num,
+                    "lastPrompt": prompt,
+                    "lastResponse": ""
+                }
+                connection.send_message(websocket_api.event_message(msg_id, {
+                    "type": "debug_info", 
+                    "data": debug_data
+                }))
+            
             # Choose AI provider based on configuration
             if ai_provider == "OpenAI" and OPENAI_AVAILABLE and api_key:
                 response_text = await _query_openai(prompt, api_key)
@@ -149,6 +174,19 @@ async def get_entities_importance_batched(
                 for state in batch_states:
                     all_results.append(_create_fallback_result(state.entity_id, batch_num))
                 continue
+
+            # Send response debug info to frontend
+            if connection and msg_id:
+                debug_data = {
+                    "aiProvider": ai_provider,
+                    "currentBatch": batch_num,
+                    "lastPrompt": prompt,
+                    "lastResponse": response_text[:1000] + ("..." if len(response_text) > 1000 else "")
+                }
+                connection.send_message(websocket_api.event_message(msg_id, {
+                    "type": "debug_info", 
+                    "data": debug_data
+                }))
 
             # Clean response text (remove markdown formatting if present)
             response_text = response_text.strip()

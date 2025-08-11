@@ -23,6 +23,13 @@ class HassAiPanel extends LitElement {
     this.overrides = {};
     this.saveTimeout = null;
     this.language = 'en'; // Default language
+    this.debugInfo = {
+      show: false,
+      lastPrompt: '',
+      lastResponse: '',
+      currentBatch: 0,
+      aiProvider: ''
+    };
   }
 
   connectedCallback() {
@@ -51,6 +58,20 @@ class HassAiPanel extends LitElement {
       const entity = message.result;
       this.entities[entity.entity_id] = entity;
       this.requestUpdate("entities");
+    }
+    if (message.type === "debug_info") {
+      this.debugInfo = {
+        ...this.debugInfo,
+        ...message.data,
+        show: true
+      };
+      this.requestUpdate();
+      
+      // Auto-hide debug after 10 seconds
+      setTimeout(() => {
+        this.debugInfo.show = false;
+        this.requestUpdate();
+      }, 10000);
     }
     if (message.type === "scan_complete") {
       this.loading = false;
@@ -141,6 +162,23 @@ class HassAiPanel extends LitElement {
           <ha-button raised @click=${this._runScan} .disabled=${this.loading}>
             ${this.loading ? t.scanning_button : t.scan_button}
           </ha-button>
+          
+          ${this.debugInfo.show ? html`
+            <div class="debug-section">
+              <h3>🔍 AI Debug Info - Batch ${this.debugInfo.currentBatch}</h3>
+              <div class="debug-provider">
+                <strong>Provider:</strong> ${this.debugInfo.aiProvider}
+              </div>
+              <div class="debug-prompt">
+                <strong>Prompt inviato:</strong>
+                <pre>${this.debugInfo.lastPrompt}</pre>
+              </div>
+              <div class="debug-response">
+                <strong>Risposta AI:</strong>
+                <pre>${this.debugInfo.lastResponse}</pre>
+              </div>
+            </div>
+          ` : ''}
         </div>
 
         ${Object.keys(this.entities).length > 0 ? html`
@@ -364,6 +402,35 @@ class HassAiPanel extends LitElement {
       }
       ha-icon {
         --mdc-icon-size: 20px;
+      }
+      .debug-section {
+        margin-top: 24px;
+        padding: 16px;
+        border: 1px solid var(--primary-color);
+        border-radius: 8px;
+        background: var(--card-background-color);
+        font-family: monospace;
+      }
+      .debug-section h3 {
+        margin: 0 0 12px 0;
+        color: var(--primary-color);
+      }
+      .debug-provider {
+        margin-bottom: 8px;
+        font-weight: bold;
+      }
+      .debug-prompt, .debug-response {
+        margin-bottom: 12px;
+      }
+      .debug-prompt pre, .debug-response pre {
+        background: var(--primary-background-color);
+        padding: 8px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 12px;
       }
     `;
   }

@@ -9,6 +9,13 @@
                     "scan_interval": "Scan Interval (days)"
                 }
             },
+            "api_key": {
+                "title": "Configure API Key",
+                "description": "Enter your API key for {provider}. {description}",
+                "data": {
+                    "api_key": "API Key"
+                }
+            },
             "configure": {
                 "title": "Configure HASS AI",
                 "description": "Set the frequency for automatic entity scans."
@@ -24,7 +31,15 @@
                 "title": "HASS AI Options",
                 "data": {
                     "scan_interval": "Scan Interval (days)",
-                    "ai_provider": "AI Provider"
+                    "ai_provider": "AI Provider",
+                    "change_api_key": "Change API Key"
+                }
+            },
+            "api_key": {
+                "title": "Update API Key",
+                "description": "Enter your API key for {provider}. {description}",
+                "data": {
+                    "api_key": "API Key"
                 }
             }
         }

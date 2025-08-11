@@ -145,7 +145,7 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
 
         # Get importance for all entities in batches
         importance_results = await get_entities_importance_batched(
-            hass, filtered_states, 10, ai_provider, api_key
+            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"]
         )
 
         # Send each result as it's processed
