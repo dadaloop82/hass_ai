@@ -23,12 +23,11 @@ class HassAiPanel extends LitElement {
     this.overrides = {};
     this.saveTimeout = null;
     this.language = 'en'; // Default language
-    this.debugInfo = {
+    this.scanProgress = {
       show: false,
-      lastPrompt: '',
-      lastResponse: '',
+      message: '',
       currentBatch: 0,
-      aiProvider: ''
+      entitiesCount: 0
     };
   }
 
@@ -46,13 +45,12 @@ class HassAiPanel extends LitElement {
     this.loading = true;
     this.entities = {};
     
-    // Show initial debug info
-    this.debugInfo = {
+    // Show initial simple progress info
+    this.scanProgress = {
       show: true,
-      lastPrompt: 'Avvio scansione...',
-      lastResponse: 'In attesa della configurazione AI...',
+      message: '🚀 Avvio scansione...',
       currentBatch: 0,
-      aiProvider: 'Rilevamento in corso...'
+      entitiesCount: 0
     };
     this.requestUpdate();
 
@@ -69,24 +67,26 @@ class HassAiPanel extends LitElement {
       this.entities[entity.entity_id] = entity;
       this.requestUpdate("entities");
     }
-    if (message.type === "debug_info") {
-      this.debugInfo = {
-        ...this.debugInfo,
-        ...message.data,
-        show: true
+    if (message.type === "scan_progress") {
+      // Update simple progress info
+      this.scanProgress = {
+        show: true,
+        message: message.data.message,
+        currentBatch: message.data.batch_number,
+        entitiesCount: message.data.entities_count
       };
       this.requestUpdate();
       
-      // Auto-hide debug after 10 seconds
+      // Auto-hide progress after 3 seconds
       setTimeout(() => {
-        this.debugInfo.show = false;
+        this.scanProgress.show = false;
         this.requestUpdate();
-      }, 10000);
+      }, 3000);
     }
     if (message.type === "batch_info") {
       // Update batch progress info
-      this.debugInfo = {
-        ...this.debugInfo,
+      this.scanProgress = {
+        ...this.scanProgress,
         currentBatch: message.data.batch_number,
         batchSize: message.data.batch_size,
         entitiesInBatch: message.data.entities_in_batch,
@@ -108,6 +108,8 @@ class HassAiPanel extends LitElement {
     }
     if (message.type === "scan_complete") {
       this.loading = false;
+      this.scanProgress.show = false;
+      this.requestUpdate();
     }
   }
 
@@ -260,20 +262,16 @@ ${data.response}
             ${this.loading ? t.scanning_button : t.scan_button}
           </ha-button>
           
-          ${this.debugInfo.show ? html`
-            <div class="debug-section">
-              <h3>🔍 AI Debug Info - Batch ${this.debugInfo.currentBatch}</h3>
-              <div class="debug-provider">
-                <strong>Provider:</strong> ${this.debugInfo.aiProvider}
+          ${this.scanProgress.show ? html`
+            <div class="progress-section">
+              <div class="progress-message">
+                ${this.scanProgress.message}
               </div>
-              <div class="debug-prompt">
-                <strong>Prompt inviato:</strong>
-                <pre>${this.debugInfo.lastPrompt}</pre>
-              </div>
-              <div class="debug-response">
-                <strong>Risposta AI:</strong>
-                <pre>${this.debugInfo.lastResponse}</pre>
-              </div>
+              ${this.scanProgress.currentBatch > 0 ? html`
+                <div class="progress-details">
+                  <small>Batch ${this.scanProgress.currentBatch} | ${this.scanProgress.entitiesCount} entità</small>
+                </div>
+              ` : ''}
             </div>
           ` : ''}
         </div>
@@ -379,6 +377,26 @@ ${data.response}
           transform: translateX(0);
           opacity: 1;
         }
+      }
+      
+      .progress-section {
+        background-color: var(--info-background-color, rgba(33, 150, 243, 0.1));
+        border-radius: 8px;
+        padding: 16px;
+        margin: 16px 0;
+        border-left: 4px solid var(--info-color, #2196f3);
+      }
+      
+      .progress-message {
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--primary-text-color);
+        margin-bottom: 8px;
+      }
+      
+      .progress-details {
+        color: var(--secondary-text-color);
+        font-size: 14px;
       }
       
       .warning-message {

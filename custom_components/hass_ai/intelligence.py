@@ -257,23 +257,32 @@ async def _process_single_batch(
     )
 
     try:
-        # Send debug info to frontend
+        # Send simple progress info to frontend instead of full debug
         if connection and msg_id:
-            debug_data = {
-                "aiProvider": ai_provider,
-                "currentBatch": batch_num,
-                "lastPrompt": prompt,
-                "lastResponse": ""
-            }
             connection.send_message(websocket_api.event_message(msg_id, {
-                "type": "debug_info", 
-                "data": debug_data
+                "type": "scan_progress", 
+                "data": {
+                    "message": f"📤 Richiesta inviata per batch {batch_num} ({len(batch_states)} entità)",
+                    "batch_number": batch_num,
+                    "entities_count": len(batch_states)
+                }
             }))
         
         # Use Local Agent only
         if ai_provider == AI_PROVIDER_LOCAL:
             response_text = await _query_local_agent(hass, prompt, conversation_agent)
             _LOGGER.debug(f"Local Agent response for batch {batch_num}: {response_text[:200]}...")
+            
+            # Send simple response confirmation
+            if connection and msg_id:
+                connection.send_message(websocket_api.event_message(msg_id, {
+                    "type": "scan_progress",
+                    "data": {
+                        "message": f"📥 Risposta ottenuta per batch {batch_num} ({len(batch_states)} entità)",
+                        "batch_number": batch_num,
+                        "entities_count": len(batch_states)
+                    }
+                }))
             
             # Check for token limit exceeded
             if _check_token_limit_exceeded(response_text):
@@ -294,17 +303,15 @@ async def _process_single_batch(
                 
         else:
             _LOGGER.error(f"AI provider {ai_provider} not supported. Only Local Agent is available.")
-            # Send debug info about provider unavailable
+            # Send simple error message to frontend
             if connection and msg_id:
-                debug_data = {
-                    "aiProvider": ai_provider,
-                    "currentBatch": batch_num,
-                    "lastPrompt": f"ERRORE: Provider {ai_provider} non supportato!",
-                    "lastResponse": "Solo l'Agente Locale è disponibile. Assicurati di avere configurato una LLM come Ollama."
-                }
                 connection.send_message(websocket_api.event_message(msg_id, {
-                    "type": "debug_info", 
-                    "data": debug_data
+                    "type": "scan_progress",
+                    "data": {
+                        "message": f"❌ Provider {ai_provider} non supportato. Uso fallback per batch {batch_num}",
+                        "batch_number": batch_num,
+                        "entities_count": len(batch_states)
+                    }
                 }))
             # Use fallback for all entities in this batch
             for state in batch_states:
@@ -318,19 +325,6 @@ async def _process_single_batch(
                         "result": fallback_result
                     }))
             return True  # Continue processing
-
-        # Send response debug info to frontend
-        if connection and msg_id:
-            debug_data = {
-                "aiProvider": ai_provider,
-                "currentBatch": batch_num,
-                "lastPrompt": prompt,
-                "lastResponse": response_text[:1000] + ("..." if len(response_text) > 1000 else "")
-            }
-            connection.send_message(websocket_api.event_message(msg_id, {
-                "type": "debug_info", 
-                "data": debug_data
-            }))
 
         # Clean response text (remove markdown formatting if present)
         response_text = response_text.strip()
