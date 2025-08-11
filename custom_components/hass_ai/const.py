@@ -1,6 +1,9 @@
 """Constants for the HASS AI integration."""
 
 DOMAIN = "hass_ai"
+CONF_AI_PROVIDER = "ai_provider"
+CONF_CONVERSATION_AGENT = "conversation_agent"
+CONF_SCAN_INTERVAL = "scan_interval"
 
 # AI Provider options - Only Local Agent supported
 AI_PROVIDER_LOCAL = "Local Agent"

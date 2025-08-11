@@ -4,7 +4,7 @@ import json
 import asyncio
 from typing import Optional
 
-from .const import AI_PROVIDER_LOCAL
+from .const import AI_PROVIDER_LOCAL, CONF_CONVERSATION_AGENT
 from homeassistant.core import HomeAssistant, State
 from homeassistant.components import conversation, websocket_api
 from homeassistant.exceptions import HomeAssistantError
@@ -37,7 +37,8 @@ async def get_entities_importance_batched(
     ai_provider: str = "OpenAI",
     api_key: str = None,
     connection = None,
-    msg_id: str = None
+    msg_id: str = None,
+    conversation_agent: str = None
 ) -> list[dict]:
     """Calculate the importance of multiple entities using external AI providers in batches."""
     
@@ -162,7 +163,7 @@ async def get_entities_importance_batched(
             
             # Use Local Agent only
             if ai_provider == AI_PROVIDER_LOCAL:
-                response_text = await _query_local_agent(hass, prompt)
+                response_text = await _query_local_agent(hass, prompt, conversation_agent)
                 _LOGGER.debug(f"Local Agent response for batch {batch_num}: {response_text[:200]}...")
             else:
                 _LOGGER.error(f"AI provider {ai_provider} not supported. Only Local Agent is available.")
@@ -279,23 +280,32 @@ def _create_fallback_result(entity_id: str, batch_num: int) -> dict:
     }
 
 
-async def _query_local_agent(hass: HomeAssistant, prompt: str) -> str:
+async def _query_local_agent(hass: HomeAssistant, prompt: str, conversation_agent: str = None) -> str:
     """Query Home Assistant local conversation agent using HA services."""
     try:
         _LOGGER.info(f"🤖 Querying local conversation agent via HA services...")
         
-        # Try to detect available conversation agents by looking at entities
-        conversation_agents = []
-        for entity_id in hass.states.async_entity_ids("conversation"):
-            if entity_id != "conversation.home_assistant":  # Skip default agent
-                conversation_agents.append(entity_id)
-                _LOGGER.info(f"🔍 Found conversation agent: {entity_id}")
+        # Determine which agent to use
+        agent_id = None
         
-        # Use the first non-default agent found, or None for default
-        agent_id = conversation_agents[0] if conversation_agents else None
+        if conversation_agent == "auto" or conversation_agent is None:
+            # Auto-detect: find first non-default agent
+            conversation_agents = []
+            for entity_id in hass.states.async_entity_ids("conversation"):
+                if entity_id != "conversation.home_assistant":  # Skip default agent
+                    conversation_agents.append(entity_id)
+                    _LOGGER.info(f"🔍 Found conversation agent: {entity_id}")
+            
+            agent_id = conversation_agents[0] if conversation_agents else None
+            _LOGGER.info(f"🎯 Auto-detected agent: {agent_id}")
+            
+        elif conversation_agent and conversation_agent != "auto":
+            # Use specifically configured agent
+            agent_id = conversation_agent
+            _LOGGER.info(f"🎯 Using configured agent: {agent_id}")
         
         if agent_id:
-            _LOGGER.info(f"🎯 Using conversation agent: {agent_id}")
+            _LOGGER.info(f"✅ Using conversation agent: {agent_id}")
         else:
             _LOGGER.warning(f"⚠️ No custom conversation agents found, using default (may not work well)")
         

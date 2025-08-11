@@ -10,7 +10,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.helpers import storage, event
 import voluptuous as vol
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_CONVERSATION_AGENT
 from .intelligence import get_entities_importance_batched
 from .services import async_setup_services, async_unload_services
 
@@ -150,9 +150,12 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
 
         _LOGGER.info(f"Starting scan of {len(filtered_states)} entities using {ai_provider}")
 
+        # Get conversation agent from config
+        conversation_agent = entry.data.get(CONF_CONVERSATION_AGENT, "auto")
+        
         # Get importance for all entities in batches
         importance_results = await get_entities_importance_batched(
-            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"]
+            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"], conversation_agent
         )
 
         # Send each result as it's processed

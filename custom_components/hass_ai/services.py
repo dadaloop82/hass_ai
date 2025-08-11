@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.exceptions import ServiceValidationError
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_CONVERSATION_AGENT
 from .intelligence import get_entities_importance_batched
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,8 +72,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     )
                 ]
             
+            # Get config entry to access conversation agent setting
+            config_entries = hass.config_entries.async_entries(DOMAIN)
+            conversation_agent = "auto"
+            if config_entries:
+                conversation_agent = config_entries[0].data.get(CONF_CONVERSATION_AGENT, "auto")
+            
             results = await get_entities_importance_batched(
-                hass, filtered_states, batch_size, ai_provider, api_key
+                hass, filtered_states, batch_size, ai_provider, api_key, None, None, conversation_agent
             )
             
             _LOGGER.info(f"Entity scan completed: {len(results)} entities analyzed using {ai_provider}")
@@ -96,7 +102,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             if not state:
                 raise ServiceValidationError(f"Entity {entity_id} not found")
             
-            results = await get_entities_importance_batched(hass, [state], 1)
+            # Get config entry to access conversation agent setting
+            config_entries = hass.config_entries.async_entries(DOMAIN)
+            conversation_agent = "auto"
+            if config_entries:
+                conversation_agent = config_entries[0].data.get(CONF_CONVERSATION_AGENT, "auto")
+            
+            results = await get_entities_importance_batched(hass, [state], 1, None, None, None, None, conversation_agent)
             
             if results:
                 importance_data = results[0]
