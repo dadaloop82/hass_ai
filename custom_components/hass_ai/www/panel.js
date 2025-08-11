@@ -112,78 +112,67 @@ class HassAiPanel extends LitElement {
   }
 
   _showBatchReductionNotification(data) {
-    // Create a toast notification for batch size reduction
-    const notification = document.createElement('div');
-    notification.style.cssText = `
+    // Use a simpler approach for notifications
+    console.log(`🔄 Batch Size Reduced: ${data.old_size} → ${data.new_size} (retry ${data.retry_attempt})`);
+    
+    // Create a simple toast notification
+    const toast = document.createElement('div');
+    toast.textContent = `🔄 Batch size reduced: ${data.old_size} → ${data.new_size} entities (retry ${data.retry_attempt})`;
+    toast.style.cssText = `
       position: fixed;
       top: 20px;
       right: 20px;
       background: #ff9800;
       color: white;
-      padding: 16px;
-      border-radius: 8px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      padding: 12px 16px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       z-index: 9999;
-      max-width: 400px;
-      animation: slideIn 0.3s ease-out;
+      font-size: 14px;
+      max-width: 300px;
+      transform: translateX(100%);
+      transition: transform 0.3s ease-out;
     `;
     
-    notification.innerHTML = `
-      <div style="font-weight: bold; margin-bottom: 8px;">
-        🔄 Batch Size Reduced
-      </div>
-      <div style="font-size: 14px;">
-        Token limit reached. Reducing from ${data.old_size} to ${data.new_size} entities per batch.
-        <br><small>Retry attempt: ${data.retry_attempt}</small>
-      </div>
-    `;
+    document.body.appendChild(toast);
     
-    document.body.appendChild(notification);
-    
-    // Auto-remove after 5 seconds
+    // Animate in
     setTimeout(() => {
-      if (notification.parentNode) {
-        notification.remove();
-      }
-    }, 5000);
+      toast.style.transform = 'translateX(0)';
+    }, 100);
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+      toast.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.remove();
+        }
+      }, 300);
+    }, 4000);
   }
 
   _showTokenLimitDialog(data) {
-    const dialog = document.createElement('ha-dialog');
-    dialog.heading = '🚨 Token Limit Exceeded';
-    dialog.addEventListener('dialog-closed', () => {
-      document.body.removeChild(dialog);
-    });
+    // Create a simple alert-style dialog instead of complex DOM manipulation
+    const message = `🚨 Token Limit Exceeded
 
-    const content = html`
-      <div style="padding: 16px;">
-        <div style="margin-bottom: 16px; font-size: 16px;">
-          <strong>Scan stopped at batch ${data.batch}</strong>
-        </div>
-        
-        <div style="background: #f5f5f5; border-radius: 8px; padding: 16px; margin: 16px 0; white-space: pre-line; font-family: monospace; font-size: 14px;">
-          ${data.message}
-        </div>
-        
-        <div style="margin-top: 16px;">
-          <strong>AI Response:</strong>
-          <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 8px; margin-top: 8px; font-size: 12px; max-height: 200px; overflow-y: auto;">
-            ${data.response}
-          </div>
-        </div>
-        
-        <div style="margin-top: 16px; padding: 12px; background: #e8f5e8; border-left: 4px solid #4caf50; border-radius: 4px;">
-          <strong>💡 Quick Solutions:</strong><br>
-          • Reduce batch size in HASS AI settings (try 5-8 entities)<br>
-          • Increase max_tokens in your conversation agent<br>
-          • Use a different conversation agent with higher limits
-        </div>
-      </div>
-    `;
+Scan stopped at batch ${data.batch}
 
-    dialog.appendChild(content);
-    document.body.appendChild(dialog);
-    dialog.open();
+${data.message}
+
+AI Response:
+${data.response}
+
+💡 Quick Solutions:
+• Reduce batch size in HASS AI settings (try 5-8 entities)
+• Increase max_tokens in your conversation agent
+• Use a different conversation agent with higher limits`;
+
+    // Use browser alert for now (more reliable)
+    alert(message);
+    
+    // Also log to console for debugging
+    console.log('HASS AI Token Limit:', data);
   }
 
   _handleToggle(ev) {

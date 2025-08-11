@@ -1,0 +1,19 @@
+# Esempio configurazione Google AI per HASS AI
+# Aggiungi questo al tuo configuration.yaml per aumentare i token
+
+conversation:
+  - platform: google_generative_ai
+    api_key: !secret google_generative_ai_api_key
+    model: gemini-1.5-flash  # o gemini-pro
+    max_tokens: 4000         # ⬅️ AUMENTA QUESTO VALORE!
+    temperature: 0.7
+    top_p: 0.9
+    
+# Alternative più elevate:
+# max_tokens: 8000   # Per batch più grandi
+# max_tokens: 16000  # Per sistemi con molte entità
+# max_tokens: 32000  # Massimo per Gemini (se supportato)
+
+# 💡 SUGGERIMENTO: 
+# Inizia con 4000 e aumenta gradualmente se necessario
+# HASS AI si adatterà automaticamente al limite che imposti

@@ -79,26 +79,26 @@ async def get_entities_importance_batched(
     all_results = []
     current_batch_size = batch_size
     remaining_states = states.copy()
-    batch_num = 0
+    overall_batch_num = 0
     token_limit_retries = 0
     max_retries = 3
     
     _LOGGER.info(f"🚀 Starting batch processing with initial batch size: {current_batch_size}")
     
-    while remaining_states and token_limit_retries < max_retries:
-        batch_num += 1
+    while remaining_states:
+        overall_batch_num += 1
         
         # Take entities for current batch
         batch_states = remaining_states[:current_batch_size]
         
-        _LOGGER.info(f"📦 Processing batch {batch_num} with {len(batch_states)} entities (batch size: {current_batch_size})")
+        _LOGGER.info(f"📦 Processing batch {overall_batch_num} with {len(batch_states)} entities (batch size: {current_batch_size}, retry: {token_limit_retries})")
         
         # Send batch info to frontend
         if connection and msg_id:
             connection.send_message(websocket_api.event_message(msg_id, {
                 "type": "batch_info",
                 "data": {
-                    "batch_number": batch_num,
+                    "batch_number": overall_batch_num,
                     "batch_size": current_batch_size,
                     "entities_in_batch": len(batch_states),
                     "remaining_entities": len(remaining_states) - len(batch_states),
@@ -107,7 +107,7 @@ async def get_entities_importance_batched(
             }))
         
         success = await _process_single_batch(
-            hass, batch_states, batch_num, ai_provider, 
+            hass, batch_states, overall_batch_num, ai_provider, 
             connection, msg_id, conversation_agent, all_results
         )
         
@@ -115,37 +115,56 @@ async def get_entities_importance_batched(
             # Batch successful - remove processed entities and reset retry counter
             remaining_states = remaining_states[current_batch_size:]
             token_limit_retries = 0
-            _LOGGER.info(f"✅ Batch {batch_num} completed successfully")
+            _LOGGER.info(f"✅ Batch {overall_batch_num} completed successfully")
             
         else:
             # Token limit exceeded - reduce batch size and retry
             token_limit_retries += 1
-            new_batch_size = max(MIN_BATCH_SIZE, int(current_batch_size * BATCH_REDUCTION_FACTOR))
             
-            _LOGGER.warning(f"⚠️ Token limit in batch {batch_num}, reducing batch size from {current_batch_size} to {new_batch_size} (retry {token_limit_retries}/{max_retries})")
-            
-            # Send reduction info to frontend
-            if connection and msg_id:
-                connection.send_message(websocket_api.event_message(msg_id, {
-                    "type": "batch_size_reduced",
-                    "data": {
-                        "old_size": current_batch_size,
-                        "new_size": new_batch_size,
-                        "retry_attempt": token_limit_retries,
-                        "reason": "Token limit exceeded"
-                    }
-                }))
-            
-            current_batch_size = new_batch_size
-            
-            # If we've reached minimum batch size and still failing, stop
-            if current_batch_size == MIN_BATCH_SIZE and token_limit_retries >= max_retries:
-                _LOGGER.error(f"🛑 Failed to process even with minimum batch size {MIN_BATCH_SIZE} after {max_retries} retries")
+            if token_limit_retries > max_retries:
+                # Max retries exceeded, try with minimum batch size one more time
+                if current_batch_size > MIN_BATCH_SIZE:
+                    _LOGGER.warning(f"🔄 Max retries exceeded, trying with minimum batch size {MIN_BATCH_SIZE}")
+                    current_batch_size = MIN_BATCH_SIZE
+                    token_limit_retries = 1  # Reset for one final attempt
+                else:
+                    # Even minimum batch size failed, use fallback for remaining entities
+                    _LOGGER.error(f"🛑 Even minimum batch size {MIN_BATCH_SIZE} failed after {max_retries} retries")
+                    _LOGGER.info(f"📋 Using fallback classification for remaining {len(remaining_states)} entities")
+                    
+                    # Send fallback results to frontend immediately
+                    for state in remaining_states:
+                        fallback_result = _create_fallback_result(state.entity_id, overall_batch_num, "token_limit_exceeded")
+                        all_results.append(fallback_result)
+                        
+                        # Send each fallback result to frontend
+                        if connection and msg_id:
+                            connection.send_message(websocket_api.event_message(msg_id, {
+                                "type": "entity_result",
+                                "result": fallback_result
+                            }))
+                    break
+            else:
+                new_batch_size = max(MIN_BATCH_SIZE, int(current_batch_size * BATCH_REDUCTION_FACTOR))
                 
-                # Use fallback for remaining entities
-                for state in remaining_states:
-                    all_results.append(_create_fallback_result(state.entity_id, batch_num, "token_limit_exceeded"))
-                break
+                _LOGGER.warning(f"⚠️ Token limit in batch {overall_batch_num}, reducing batch size from {current_batch_size} to {new_batch_size} (retry {token_limit_retries}/{max_retries})")
+                
+                # Send reduction info to frontend
+                if connection and msg_id:
+                    connection.send_message(websocket_api.event_message(msg_id, {
+                        "type": "batch_size_reduced",
+                        "data": {
+                            "old_size": current_batch_size,
+                            "new_size": new_batch_size,
+                            "retry_attempt": token_limit_retries,
+                            "reason": "Token limit exceeded"
+                        }
+                    }))
+                
+                current_batch_size = new_batch_size
+                
+                # Don't increment overall_batch_num since we're retrying the same batch
+                overall_batch_num -= 1  # Counteract the increment that will happen at loop start
 
     # Ensure all entities have a result (fallback for any missing)
     processed_entity_ids = {res["entity_id"] for res in all_results}
@@ -289,7 +308,15 @@ async def _process_single_batch(
                 }))
             # Use fallback for all entities in this batch
             for state in batch_states:
-                all_results.append(_create_fallback_result(state.entity_id, batch_num))
+                fallback_result = _create_fallback_result(state.entity_id, batch_num)
+                all_results.append(fallback_result)
+                
+                # Send fallback result to frontend
+                if connection and msg_id:
+                    connection.send_message(websocket_api.event_message(msg_id, {
+                        "type": "entity_result",
+                        "result": fallback_result
+                    }))
             return True  # Continue processing
 
         # Send response debug info to frontend
@@ -322,36 +349,76 @@ async def _process_single_batch(
                     # Validate rating is within bounds
                     rating = int(item["rating"])
                     if 0 <= rating <= 5:
-                        all_results.append({
+                        result = {
                             "entity_id": item["entity_id"],
                             "overall_weight": rating,
                             "overall_reason": item["reason"],
                             "analysis_method": "ai_conversation",
                             "batch_number": batch_num,
-                        })
+                        }
+                        all_results.append(result)
+                        
+                        # Send result to frontend immediately
+                        if connection and msg_id:
+                            connection.send_message(websocket_api.event_message(msg_id, {
+                                "type": "entity_result",
+                                "result": result
+                            }))
                     else:
                         _LOGGER.warning(f"Invalid rating {rating} for entity {item['entity_id']}, using fallback")
-                        all_results.append(_create_fallback_result(item["entity_id"], batch_num))
+                        fallback_result = _create_fallback_result(item["entity_id"], batch_num)
+                        all_results.append(fallback_result)
+                        
+                        # Send fallback result to frontend
+                        if connection and msg_id:
+                            connection.send_message(websocket_api.event_message(msg_id, {
+                                "type": "entity_result",
+                                "result": fallback_result
+                            }))
                 else:
                     _LOGGER.warning(f"Malformed AI response item: {item}")
         else:
             _LOGGER.warning(f"AI response is not a list, using fallback for batch {batch_num}")
             # Use fallback for all entities in this batch
             for state in batch_states:
-                all_results.append(_create_fallback_result(state.entity_id, batch_num))
+                fallback_result = _create_fallback_result(state.entity_id, batch_num)
+                all_results.append(fallback_result)
+                
+                # Send fallback result to frontend
+                if connection and msg_id:
+                    connection.send_message(websocket_api.event_message(msg_id, {
+                        "type": "entity_result",
+                        "result": fallback_result
+                    }))
 
     except json.JSONDecodeError as e:
         _LOGGER.warning(f"AI response is not valid JSON for batch {batch_num} - Raw response: {response_text} - Error: {e}")
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
         for state in batch_states:
-            all_results.append(_create_fallback_result(state.entity_id, batch_num))
+            fallback_result = _create_fallback_result(state.entity_id, batch_num)
+            all_results.append(fallback_result)
+            
+            # Send fallback result to frontend
+            if connection and msg_id:
+                connection.send_message(websocket_api.event_message(msg_id, {
+                    "type": "entity_result",
+                    "result": fallback_result
+                }))
     except Exception as e:
         _LOGGER.error(f"Error querying AI for batch {batch_num}: {e}")
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
         for state in batch_states:
-            all_results.append(_create_fallback_result(state.entity_id, batch_num))
+            fallback_result = _create_fallback_result(state.entity_id, batch_num)
+            all_results.append(fallback_result)
+            
+            # Send fallback result to frontend
+            if connection and msg_id:
+                connection.send_message(websocket_api.event_message(msg_id, {
+                    "type": "entity_result",
+                    "result": fallback_result
+                }))
 
     return True  # Success
 
