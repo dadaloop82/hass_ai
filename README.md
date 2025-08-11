@@ -13,18 +13,26 @@
 
 ## 🏠 How It Works
 
-The system uses Home Assistant's local AI (via conversation agent) to:
+The system integrates with **any** Home Assistant conversation agent to provide intelligent analysis:
 
-1. **Analyze** all system entities
-2. **Evaluate** their importance on a 0-5 scale:
+### 🤖 **Universal AI Support**
+- **Google AI (Gemini)** - Advanced reasoning and detailed analysis
+- **OpenAI (ChatGPT)** - High-quality natural language processing  
+- **Ollama** - Local LLM models for complete privacy
+- **Other Providers** - Any conversation agent configured in Home Assistant
+
+### 📊 **Intelligent Analysis Process**
+1. **Auto-Detection**: Automatically finds and uses your preferred conversation agent
+2. **Analyze** all system entities using your chosen AI
+3. **Evaluate** their importance on a 0-5 scale:
    - 0 = Ignore (diagnostic/unnecessary)
    - 1 = Very Low (rarely useful)
    - 2 = Low (occasionally useful) 
    - 3 = Medium (commonly useful)
    - 4 = High (frequently important)
    - 5 = Critical (essential for automations)
-3. **Provide** detailed reasons for each evaluation
-4. **Allow** complete user customizations
+4. **Provide** detailed reasons for each evaluation
+5. **Allow** complete user customizations
 
 ## 📦 Installation
 
@@ -50,15 +58,39 @@ The system uses Home Assistant's local AI (via conversation agent) to:
 
 ### Initial Setup
 
-During configuration you can set:
+HASS AI uses a **two-step configuration wizard**:
 
-- **AI Provider**: Currently supports only the integrated conversation agent
+#### 🎯 **Step 1: AI Provider Selection**  
+Choose your preferred conversation agent:
+- **Auto-Detection** - Let HASS AI find your configured agent automatically
+- **Manual Selection** - Choose from all available conversation agents
+
+#### ⚙️ **Step 2: Scan Settings**
+Configure analysis parameters:
 - **Scan Interval**: How often to run automatic scans (1-30 days)
+- **Batch Size**: Number of entities to analyze per batch
 
 ### Requirements
 
 - Home Assistant 2023.4.0 or higher
-- Configured conversation agent (Google Gemini, OpenAI, etc.)
+- **Any configured conversation agent**:
+  - Google AI (Gemini) 
+  - OpenAI (ChatGPT)
+  - Ollama (Local LLMs)
+  - Anthropic Claude
+  - Or any other conversation integration
+
+> 💡 **Note**: HASS AI works with **any** conversation agent - no specific provider required!
+
+#### ⚡ **Token Limits & Performance**
+
+Different conversation agents have different token limits. If you encounter token limit errors:
+
+- **Reduce Batch Size**: Lower the entities per batch (5-8 recommended for most agents)
+- **Increase Agent Limits**: Configure higher `max_tokens` in your conversation agent
+- **Choose Different Agent**: Some agents like Ollama (local) have more flexible limits
+
+HASS AI will automatically stop scanning and show helpful suggestions if limits are reached.
 
 ## 🎯 Usage
 
@@ -183,3 +215,55 @@ hass.callWS({
   }
 })
 ```
+
+## 🔧 Troubleshooting
+
+### 🚨 **Token Limit Exceeded**
+
+If you see "Token limit exceeded" during scanning:
+
+**Quick Fixes:**
+- **Reduce Batch Size**: In HASS AI config, lower entities per batch to 5-8
+- **Increase Agent Limits**: Add `max_tokens: 4000` (or higher) to your conversation agent config
+- **Use Different Agent**: Try Ollama (local) for more flexible limits
+
+**Example Ollama Config:**
+```yaml
+# configuration.yaml
+conversation:
+  - platform: ollama
+    model: llama3.1
+    max_tokens: 8000  # Increase token limit
+    temperature: 0.7
+```
+
+### 🤖 **Conversation Agent Issues**
+
+**Problem**: "No conversation agents found"
+- Go to Settings → Voice Assistants → Add Agent
+- Configure Google AI, OpenAI, or Ollama
+- Restart Home Assistant and reconfigure HASS AI
+
+**Problem**: "AI responses are poor quality"
+- Try a different conversation agent (Gemini vs ChatGPT vs Ollama)
+- Increase `temperature` in agent config for more creative responses
+- Check that your agent has sufficient context window
+
+### 📊 **Performance Optimization**
+
+- **Large Systems (>500 entities)**: Use batch size 5-8
+- **Small Systems (<100 entities)**: Use batch size 10-15
+- **Slow Responses**: Check your conversation agent's response time
+- **Memory Issues**: Restart Home Assistant after configuration changes
+
+### 🔄 **Configuration Problems**
+
+**Problem**: Integration won't load
+- Check Home Assistant logs for errors
+- Ensure conversation component is enabled
+- Restart Home Assistant after adding conversation agents
+
+**Problem**: Panel not showing
+- Clear browser cache and refresh
+- Check that frontend component is enabled
+- Verify HASS AI panel is not hidden in sidebar settings

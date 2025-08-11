@@ -27,3 +27,34 @@ IMPORTANCE_CRITICAL = 5
 STORAGE_KEY_OVERRIDES = "overrides"
 STORAGE_KEY_LAST_SCAN = "last_scan"
 STORAGE_KEY_VERSION = "version"
+
+# Token limit management
+MAX_TOKEN_ERROR_KEYWORDS = [
+    "exceed",
+    "maximum",
+    "limit",
+    "token",
+    "too long",
+    "too many",
+    "context length",
+    "input too large",
+    "quota",
+    "rate limit"
+]
+
+# Dynamic batch size management
+MIN_BATCH_SIZE = 1
+MAX_BATCH_SIZE = 50
+DEFAULT_BATCH_SIZE = 10
+BATCH_REDUCTION_FACTOR = 0.8  # Reduce by 20% each time
+
+# Error messages for token limits
+TOKEN_LIMIT_ERROR_MESSAGE = (
+    "⚠️ Token limit exceeded! The conversation agent has reached its maximum token capacity. "
+    "To resolve this issue:\n\n"
+    "🔧 **Recommended Solutions:**\n"
+    "• Increase the max_tokens parameter in your conversation agent configuration\n"
+    "• Reduce the batch size in HASS AI settings (try 5-8 entities per batch)\n"
+    "• Use a conversation agent with higher token limits\n\n"
+    "📊 **Current batch was stopped to prevent errors.**"
+)

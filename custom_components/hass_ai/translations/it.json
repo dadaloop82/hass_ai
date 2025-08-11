@@ -50,5 +50,16 @@
             "name": "Reset Override",
             "description": "Rimuove tutti gli override utente e ripristina i valori AI originali"
         }
+    },
+    "errors": {
+        "token_limit_exceeded": {
+            "title": "Limite Token Superato",
+            "message": "L'agente conversazione ha raggiunto la capacità massima di token. Aumenta il parametro max_tokens nella configurazione dell'agente o riduci la dimensione del batch.",
+            "solutions": {
+                "increase_tokens": "Aumenta max_tokens nelle impostazioni dell'agente conversazione",
+                "reduce_batch": "Riduci la dimensione del batch nella configurazione HASS AI (prova 5-8 entità)",
+                "change_agent": "Usa un agente conversazione con limiti di token più elevati"
+            }
+        }
     }
 }

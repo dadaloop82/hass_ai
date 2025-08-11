@@ -83,9 +83,107 @@ class HassAiPanel extends LitElement {
         this.requestUpdate();
       }, 10000);
     }
+    if (message.type === "batch_info") {
+      // Update batch progress info
+      this.debugInfo = {
+        ...this.debugInfo,
+        currentBatch: message.data.batch_number,
+        batchSize: message.data.batch_size,
+        entitiesInBatch: message.data.entities_in_batch,
+        remainingEntities: message.data.remaining_entities,
+        retryAttempt: message.data.retry_attempt,
+        show: true
+      };
+      this.requestUpdate();
+    }
+    if (message.type === "batch_size_reduced") {
+      // Show batch size reduction notification
+      this._showBatchReductionNotification(message.data);
+    }
+    if (message.type === "token_limit_exceeded") {
+      this.loading = false;
+      
+      // Show token limit error dialog
+      this._showTokenLimitDialog(message.data);
+    }
     if (message.type === "scan_complete") {
       this.loading = false;
     }
+  }
+
+  _showBatchReductionNotification(data) {
+    // Create a toast notification for batch size reduction
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #ff9800;
+      color: white;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      z-index: 9999;
+      max-width: 400px;
+      animation: slideIn 0.3s ease-out;
+    `;
+    
+    notification.innerHTML = `
+      <div style="font-weight: bold; margin-bottom: 8px;">
+        🔄 Batch Size Reduced
+      </div>
+      <div style="font-size: 14px;">
+        Token limit reached. Reducing from ${data.old_size} to ${data.new_size} entities per batch.
+        <br><small>Retry attempt: ${data.retry_attempt}</small>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.remove();
+      }
+    }, 5000);
+  }
+
+  _showTokenLimitDialog(data) {
+    const dialog = document.createElement('ha-dialog');
+    dialog.heading = '🚨 Token Limit Exceeded';
+    dialog.addEventListener('dialog-closed', () => {
+      document.body.removeChild(dialog);
+    });
+
+    const content = html`
+      <div style="padding: 16px;">
+        <div style="margin-bottom: 16px; font-size: 16px;">
+          <strong>Scan stopped at batch ${data.batch}</strong>
+        </div>
+        
+        <div style="background: #f5f5f5; border-radius: 8px; padding: 16px; margin: 16px 0; white-space: pre-line; font-family: monospace; font-size: 14px;">
+          ${data.message}
+        </div>
+        
+        <div style="margin-top: 16px;">
+          <strong>AI Response:</strong>
+          <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 8px; margin-top: 8px; font-size: 12px; max-height: 200px; overflow-y: auto;">
+            ${data.response}
+          </div>
+        </div>
+        
+        <div style="margin-top: 16px; padding: 12px; background: #e8f5e8; border-left: 4px solid #4caf50; border-radius: 4px;">
+          <strong>💡 Quick Solutions:</strong><br>
+          • Reduce batch size in HASS AI settings (try 5-8 entities)<br>
+          • Increase max_tokens in your conversation agent<br>
+          • Use a different conversation agent with higher limits
+        </div>
+      </div>
+    `;
+
+    dialog.appendChild(content);
+    document.body.appendChild(dialog);
+    dialog.open();
   }
 
   _handleToggle(ev) {
@@ -283,6 +381,17 @@ class HassAiPanel extends LitElement {
 
   static get styles() {
     return css`
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      
       .warning-message {
         color: var(--warning-color, #ff9800);
         font-style: italic;

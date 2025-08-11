@@ -1,5 +1,33 @@
 # HASS AI Features
 
+## V1.7.0: Universal Conversation Agent Support & Local Agent Architecture
+
+This version introduces a completely redesigned agent selection system that works with **any** conversation agent provider, eliminating dependencies and assumptions about specific AI services.
+
+### 🌟 **Universal AI Provider Support**
+- **🤖 Any Conversation Agent**: Works with Google AI, OpenAI, Ollama, ChatGPT, Anthropic, and any other conversation integration
+- **🎯 Auto-Detection**: Automatically finds and selects your configured conversation agent
+- **⚙️ Manual Selection**: Choose from all available agents with friendly names and clear identification
+- **🔧 Two-Step Configuration**: Streamlined setup wizard for agent selection and scan parameters
+
+### 🏗️ **Local Agent Architecture** 
+- **📦 Zero External Dependencies**: No protobuf or other external library requirements
+- **🏠 Home Assistant Native**: Uses only built-in conversation.process service
+- **🔒 Privacy-First**: Works perfectly with local LLMs through Ollama
+- **⚡ Lightweight Installation**: Clean installation without dependency conflicts
+
+### 🚀 **Enhanced Intelligence System**
+- **🧠 Configurable AI Backend**: Each analysis uses your selected conversation agent
+- **📊 Consistent Analysis Quality**: Same high-quality results regardless of AI provider  
+- **🔍 Enhanced Logging**: See exactly which agent is being used for each analysis
+- **⚙️ Dynamic Agent Switching**: Change agents anytime through reconfiguration
+
+### 🎛️ **Improved Configuration Flow**
+- **Step 1: Agent Selection** - Choose your preferred conversation agent with auto-detection
+- **Step 2: Scan Settings** - Configure analysis parameters and intervals
+- **💡 Smart Defaults**: Auto-detection finds the best available agent automatically
+- **🔄 Easy Reconfiguration**: Update agent selection anytime without losing data
+
 ## V1.4.0: Complete Architecture Refactor and Enhanced Intelligence
 
 This version represents a major overhaul of the entire system with significant improvements to AI analysis, user experience, and developer tooling.

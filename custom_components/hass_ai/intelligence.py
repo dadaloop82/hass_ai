@@ -4,7 +4,14 @@ import json
 import asyncio
 from typing import Optional
 
-from .const import AI_PROVIDER_LOCAL, CONF_CONVERSATION_AGENT
+from .const import (
+    AI_PROVIDER_LOCAL, 
+    CONF_CONVERSATION_AGENT, 
+    MAX_TOKEN_ERROR_KEYWORDS,
+    TOKEN_LIMIT_ERROR_MESSAGE,
+    MIN_BATCH_SIZE,
+    BATCH_REDUCTION_FACTOR
+)
 from homeassistant.core import HomeAssistant, State
 from homeassistant.components import conversation, websocket_api
 from homeassistant.exceptions import HomeAssistantError
@@ -40,7 +47,7 @@ async def get_entities_importance_batched(
     msg_id: str = None,
     conversation_agent: str = None
 ) -> list[dict]:
-    """Calculate the importance of multiple entities using external AI providers in batches."""
+    """Calculate the importance of multiple entities using external AI providers in batches with dynamic size reduction."""
     
     if not states:
         _LOGGER.warning("No entities provided for analysis")
@@ -70,180 +77,75 @@ async def get_entities_importance_batched(
         return all_results
     
     all_results = []
-    total_batches = (len(states) + batch_size - 1) // batch_size
+    current_batch_size = batch_size
+    remaining_states = states.copy()
+    batch_num = 0
+    token_limit_retries = 0
+    max_retries = 3
     
-    for i in range(0, len(states), batch_size):
-        batch_states = states[i:i + batch_size]
-        batch_num = (i // batch_size) + 1
+    _LOGGER.info(f"🚀 Starting batch processing with initial batch size: {current_batch_size}")
+    
+    while remaining_states and token_limit_retries < max_retries:
+        batch_num += 1
         
-        _LOGGER.debug(f"Processing batch {batch_num}/{total_batches} with {len(batch_states)} entities")
+        # Take entities for current batch
+        batch_states = remaining_states[:current_batch_size]
         
-        # Create detailed entity information for AI analysis
-        entity_details = []
-        for state in batch_states:
-            # Get comprehensive entity info including key attributes
-            attributes = dict(state.attributes)
-            
-            # Extract important attributes for analysis
-            important_attrs = {}
-            
-            # Common important attributes
-            attr_keys = [
-                'device_class', 'unit_of_measurement', 'friendly_name', 
-                'supported_features', 'entity_category', 'icon',
-                'room', 'area', 'location', 'zone', 'floor',
-                # Climate specific
-                'temperature', 'target_temperature', 'hvac_mode', 'hvac_modes',
-                # Light specific  
-                'brightness', 'color_mode', 'supported_color_modes',
-                # Sensor specific
-                'state_class', 'last_changed', 'last_updated',
-                # Security specific
-                'device_type', 'tamper', 'battery_level',
-                # Media specific
-                'source', 'volume_level', 'media_title',
-                # Cover specific
-                'current_position', 'position',
-                # Switch/Binary sensor specific
-                'device_class',
-            ]
-            
-            for key in attr_keys:
-                if key in attributes and attributes[key] is not None:
-                    important_attrs[key] = attributes[key]
-            
-            # Create detailed description
-            entity_description = (
-                f"- Entity: {state.entity_id}\n"
-                f"  Domain: {state.domain}\n" 
-                f"  Name: {state.attributes.get('friendly_name', state.entity_id.split('.')[-1])}\n"
-                f"  Current State: {state.state}\n"
-                f"  Attributes: {json.dumps(important_attrs, default=str)}\n"
-            )
-            
-            entity_details.append(entity_description)
+        _LOGGER.info(f"📦 Processing batch {batch_num} with {len(batch_states)} entities (batch size: {current_batch_size})")
         
-        # Add delay to make AI analysis visible (2-3 seconds per batch)
-        await asyncio.sleep(2.5)
+        # Send batch info to frontend
+        if connection and msg_id:
+            connection.send_message(websocket_api.event_message(msg_id, {
+                "type": "batch_info",
+                "data": {
+                    "batch_number": batch_num,
+                    "batch_size": current_batch_size,
+                    "entities_in_batch": len(batch_states),
+                    "remaining_entities": len(remaining_states) - len(batch_states),
+                    "retry_attempt": token_limit_retries
+                }
+            }))
         
-        prompt = (
-            f"As a Home Assistant expert, analyze these {len(batch_states)} entities and their attributes to rate their automation importance on a scale of 0-5:\n\n"
-            f"Rating Scale:\n"
-            f"0 = Ignore (diagnostic/unnecessary for automations)\n"
-            f"1 = Very Low (rarely useful, mostly informational)\n"
-            f"2 = Low (occasionally useful, minor convenience)\n"
-            f"3 = Medium (commonly useful, good automation potential)\n"
-            f"4 = High (frequently important, significant automation value)\n"
-            f"5 = Critical (essential for automations, security, or safety)\n\n"
-            f"Consider these factors:\n"
-            f"- Device type and functionality (from domain and device_class)\n"
-            f"- Attributes that indicate automation potential (controllable features)\n"
-            f"- Location/area relevance (room, zone information)\n"
-            f"- Security and safety importance\n"
-            f"- State changes that trigger useful automations\n"
-            f"- Integration complexity vs. automation value\n\n"
-            f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
-            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'.\n\n"
-            f"Entities to analyze:\n" + "\n".join(entity_details)
+        success = await _process_single_batch(
+            hass, batch_states, batch_num, ai_provider, 
+            connection, msg_id, conversation_agent, all_results
         )
-
-        try:
-            # Send debug info to frontend
+        
+        if success:
+            # Batch successful - remove processed entities and reset retry counter
+            remaining_states = remaining_states[current_batch_size:]
+            token_limit_retries = 0
+            _LOGGER.info(f"✅ Batch {batch_num} completed successfully")
+            
+        else:
+            # Token limit exceeded - reduce batch size and retry
+            token_limit_retries += 1
+            new_batch_size = max(MIN_BATCH_SIZE, int(current_batch_size * BATCH_REDUCTION_FACTOR))
+            
+            _LOGGER.warning(f"⚠️ Token limit in batch {batch_num}, reducing batch size from {current_batch_size} to {new_batch_size} (retry {token_limit_retries}/{max_retries})")
+            
+            # Send reduction info to frontend
             if connection and msg_id:
-                debug_data = {
-                    "aiProvider": ai_provider,
-                    "currentBatch": batch_num,
-                    "lastPrompt": prompt,
-                    "lastResponse": ""
-                }
                 connection.send_message(websocket_api.event_message(msg_id, {
-                    "type": "debug_info", 
-                    "data": debug_data
+                    "type": "batch_size_reduced",
+                    "data": {
+                        "old_size": current_batch_size,
+                        "new_size": new_batch_size,
+                        "retry_attempt": token_limit_retries,
+                        "reason": "Token limit exceeded"
+                    }
                 }))
             
-            # Use Local Agent only
-            if ai_provider == AI_PROVIDER_LOCAL:
-                response_text = await _query_local_agent(hass, prompt, conversation_agent)
-                _LOGGER.debug(f"Local Agent response for batch {batch_num}: {response_text[:200]}...")
-            else:
-                _LOGGER.error(f"AI provider {ai_provider} not supported. Only Local Agent is available.")
-                # Send debug info about provider unavailable
-                if connection and msg_id:
-                    debug_data = {
-                        "aiProvider": ai_provider,
-                        "currentBatch": batch_num,
-                        "lastPrompt": f"ERRORE: Provider {ai_provider} non supportato!",
-                        "lastResponse": "Solo l'Agente Locale è disponibile. Assicurati di avere configurato una LLM come Ollama."
-                    }
-                    connection.send_message(websocket_api.event_message(msg_id, {
-                        "type": "debug_info", 
-                        "data": debug_data
-                    }))
-                # Use fallback for all entities in this batch
-                for state in batch_states:
-                    all_results.append(_create_fallback_result(state.entity_id, batch_num))
-                continue
-
-            # Send response debug info to frontend
-            if connection and msg_id:
-                debug_data = {
-                    "aiProvider": ai_provider,
-                    "currentBatch": batch_num,
-                    "lastPrompt": prompt,
-                    "lastResponse": response_text[:1000] + ("..." if len(response_text) > 1000 else "")
-                }
-                connection.send_message(websocket_api.event_message(msg_id, {
-                    "type": "debug_info", 
-                    "data": debug_data
-                }))
-
-            # Clean response text (remove markdown formatting if present)
-            response_text = response_text.strip()
-            if response_text.startswith("```json"):
-                response_text = response_text[7:]
-            if response_text.endswith("```"):
-                response_text = response_text[:-3]
-            response_text = response_text.strip()
-
-            # Parse JSON response
-            parsed_response = json.loads(response_text)
-
-            if isinstance(parsed_response, list):
-                for item in parsed_response:
-                    if isinstance(item, dict) and all(key in item for key in ["entity_id", "rating", "reason"]):
-                        # Validate rating is within bounds
-                        rating = int(item["rating"])
-                        if 0 <= rating <= 5:
-                            all_results.append({
-                                "entity_id": item["entity_id"],
-                                "overall_weight": rating,
-                                "overall_reason": item["reason"],
-                                "analysis_method": "ai_conversation",
-                                "batch_number": batch_num,
-                            })
-                        else:
-                            _LOGGER.warning(f"Invalid rating {rating} for entity {item['entity_id']}, using fallback")
-                            all_results.append(_create_fallback_result(item["entity_id"], batch_num))
-                    else:
-                        _LOGGER.warning(f"Malformed AI response item: {item}")
-            else:
-                _LOGGER.warning(f"AI response is not a list, using fallback for batch {batch_num}")
-                # Use fallback for all entities in this batch
-                for state in batch_states:
-                    all_results.append(_create_fallback_result(state.entity_id, batch_num))
-
-        except json.JSONDecodeError as e:
-            _LOGGER.warning(f"AI response is not valid JSON for batch {batch_num} - Raw response: {response_text} - Error: {e}")
-            _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
-            # Use fallback for all entities in this batch
-            for state in batch_states:
-                all_results.append(_create_fallback_result(state.entity_id, batch_num))
-        except Exception as e:
-            _LOGGER.error(f"Error querying AI for batch {batch_num}: {e}")
-            _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
-            # Use fallback for all entities in this batch
-            for state in batch_states:
-                all_results.append(_create_fallback_result(state.entity_id, batch_num))
+            current_batch_size = new_batch_size
+            
+            # If we've reached minimum batch size and still failing, stop
+            if current_batch_size == MIN_BATCH_SIZE and token_limit_retries >= max_retries:
+                _LOGGER.error(f"🛑 Failed to process even with minimum batch size {MIN_BATCH_SIZE} after {max_retries} retries")
+                
+                # Use fallback for remaining entities
+                for state in remaining_states:
+                    all_results.append(_create_fallback_result(state.entity_id, batch_num, "token_limit_exceeded"))
+                break
 
     # Ensure all entities have a result (fallback for any missing)
     processed_entity_ids = {res["entity_id"] for res in all_results}
@@ -251,11 +153,224 @@ async def get_entities_importance_batched(
         if state.entity_id not in processed_entity_ids:
             all_results.append(_create_fallback_result(state.entity_id, 0))
 
-    _LOGGER.info(f"Completed analysis of {len(states)} entities, got {len(all_results)} results")
+    _LOGGER.info(f"🏁 Completed analysis of {len(states)} entities, got {len(all_results)} results")
     return all_results
+        
+async def _process_single_batch(
+    hass: HomeAssistant,
+    batch_states: list[State], 
+    batch_num: int,
+    ai_provider: str,
+    connection,
+    msg_id: str,
+    conversation_agent: str,
+    all_results: list
+) -> bool:
+    """Process a single batch and return True if successful, False if token limit exceeded."""
+    
+    # Create detailed entity information for AI analysis
+    entity_details = []
+    for state in batch_states:
+        # Get comprehensive entity info including key attributes
+        attributes = dict(state.attributes)
+        
+        # Extract important attributes for analysis
+        important_attrs = {}
+        
+        # Common important attributes
+        attr_keys = [
+            'device_class', 'unit_of_measurement', 'friendly_name', 
+            'supported_features', 'entity_category', 'icon',
+            'room', 'area', 'location', 'zone', 'floor',
+            # Climate specific
+            'temperature', 'target_temperature', 'hvac_mode', 'hvac_modes',
+            # Light specific  
+            'brightness', 'color_mode', 'supported_color_modes',
+            # Sensor specific
+            'state_class', 'last_changed', 'last_updated',
+            # Security specific
+            'device_type', 'tamper', 'battery_level',
+            # Media specific
+            'source', 'volume_level', 'media_title',
+            # Cover specific
+            'current_position', 'position',
+            # Switch/Binary sensor specific
+            'device_class',
+        ]
+        
+        for key in attr_keys:
+            if key in attributes and attributes[key] is not None:
+                important_attrs[key] = attributes[key]
+        
+        # Create detailed description
+        entity_description = (
+            f"- Entity: {state.entity_id}\n"
+            f"  Domain: {state.domain}\n" 
+            f"  Name: {state.attributes.get('friendly_name', state.entity_id.split('.')[-1])}\n"
+            f"  Current State: {state.state}\n"
+            f"  Attributes: {json.dumps(important_attrs, default=str)}\n"
+        )
+        
+        entity_details.append(entity_description)
+    
+    # Add delay to make AI analysis visible (2-3 seconds per batch)
+    await asyncio.sleep(2.5)
+    
+    prompt = (
+        f"As a Home Assistant expert, analyze these {len(batch_states)} entities and their attributes to rate their automation importance on a scale of 0-5:\n\n"
+        f"Rating Scale:\n"
+        f"0 = Ignore (diagnostic/unnecessary for automations)\n"
+        f"1 = Very Low (rarely useful, mostly informational)\n"
+        f"2 = Low (occasionally useful, minor convenience)\n"
+        f"3 = Medium (commonly useful, good automation potential)\n"
+        f"4 = High (frequently important, significant automation value)\n"
+        f"5 = Critical (essential for automations, security, or safety)\n\n"
+        f"Consider these factors:\n"
+        f"- Device type and functionality (from domain and device_class)\n"
+        f"- Attributes that indicate automation potential (controllable features)\n"
+        f"- Location/area relevance (room, zone information)\n"
+        f"- Security and safety importance\n"
+        f"- State changes that trigger useful automations\n"
+        f"- Integration complexity vs. automation value\n\n"
+        f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
+        f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'.\n\n"
+        f"Entities to analyze:\n" + "\n".join(entity_details)
+    )
+
+    try:
+        # Send debug info to frontend
+        if connection and msg_id:
+            debug_data = {
+                "aiProvider": ai_provider,
+                "currentBatch": batch_num,
+                "lastPrompt": prompt,
+                "lastResponse": ""
+            }
+            connection.send_message(websocket_api.event_message(msg_id, {
+                "type": "debug_info", 
+                "data": debug_data
+            }))
+        
+        # Use Local Agent only
+        if ai_provider == AI_PROVIDER_LOCAL:
+            response_text = await _query_local_agent(hass, prompt, conversation_agent)
+            _LOGGER.debug(f"Local Agent response for batch {batch_num}: {response_text[:200]}...")
+            
+            # Check for token limit exceeded
+            if _check_token_limit_exceeded(response_text):
+                _LOGGER.error(f"🚨 Token limit exceeded in batch {batch_num}")
+                
+                # Send token limit error to frontend
+                if connection and msg_id:
+                    connection.send_message(websocket_api.event_message(msg_id, {
+                        "type": "token_limit_exceeded",
+                        "data": {
+                            "batch": batch_num,
+                            "message": TOKEN_LIMIT_ERROR_MESSAGE,
+                            "response": response_text
+                        }
+                    }))
+                
+                return False  # Signal token limit exceeded
+                
+        else:
+            _LOGGER.error(f"AI provider {ai_provider} not supported. Only Local Agent is available.")
+            # Send debug info about provider unavailable
+            if connection and msg_id:
+                debug_data = {
+                    "aiProvider": ai_provider,
+                    "currentBatch": batch_num,
+                    "lastPrompt": f"ERRORE: Provider {ai_provider} non supportato!",
+                    "lastResponse": "Solo l'Agente Locale è disponibile. Assicurati di avere configurato una LLM come Ollama."
+                }
+                connection.send_message(websocket_api.event_message(msg_id, {
+                    "type": "debug_info", 
+                    "data": debug_data
+                }))
+            # Use fallback for all entities in this batch
+            for state in batch_states:
+                all_results.append(_create_fallback_result(state.entity_id, batch_num))
+            return True  # Continue processing
+
+        # Send response debug info to frontend
+        if connection and msg_id:
+            debug_data = {
+                "aiProvider": ai_provider,
+                "currentBatch": batch_num,
+                "lastPrompt": prompt,
+                "lastResponse": response_text[:1000] + ("..." if len(response_text) > 1000 else "")
+            }
+            connection.send_message(websocket_api.event_message(msg_id, {
+                "type": "debug_info", 
+                "data": debug_data
+            }))
+
+        # Clean response text (remove markdown formatting if present)
+        response_text = response_text.strip()
+        if response_text.startswith("```json"):
+            response_text = response_text[7:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3]
+        response_text = response_text.strip()
+
+        # Parse JSON response
+        parsed_response = json.loads(response_text)
+
+        if isinstance(parsed_response, list):
+            for item in parsed_response:
+                if isinstance(item, dict) and all(key in item for key in ["entity_id", "rating", "reason"]):
+                    # Validate rating is within bounds
+                    rating = int(item["rating"])
+                    if 0 <= rating <= 5:
+                        all_results.append({
+                            "entity_id": item["entity_id"],
+                            "overall_weight": rating,
+                            "overall_reason": item["reason"],
+                            "analysis_method": "ai_conversation",
+                            "batch_number": batch_num,
+                        })
+                    else:
+                        _LOGGER.warning(f"Invalid rating {rating} for entity {item['entity_id']}, using fallback")
+                        all_results.append(_create_fallback_result(item["entity_id"], batch_num))
+                else:
+                    _LOGGER.warning(f"Malformed AI response item: {item}")
+        else:
+            _LOGGER.warning(f"AI response is not a list, using fallback for batch {batch_num}")
+            # Use fallback for all entities in this batch
+            for state in batch_states:
+                all_results.append(_create_fallback_result(state.entity_id, batch_num))
+
+    except json.JSONDecodeError as e:
+        _LOGGER.warning(f"AI response is not valid JSON for batch {batch_num} - Raw response: {response_text} - Error: {e}")
+        _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
+        # Use fallback for all entities in this batch
+        for state in batch_states:
+            all_results.append(_create_fallback_result(state.entity_id, batch_num))
+    except Exception as e:
+        _LOGGER.error(f"Error querying AI for batch {batch_num}: {e}")
+        _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
+        # Use fallback for all entities in this batch
+        for state in batch_states:
+            all_results.append(_create_fallback_result(state.entity_id, batch_num))
+
+    return True  # Success
 
 
-def _create_fallback_result(entity_id: str, batch_num: int) -> dict:
+def _check_token_limit_exceeded(response_text: str) -> bool:
+    """Check if the response indicates a token limit was exceeded."""
+    if not response_text:
+        return False
+    
+    response_lower = response_text.lower()
+    for keyword in MAX_TOKEN_ERROR_KEYWORDS:
+        if keyword.lower() in response_lower:
+            _LOGGER.warning(f"🚨 Token limit keyword detected: '{keyword}' in response")
+            return True
+    
+    return False
+
+
+def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domain_fallback") -> dict:
     """Create a fallback result when AI analysis fails."""
     domain = entity_id.split(".")[0]
     
@@ -271,11 +386,18 @@ def _create_fallback_result(entity_id: str, batch_num: int) -> dict:
         5: "Critical importance - essential for security/safety automations"
     }
     
+    if reason == "token_limit_exceeded":
+        fallback_reason = f"{reason_map[importance]} (fallback due to token limit exceeded)"
+        analysis_method = "domain_fallback_token_limit"
+    else:
+        fallback_reason = f"{reason_map[importance]} (using domain-based classification)"
+        analysis_method = "domain_fallback"
+    
     return {
         "entity_id": entity_id,
         "overall_weight": importance,
-        "overall_reason": f"{reason_map[importance]} (using domain-based classification)",
-        "analysis_method": "domain_fallback",
+        "overall_reason": fallback_reason,
+        "analysis_method": analysis_method,
         "batch_number": batch_num,
     }
 
