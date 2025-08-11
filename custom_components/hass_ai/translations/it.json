@@ -3,7 +3,15 @@
         "step": {
             "user": {
                 "title": "Benvenuto in HASS AI",
-                "description": "Stai per configurare HASS AI, un'integrazione progettata per portare un nuovo livello di intelligenza alla tua casa domotica. L'obiettivo è capire automaticamente quali dei tuoi dispositivi sono più importanti per l'automazione domestica.\n\nDopo questa configurazione iniziale, un nuovo pannello \"HASS AI\" sarà aggiunto alla barra laterale. Da lì, potrai eseguire una scansione per vedere come l'IA ha pesato le tue entità e quindi modificare i suoi suggerimenti per adattarli perfettamente alle tue esigenze. Nel prossimo passo, configurerai l'intervallo di scansione automatica."
+                "description": "Stai per configurare HASS AI, un'integrazione progettata per portare un nuovo livello di intelligenza alla tua casa smart. Il suo obiettivo è comprendere automaticamente quali dei tuoi dispositivi sono più importanti per la domotica.\n\nDopo questa configurazione iniziale, un nuovo pannello \"HASS AI\" sarà aggiunto alla barra laterale. Da lì potrai eseguire una scansione per vedere come l'AI ha valutato le tue entità e poi sovrascrivere i suoi suggerimenti per adattarli perfettamente alle tue esigenze.",
+                "data": {
+                    "ai_provider": "Provider AI",
+                    "scan_interval": "Intervallo di scansione (giorni)"
+                }
+            },
+            "configure": {
+                "title": "Configura HASS AI", 
+                "description": "Imposta la frequenza per le scansioni automatiche delle entità."
             }
         },
         "abort": {
@@ -13,20 +21,26 @@
     "options": {
         "step": {
             "init": {
+                "title": "Opzioni HASS AI",
                 "data": {
-                    "scan_interval": "Intervallo di scansione (giorni)"
+                    "scan_interval": "Intervallo di scansione (giorni)",
+                    "ai_provider": "Provider AI"
                 }
             }
         }
     },
-    "panel": {
-        "llm_warning": "Questo sistema funziona solo con Large Language Models (LLM) come Google Gemini o OpenAI ChatGPT. Assicurati che il tuo agente di conversazione predefinito sia configurato correttamente."
-    },
-    "panel": {
-        "llm_warning": "Questo sistema funziona solo con Large Language Models (LLM) come Google Gemini o OpenAI ChatGPT. Assicurati che il tuo agente di conversazione predefinito sia configurato correttamente.",
-        "ai_log_title": "Log Comunicazione AI",
-        "ai_log_entity": "Entità",
-        "ai_log_prompt": "Prompt",
-        "ai_log_response": "Risposta"
+    "services": {
+        "scan_entities": {
+            "name": "Scansiona Entità",
+            "description": "Esegue una scansione AI di tutte le entità per valutare la loro importanza"
+        },
+        "get_entity_importance": {
+            "name": "Ottieni Importanza Entità", 
+            "description": "Restituisce l'importanza di una specifica entità"
+        },
+        "reset_overrides": {
+            "name": "Reset Override",
+            "description": "Rimuove tutti gli override utente e ripristina i valori AI originali"
+        }
     }
 }

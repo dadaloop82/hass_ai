@@ -3,7 +3,11 @@
         "step": {
             "user": {
                 "title": "Welcome to HASS AI",
-                "description": "You are about to set up HASS AI, an integration designed to bring a new level of intelligence to your smart home. Its goal is to automatically understand which of your devices are most important for home automation.\n\nAfter this initial setup, a new \"HASS AI\" panel will be added to your sidebar. From there, you can run a scan to see how the AI has weighted your entities and then override its suggestions to perfectly match your needs. In the next step, you will configure the automatic scanning interval."
+                "description": "You are about to set up HASS AI, an integration designed to bring a new level of intelligence to your smart home. Its goal is to automatically understand which of your devices are most important for home automation.\n\nAfter this initial setup, a new \"HASS AI\" panel will be added to your sidebar. From there, you can run a scan to see how the AI has weighted your entities and then override its suggestions to perfectly match your needs.",
+                "data": {
+                    "ai_provider": "AI Provider",
+                    "scan_interval": "Scan Interval (days)"
+                }
             },
             "configure": {
                 "title": "Configure HASS AI",
@@ -17,20 +21,26 @@
     "options": {
         "step": {
             "init": {
+                "title": "HASS AI Options",
                 "data": {
-                    "scan_interval": "Scan Interval (days)"
+                    "scan_interval": "Scan Interval (days)",
+                    "ai_provider": "AI Provider"
                 }
             }
         }
     },
-    "panel": {
-        "llm_warning": "This system only works with Large Language Models (LLMs) like Google Gemini or OpenAI ChatGPT. Please ensure your default conversation agent is configured correctly."
-    },
-    "panel": {
-        "llm_warning": "This system only works with Large Language Models (LLMs) like Google Gemini or OpenAI ChatGPT. Please ensure your default conversation agent is configured correctly.",
-        "ai_log_title": "AI Communication Log",
-        "ai_log_entity": "Entity",
-        "ai_log_prompt": "Prompt",
-        "ai_log_response": "Response"
+    "services": {
+        "scan_entities": {
+            "name": "Scan Entities",
+            "description": "Perform an AI scan of all entities to evaluate their importance"
+        },
+        "get_entity_importance": {
+            "name": "Get Entity Importance", 
+            "description": "Get the importance rating of a specific entity"
+        },
+        "reset_overrides": {
+            "name": "Reset Overrides",
+            "description": "Remove all user overrides and restore original AI values"
+        }
     }
 }

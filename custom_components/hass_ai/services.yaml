@@ -1,0 +1,42 @@
+scan_entities:
+  name: Scansiona Entità
+  description: Esegue una scansione AI di tutte le entità per valutare la loro importanza
+  fields:
+    entity_filter:
+      name: Filtro Entità
+      description: Pattern opzionale per filtrare le entità da analizzare (esempio "light.*")
+      example: "sensor.*"
+      selector:
+        text:
+    batch_size:
+      name: Dimensione Batch
+      description: Numero di entità da processare per volta
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+get_entity_importance:
+  name: Ottieni Importanza Entità
+  description: Restituisce l'importanza di una specifica entità
+  fields:
+    entity_id:
+      name: ID Entità
+      description: L'ID dell'entità da analizzare
+      required: true
+      example: "light.living_room"
+      selector:
+        entity:
+
+reset_overrides:
+  name: Reset Override
+  description: Rimuove tutti gli override utente e ripristina i valori AI originali
+  fields:
+    confirm:
+      name: Conferma
+      description: Conferma che vuoi rimuovere tutti gli override
+      required: true
+      default: false
+      selector:
+        boolean:

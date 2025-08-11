@@ -1,72 +1,169 @@
 from __future__ import annotations
 import logging
 import json
+from typing import Optional
 
 from homeassistant.core import HomeAssistant, State
 from homeassistant.components import conversation
+from homeassistant.exceptions import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
+
+# Entity importance categories for better classification
+ENTITY_IMPORTANCE_MAP = {
+    "climate": 4,  # HVAC controls are typically important
+    "light": 3,    # Lights are moderately important
+    "switch": 3,   # Switches are moderately important
+    "sensor": 2,   # Sensors provide data but less critical for automation
+    "binary_sensor": 2,
+    "device_tracker": 3,  # Location tracking is important
+    "alarm_control_panel": 5,  # Security is critical
+    "lock": 5,     # Security related
+    "camera": 4,   # Security/monitoring
+    "cover": 3,    # Blinds, garage doors etc
+    "fan": 3,
+    "media_player": 2,
+    "weather": 2,
+    "sun": 1,      # Less critical for most automations
+    "person": 4,   # Person tracking is important
+}
 
 async def get_entities_importance_batched(
     hass: HomeAssistant, 
     states: list[State],
-    batch_size: int = 10 # Process 10 entities at a time
+    batch_size: int = 10  # Process 10 entities at a time
 ) -> list[dict]:
     """Calculate the importance of multiple entities using the conversation agent in batches."""
     
+    if not states:
+        _LOGGER.warning("No entities provided for analysis")
+        return []
+    
     all_results = []
+    total_batches = (len(states) + batch_size - 1) // batch_size
+    
     for i in range(0, len(states), batch_size):
         batch_states = states[i:i + batch_size]
+        batch_num = (i // batch_size) + 1
         
+        _LOGGER.debug(f"Processing batch {batch_num}/{total_batches} with {len(batch_states)} entities")
+        
+        # Create detailed entity information for AI analysis
         entity_details = []
         for state in batch_states:
+            # Get basic entity info
+            entity_info = {
+                "entity_id": state.entity_id,
+                "domain": state.domain,
+                "name": state.name or state.entity_id.split(".")[-1],
+                "state": str(state.state),
+                "unit": state.attributes.get("unit_of_measurement", ""),
+                "device_class": state.attributes.get("device_class", ""),
+                "friendly_name": state.attributes.get("friendly_name", "")
+            }
+            
             entity_details.append(
-                f"- entity_id: {state.entity_id}, name: {state.name}, state: {state.state}, attributes: {state.attributes}"
+                f"- entity_id: {entity_info['entity_id']}, "
+                f"domain: {entity_info['domain']}, "
+                f"name: {entity_info['friendly_name']}, "
+                f"state: {entity_info['state']}, "
+                f"device_class: {entity_info['device_class']}"
             )
         
         prompt = (
-            f"As a Home Assistant expert, analyze the following entities and rate their automation importance on a scale of 0 (ignore) to 5 (essential). "
-            f"Provide a brief, one-sentence reason for each. Respond strictly in JSON format, as an array of objects. "
-            f"Each object should have 'entity_id', 'rating', and 'reason' keys.\n"
+            f"As a Home Assistant expert, analyze these {len(batch_states)} entities and rate their automation importance on a scale of 0-5:\n"
+            f"0 = Ignore (diagnostic/unnecessary)\n"
+            f"1 = Very Low (rarely useful)\n"
+            f"2 = Low (occasionally useful)\n"
+            f"3 = Medium (commonly useful)\n"
+            f"4 = High (frequently important)\n"
+            f"5 = Critical (essential for automations)\n\n"
+            f"Consider: device type, location relevance, automation potential, security importance.\n"
+            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'.\n\n"
             f"Entities:\n" + "\n".join(entity_details)
         )
 
         try:
+            # Use conversation agent for AI analysis
             agent_response = await conversation.async_converse(hass, prompt, None, "en")
             response_text = agent_response.response.speech["plain"]["speech"]
 
-            # Attempt to parse the response as JSON
+            # Clean response text (remove markdown formatting if present)
+            response_text = response_text.strip()
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+
+            # Parse JSON response
             parsed_response = json.loads(response_text)
 
             if isinstance(parsed_response, list):
                 for item in parsed_response:
-                    if isinstance(item, dict) and "entity_id" in item and "rating" in item and "reason" in item:
-                        all_results.append({
-                            "entity_id": item["entity_id"],
-                            "overall_weight": int(item["rating"]),
-                            "overall_reason": item["reason"],
-                            "prompt": prompt, # Store the single prompt for all entities in this batch
-                            "response_text": response_text, # Store the single response for all entities in this batch
-                        })
+                    if isinstance(item, dict) and all(key in item for key in ["entity_id", "rating", "reason"]):
+                        # Validate rating is within bounds
+                        rating = int(item["rating"])
+                        if 0 <= rating <= 5:
+                            all_results.append({
+                                "entity_id": item["entity_id"],
+                                "overall_weight": rating,
+                                "overall_reason": item["reason"],
+                                "analysis_method": "ai_conversation",
+                                "batch_number": batch_num,
+                            })
+                        else:
+                            _LOGGER.warning(f"Invalid rating {rating} for entity {item['entity_id']}, using fallback")
+                            all_results.append(_create_fallback_result(item["entity_id"], batch_num))
                     else:
-                        _LOGGER.warning(f"Malformed item in AI response: {item}")
+                        _LOGGER.warning(f"Malformed AI response item: {item}")
             else:
-                _LOGGER.warning(f"AI response is not a list: {response_text}")
+                _LOGGER.warning(f"AI response is not a list, using fallback for batch {batch_num}")
+                # Use fallback for all entities in this batch
+                for state in batch_states:
+                    all_results.append(_create_fallback_result(state.entity_id, batch_num))
 
         except json.JSONDecodeError as e:
-            _LOGGER.warning(f"AI response is not valid JSON: {response_text} - Error: {e}")
+            _LOGGER.warning(f"AI response is not valid JSON for batch {batch_num}: {response_text[:200]}... - Error: {e}")
+            # Use fallback for all entities in this batch
+            for state in batch_states:
+                all_results.append(_create_fallback_result(state.entity_id, batch_num))
         except Exception as e:
-            _LOGGER.warning(f"Error querying AI for entities: {e}")
+            _LOGGER.error(f"Error querying AI for batch {batch_num}: {e}")
+            # Use fallback for all entities in this batch
+            for state in batch_states:
+                all_results.append(_create_fallback_result(state.entity_id, batch_num))
 
-    # Fallback for entities that didn't get a valid response or if AI failed
+    # Ensure all entities have a result (fallback for any missing)
+    processed_entity_ids = {res["entity_id"] for res in all_results}
     for state in states:
-        if not any(res["entity_id"] == state.entity_id for res in all_results):
-            all_results.append({
-                "entity_id": state.entity_id,
-                "overall_weight": 1,
-                "overall_reason": "AI analysis failed or response malformed; using default weight.",
-                "prompt": "No prompt generated for this entity.",
-                "response_text": "No response received for this entity.",
-            })
+        if state.entity_id not in processed_entity_ids:
+            all_results.append(_create_fallback_result(state.entity_id, 0))
 
+    _LOGGER.info(f"Completed analysis of {len(states)} entities, got {len(all_results)} results")
     return all_results
+
+
+def _create_fallback_result(entity_id: str, batch_num: int) -> dict:
+    """Create a fallback result when AI analysis fails."""
+    domain = entity_id.split(".")[0]
+    
+    # Use domain-based importance mapping
+    importance = ENTITY_IMPORTANCE_MAP.get(domain, 2)
+    
+    reason_map = {
+        0: "Entity marked as ignore - likely diagnostic or unnecessary",
+        1: "Very low importance - rarely used in automations",
+        2: "Low importance - domain suggests limited automation value",
+        3: "Medium importance - commonly useful for automations",
+        4: "High importance - frequently used in smart home automations",
+        5: "Critical importance - essential for security/safety automations"
+    }
+    
+    return {
+        "entity_id": entity_id,
+        "overall_weight": importance,
+        "overall_reason": f"{reason_map[importance]} (AI analysis unavailable, using domain-based classification)",
+        "analysis_method": "domain_fallback",
+        "batch_number": batch_num,
+    }

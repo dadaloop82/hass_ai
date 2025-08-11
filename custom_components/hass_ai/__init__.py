@@ -12,6 +12,7 @@ import voluptuous as vol
 
 from .const import DOMAIN
 from .intelligence import get_entities_importance_batched
+from .services import async_setup_services, async_unload_services
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -62,19 +63,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
-    hass.data[DOMAIN][entry.entry_id] = {"store": store}
+    hass.data[DOMAIN][entry.entry_id] = {
+        "store": store,
+        "config": entry.data,
+        "options": entry.options
+    }
 
-    # Get scan interval from config entry
-    scan_interval_days = entry.data.get("scan_interval", 7)
+    # Get scan interval from config entry (from data or options)
+    scan_interval_days = (
+        entry.options.get("scan_interval") or 
+        entry.data.get("scan_interval", 7)
+    )
     scan_interval = timedelta(days=scan_interval_days)
 
     # Schedule periodic scan
     async def periodic_scan(now):
         _LOGGER.debug("Performing periodic HASS AI scan")
-        pass  # Implement scan logic if needed
+        # TODO: Implement automatic background scanning if needed
+        pass
 
     entry.async_on_unload(event.async_track_time_interval(hass, periodic_scan, scan_interval))
 
+    # Setup services
+    await async_setup_services(hass)
+
+    _LOGGER.info(f"HASS AI integration loaded successfully with scan interval: {scan_interval_days} days")
     return True
 
 
@@ -84,10 +97,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 @websocket_api.async_response
 async def handle_load_overrides(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to load user-defined overrides."""
-    entry_id = next(iter(hass.data[DOMAIN]))
-    store = hass.data[DOMAIN][entry_id]["store"]
-    overrides = await store.async_load() or {}
-    connection.send_message(websocket_api.result_message(msg["id"], overrides))
+    try:
+        entry_id = next(iter(hass.data[DOMAIN]))
+        store = hass.data[DOMAIN][entry_id]["store"]
+        overrides = await store.async_load() or {}
+        connection.send_message(websocket_api.result_message(msg["id"], overrides))
+    except Exception as e:
+        _LOGGER.error(f"Error loading overrides: {e}")
+        connection.send_message(websocket_api.error_message(msg["id"], "load_failed", str(e)))
+
 
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/scan_entities",
@@ -95,21 +113,37 @@ async def handle_load_overrides(hass: HomeAssistant, connection: websocket_api.A
 @websocket_api.async_response
 async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to scan entities and send results back in real-time."""
-    connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
+    try:
+        connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
 
-    all_states = hass.states.async_all()
-    
-    # Filter out hass_ai entities
-    filtered_states = [state for state in all_states if not (state.domain == DOMAIN or state.entity_id.startswith(f"{DOMAIN}."))]
-
-    # Get importance for all entities in a single AI call
-    importance_results = await get_entities_importance_batched(hass, filtered_states)
-
-    # Send each result as it's processed
-    for result in importance_results:
-        connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
+        all_states = hass.states.async_all()
         
-    connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_complete"}))
+        # Filter out hass_ai entities and system entities
+        filtered_states = [
+            state for state in all_states 
+            if not (
+                state.domain == DOMAIN or 
+                state.entity_id.startswith(f"{DOMAIN}.") or
+                state.domain in ["persistent_notification", "system_log"]
+            )
+        ]
+
+        _LOGGER.info(f"Starting scan of {len(filtered_states)} entities")
+
+        # Get importance for all entities in batches
+        importance_results = await get_entities_importance_batched(hass, filtered_states)
+
+        # Send each result as it's processed
+        for result in importance_results:
+            connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
+            
+        connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_complete"}))
+        _LOGGER.info(f"Scan completed successfully for {len(importance_results)} entities")
+        
+    except Exception as e:
+        _LOGGER.error(f"Error during entity scan: {e}")
+        connection.send_message(websocket_api.error_message(msg["id"], "scan_failed", str(e)))
+
 
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/save_overrides",
@@ -118,15 +152,31 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
 @websocket_api.async_response
 async def handle_save_overrides(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to save user-defined overrides."""
-    entry_id = next(iter(hass.data[DOMAIN]))
-    store = hass.data[DOMAIN][entry_id]["store"]
+    try:
+        entry_id = next(iter(hass.data[DOMAIN]))
+        store = hass.data[DOMAIN][entry_id]["store"]
 
-    await store.async_save(msg["overrides"])
+        await store.async_save(msg["overrides"])
+        _LOGGER.debug(f"Saved {len(msg['overrides'])} overrides")
 
-    connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
+        connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error saving overrides: {e}")
+        connection.send_message(websocket_api.error_message(msg["id"], "save_failed", str(e)))
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    frontend.async_remove_panel(hass, PANEL_URL_PATH)
-    hass.data[DOMAIN].pop(entry.entry_id)
-    return True
+    try:
+        # Unload services
+        await async_unload_services(hass)
+        
+        # Remove panel
+        frontend.async_remove_panel(hass, PANEL_URL_PATH)
+        hass.data[DOMAIN].pop(entry.entry_id)
+        _LOGGER.info("HASS AI integration unloaded successfully")
+        return True
+    except Exception as e:
+        _LOGGER.error(f"Error unloading HASS AI: {e}")
+        return False
