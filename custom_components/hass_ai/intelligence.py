@@ -280,29 +280,52 @@ def _create_fallback_result(entity_id: str, batch_num: int) -> dict:
 
 
 async def _query_local_agent(hass: HomeAssistant, prompt: str) -> str:
-    """Query Home Assistant local conversation agent."""
+    """Query Home Assistant local conversation agent using HA services."""
     try:
-        # Get the conversation agent
-        agent = await conversation.async_get_agent(hass, None)
+        _LOGGER.info(f"🤖 Querying local conversation agent via HA services...")
         
-        # Create a conversation request
-        conversation_input = conversation.ConversationInput(
-            text=prompt,
-            context=conversation.ConversationContext(),
-            conversation_id=None,
-            device_id=None,
-            language=hass.config.language
+        # List available agents for debugging
+        try:
+            agents = await conversation.async_get_conversation_agents(hass)
+            _LOGGER.info(f"🔍 Available conversation agents: {list(agents.keys())}")
+            for agent_key, agent_info in agents.items():
+                _LOGGER.info(f"  - {agent_key}: {agent_info}")
+        except Exception as e:
+            _LOGGER.warning(f"⚠️ Could not list conversation agents: {e}")
+        
+        # Use Home Assistant service to process conversation
+        _LOGGER.info(f"� Sending conversation via service (prompt length: {len(prompt)} chars)")
+        
+        service_data = {
+            "text": prompt,
+            "language": hass.config.language
+        }
+        
+        # Call the conversation.process service
+        response = await hass.services.async_call(
+            "conversation", 
+            "process", 
+            service_data, 
+            blocking=True, 
+            return_response=True
         )
         
-        # Process the conversation
-        result = await agent.async_process(conversation_input)
+        _LOGGER.info(f"� Service response: {response}")
         
-        # Return the response text
-        return result.response.response_type.text
+        # Extract the response text
+        if response and "response" in response and "speech" in response["response"]:
+            response_text = response["response"]["speech"]["plain"]["speech"]
+            _LOGGER.info(f"📄 Extracted response text: {response_text[:200]}...")
+            return response_text
+        else:
+            _LOGGER.error(f"❌ Unexpected service response format: {response}")
+            raise Exception(f"Invalid service response format: {response}")
         
     except Exception as e:
-        _LOGGER.error(f"Error querying local conversation agent: {e}")
+        _LOGGER.error(f"❌ Error querying conversation service: {type(e).__name__}: {e}")
+        _LOGGER.error(f"🔧 Make sure you have a proper conversation agent configured")
+        _LOGGER.error(f"💡 Check Settings > Voice Assistants > Conversation Agent")
         # Return a simple structured response as fallback
         return """[
-{"entity_id": "fallback", "rating": 2, "reason": "Agente locale non disponibile, usando classificazione domain-based"}
+{"entity_id": "fallback", "rating": 2, "reason": "Servizio conversazione non disponibile - verifica configurazione agente in Impostazioni > Assistenti vocali"}
 ]"""
