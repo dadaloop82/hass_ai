@@ -45,6 +45,16 @@ class HassAiPanel extends LitElement {
   async _runScan() {
     this.loading = true;
     this.entities = {};
+    
+    // Show initial debug info
+    this.debugInfo = {
+      show: true,
+      lastPrompt: 'Avvio scansione...',
+      lastResponse: 'In attesa della configurazione AI...',
+      currentBatch: 0,
+      aiProvider: 'Rilevamento in corso...'
+    };
+    this.requestUpdate();
 
     await this.hass.connection.subscribeMessage(
       (message) => this._handleScanUpdate(message),
