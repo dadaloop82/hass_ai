@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.3 - Updated 2025-08-12T17:00:00Z - CACHE BUSTER
-// FASE 1: Smart Filter implementato! Filtro peso minimo per entità
-// Force reload timestamp: 1723479600000
+// HASS AI Panel v1.9.5 - Updated 2025-08-12T18:00:00Z - CACHE BUSTER
+// Features: Unknown entities styling + Incremental scanning + Enhanced UX
+// Force reload timestamp: 1723483200000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -17,6 +17,7 @@ class HassAiPanel extends LitElement {
       language: { state: true },
       agentInfo: { state: true },
       minWeight: { state: true },
+      searchTerm: { state: true },
     };
   }
 
@@ -27,7 +28,8 @@ class HassAiPanel extends LitElement {
     this.overrides = {};
     this.saveTimeout = null;
     this.language = 'en'; // Default language
-    this.minWeight = 0; // Filter: minimum weight to show entities
+    this.minWeight = 3; // Filter: minimum weight to show entities (default 3)
+    this.searchTerm = ''; // Search filter
     this.scanProgress = {
       show: false,
       message: '',
@@ -46,7 +48,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.3 loaded - FASE 1: Smart Filter Implementato!');
+    console.log('🚀 HASS AI Panel v1.9.5 loaded - Unknown entities styling + Incremental scanning!');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
     this._loadOverrides();
@@ -107,7 +109,7 @@ class HassAiPanel extends LitElement {
   async _loadMinWeightFilter() {
     // Load minimum weight filter from localStorage
     const saved = localStorage.getItem('hass_ai_min_weight');
-    this.minWeight = saved ? parseInt(saved) : 0;
+    this.minWeight = saved ? parseInt(saved) : 3; // Default to 3
   }
 
   async _saveMinWeightFilter(value) {
@@ -118,22 +120,121 @@ class HassAiPanel extends LitElement {
   }
 
   _getFilteredEntities() {
-    // Filter entities by minimum weight
+    // Filter entities by minimum weight and search term
     return Object.entries(this.entities).filter(([entityId, entity]) => {
       const weight = this.overrides[entityId]?.overall_weight ?? entity.overall_weight;
-      return weight >= this.minWeight;
+      const matchesWeight = weight >= this.minWeight;
+      
+      // Search in entity_id and name
+      const matchesSearch = this.searchTerm === '' || 
+        entityId.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+        (entity.name && entity.name.toLowerCase().includes(this.searchTerm.toLowerCase()));
+      
+      return matchesWeight && matchesSearch;
     });
+  }
+
+  _isEntityUnavailable(entityId) {
+    // Check if entity is unknown, unavailable, or has no meaningful state
+    const entityState = this.hass.states[entityId];
+    if (!entityState) return true;
+    
+    const unavailableStates = ['unknown', 'unavailable', 'none', '', null, undefined];
+    return unavailableStates.includes(entityState.state) || 
+           unavailableStates.includes(entityState.state?.toLowerCase());
+  }
+
+  _getUnevaluatedEntities() {
+    // Get all current HA entities
+    const allHAEntities = this.hass.states ? Object.keys(this.hass.states) : [];
+    
+    // Filter out hass_ai entities and system entities, and entities already evaluated
+    return allHAEntities.filter(entityId => {
+      const isSystemEntity = entityId.startsWith('hass_ai.') || 
+                             entityId.includes('persistent_notification') ||
+                             entityId.includes('system_log');
+      const isAlreadyEvaluated = this.entities[entityId];
+      
+      return !isSystemEntity && !isAlreadyEvaluated;
+    });
+  }
+
+  _getScanButtonText() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    const unevaluatedCount = this._getUnevaluatedEntities().length;
+    
+    if (this.loading || this.scanProgress.show) {
+      return isItalian ? "Scansione in corso..." : "Scanning...";
+    }
+    
+    if (unevaluatedCount > 0 && Object.keys(this.entities).length > 0) {
+      return isItalian ? 
+        `Scansiona ed esamina le ${unevaluatedCount} entità nuove` :
+        `Scan and examine ${unevaluatedCount} new entities`;
+    }
+    
+    return isItalian ? "Avvia Nuova Scansione" : "Start New Scan";
+  }
+
+  async _evaluateSingleEntity(entityId) {
+    // Evaluate a single entity using the same AI logic
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    try {
+      this._showSimpleNotification(
+        isItalian ? `🔍 Valutazione ${entityId}...` : `🔍 Evaluating ${entityId}...`,
+        'info'
+      );
+
+      // Call the same WebSocket endpoint but with a single entity
+      // We'll need to add this endpoint or modify the existing one
+      await this.hass.connection.subscribeMessage(
+        (message) => {
+          if (message.type === "entity_result") {
+            const entity = message.result;
+            this.entities[entity.entity_id] = entity;
+            this.requestUpdate("entities");
+            this._saveAiResults();
+            
+            this._showSimpleNotification(
+              isItalian ? `✅ ${entityId} valutato!` : `✅ ${entityId} evaluated!`,
+              'success'
+            );
+          }
+        },
+        { 
+          type: "hass_ai/evaluate_single_entity",
+          entity_id: entityId,
+          language: this.hass.language || navigator.language || 'en'
+        }
+      );
+    } catch (error) {
+      this._showSimpleNotification(
+        isItalian ? `❌ Errore valutazione ${entityId}` : `❌ Error evaluating ${entityId}`,
+        'error'
+      );
+    }
   }
 
   async _runScan() {
     this.loading = true;
-    this.entities = {};
+    
+    // Check if we should scan only new entities or all entities
+    const unevaluatedEntities = this._getUnevaluatedEntities();
+    const shouldScanOnlyNew = unevaluatedEntities.length > 0 && Object.keys(this.entities).length > 0;
+    
+    if (!shouldScanOnlyNew) {
+      // Full scan - reset entities
+      this.entities = {};
+    }
     
     // Initialize progress tracking
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     this.scanProgress = {
       show: true,
-      message: isItalian ? '🚀 Avvio scansione...' : '🚀 Starting scan...',
+      message: shouldScanOnlyNew ? 
+        (isItalian ? '🔍 Scansione entità nuove...' : '� Scanning new entities...') :
+        (isItalian ? '�🚀 Avvio scansione completa...' : '🚀 Starting full scan...'),
       currentBatch: 0,
       totalBatches: 0,
       entitiesProcessed: 0,
@@ -147,7 +248,9 @@ class HassAiPanel extends LitElement {
       (message) => this._handleScanUpdate(message),
       { 
         type: "hass_ai/scan_entities",
-        language: this.hass.language || navigator.language || 'en'
+        language: this.hass.language || navigator.language || 'en',
+        new_entities_only: shouldScanOnlyNew,
+        existing_entities: shouldScanOnlyNew ? Object.keys(this.entities) : []
       }
     );
   }
@@ -570,7 +673,7 @@ class HassAiPanel extends LitElement {
         <div class="card-content">
           <p>${t.description}</p>
           <ha-button raised @click=${this._runScan} .disabled=${this.loading || (this.scanProgress.show && !this.scanProgress.isComplete)}>
-            ${this.loading || this.scanProgress.show ? t.scanning_button : t.scan_button}
+            ${this._getScanButtonText()}
           </ha-button>
           
           ${this.lastScanInfo.entityCount > 0 ? html`
@@ -583,14 +686,35 @@ class HassAiPanel extends LitElement {
           ` : ''}
         </div>
 
-        <!-- Smart Filter Panel -->
+        <!-- Smart Filter Panel - Only show after scan completed -->
         ${Object.keys(this.entities).length > 0 ? html`
           <div class="smart-filter-panel">
             <div class="filter-header">
               <ha-icon icon="mdi:filter"></ha-icon>
-              <span>${isItalian ? '🎛️ Filtro Intelligente' : '🎛️ Smart Filter'}</span>
+              <span>${isItalian ? '🎛️ Filtro e Ricerca' : '🎛️ Filter & Search'}</span>
             </div>
             <div class="filter-controls">
+              <!-- Search box -->
+              <div class="filter-row">
+                <label for="search-filter">${isItalian ? 'Cerca:' : 'Search:'}</label>
+                <input 
+                  id="search-filter" 
+                  type="text" 
+                  placeholder="${isItalian ? 'Cerca entità...' : 'Search entities...'}"
+                  .value=${this.searchTerm}
+                  @input=${(e) => { this.searchTerm = e.target.value; this.requestUpdate(); }}
+                  class="search-input"
+                />
+                ${this.searchTerm ? html`
+                  <ha-icon 
+                    icon="mdi:close" 
+                    @click=${() => { this.searchTerm = ''; this.requestUpdate(); }}
+                    class="clear-search"
+                  ></ha-icon>
+                ` : ''}
+              </div>
+              
+              <!-- Weight filter -->
               <div class="filter-row">
                 <label for="weight-filter">${isItalian ? 'Peso Minimo:' : 'Minimum Weight:'}</label>
                 <input 
@@ -605,18 +729,57 @@ class HassAiPanel extends LitElement {
                 />
                 <span class="weight-value">${this.minWeight}</span>
               </div>
+              
               <div class="filter-stats">
                 ${(() => {
                   const filteredEntities = this._getFilteredEntities();
                   const totalEntities = Object.keys(this.entities).length;
                   return html`
-                    📊 ${isItalian ? 'Mostrando' : 'Showing'} <strong>${filteredEntities.length}</strong> ${isItalian ? 'di' : 'of'} <strong>${totalEntities}</strong> ${isItalian ? 'entità' : 'entities'}
+                    📊 ${isItalian ? 'Saranno prese in considerazione' : 'Will be considered'} <strong>${filteredEntities.length}</strong> ${isItalian ? 'entità su' : 'entities out of'} <strong>${totalEntities}</strong>
                   `;
                 })()}
               </div>
             </div>
           </div>
         ` : ''}
+
+        <!-- Unevaluated Entities Section -->
+        ${(() => {
+          const unevaluatedEntities = this._getUnevaluatedEntities();
+          return unevaluatedEntities.length > 0 ? html`
+            <div class="unevaluated-panel">
+              <div class="filter-header">
+                <ha-icon icon="mdi:alert-circle"></ha-icon>
+                <span>${isItalian ? '⚠️ Entità Non Valutate' : '⚠️ Unevaluated Entities'}</span>
+              </div>
+              <div class="unevaluated-content">
+                <p>${isItalian ? 
+                  `Trovate ${unevaluatedEntities.length} nuove entità non ancora valutate:` :
+                  `Found ${unevaluatedEntities.length} new entities not yet evaluated:`
+                }</p>
+                <div class="unevaluated-list">
+                  ${unevaluatedEntities.slice(0, 10).map(entityId => html`
+                    <div class="unevaluated-item">
+                      <span class="entity-id">${entityId}</span>
+                      <ha-button 
+                        size="small" 
+                        @click=${() => this._evaluateSingleEntity(entityId)}
+                        class="evaluate-btn"
+                      >
+                        ${isItalian ? 'Valuta' : 'Evaluate'}
+                      </ha-button>
+                    </div>
+                  `)}
+                  ${unevaluatedEntities.length > 10 ? html`
+                    <div class="more-entities">
+                      ${isItalian ? `... e altre ${unevaluatedEntities.length - 10} entità` : `... and ${unevaluatedEntities.length - 10} more entities`}
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          ` : '';
+        })()}
 
         <!-- Fixed Progress Section -->
         ${this.scanProgress.show ? html`
@@ -674,17 +837,19 @@ class HassAiPanel extends LitElement {
                 <tbody>
                   ${sortedEntities.map(entity => {
                     const categoryInfo = getCategoryInfo(entity.category);
+                    const isUnavailable = this._isEntityUnavailable(entity.entity_id);
                     return html`
-                    <tr data-entity-id="${entity.entity_id}">
+                    <tr data-entity-id="${entity.entity_id}" class="${isUnavailable ? 'entity-unavailable' : ''}">
                       <td>
                         <ha-switch
                           .checked=${this.overrides[entity.entity_id]?.enabled ?? true}
                           data-entity-id=${entity.entity_id}
                           @change=${this._handleToggle}
+                          .disabled=${isUnavailable}
                         ></ha-switch>
                       </td>
                       <td>
-                        <div class="entity-info">
+                        <div class="entity-info ${isUnavailable ? 'unavailable' : ''}">
                           <strong>${entity.entity_id}</strong>
                           <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
                         </div>
@@ -1197,6 +1362,109 @@ class HassAiPanel extends LitElement {
       .filter-stats strong {
         color: var(--primary-text-color);
         font-weight: 600;
+      }
+      
+      /* Search Input Styles */
+      .search-input {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        background: var(--card-background-color);
+        color: var(--primary-text-color);
+        font-size: 14px;
+        outline: none;
+      }
+      
+      .search-input:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(var(--rgb-primary-color), 0.1);
+      }
+      
+      .clear-search {
+        cursor: pointer;
+        color: var(--secondary-text-color);
+        padding: 4px;
+        margin-left: 8px;
+        border-radius: 50%;
+        transition: background-color 0.2s;
+      }
+      
+      .clear-search:hover {
+        background-color: var(--divider-color);
+      }
+      
+      /* Unevaluated Entities Panel */
+      .unevaluated-panel {
+        background: linear-gradient(135deg, var(--warning-color, #ff9800), rgba(255, 152, 0, 0.1));
+        border: 1px solid var(--warning-color, #ff9800);
+        border-radius: 8px;
+        margin: 16px;
+        padding: 16px;
+        box-shadow: 0 2px 4px rgba(255, 152, 0, 0.2);
+      }
+      
+      .unevaluated-content p {
+        margin: 0 0 12px 0;
+        font-weight: 500;
+      }
+      
+      .unevaluated-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      .unevaluated-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        background: var(--card-background-color);
+        border-radius: 6px;
+        border: 1px solid var(--divider-color);
+      }
+      
+      .entity-id {
+        font-family: monospace;
+        font-size: 0.9em;
+        color: var(--primary-text-color);
+      }
+      
+      .evaluate-btn {
+        --mdc-button-horizontal-padding: 12px;
+        --mdc-typography-button-font-size: 12px;
+      }
+      
+      .more-entities {
+        text-align: center;
+        color: var(--secondary-text-color);
+        font-style: italic;
+        padding: 8px;
+      }
+      
+      /* Unavailable entities styling */
+      .entity-unavailable {
+        opacity: 0.4;
+        background-color: rgba(128, 128, 128, 0.1);
+        pointer-events: none;
+      }
+      
+      .entity-unavailable td {
+        color: var(--disabled-text-color) !important;
+      }
+      
+      .entity-info.unavailable {
+        opacity: 0.6;
+        text-decoration: line-through;
+      }
+      
+      .entity-info.unavailable strong {
+        color: var(--disabled-text-color);
+      }
+      
+      .entity-info.unavailable small {
+        color: var(--disabled-text-color);
       }
     `;
   }

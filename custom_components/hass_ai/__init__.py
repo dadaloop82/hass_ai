@@ -113,6 +113,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_load_overrides)
     websocket_api.async_register_command(hass, handle_load_ai_results)
     websocket_api.async_register_command(hass, handle_save_ai_results)
+    websocket_api.async_register_command(hass, handle_evaluate_single_entity)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -142,8 +143,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info(f"HASS AI integration loaded successfully with scan interval: {scan_interval_days} days")
     
-    _LOGGER.info("🏠 HASS AI v1.9.3 - FASE 1: Smart Filter Implementato")
-    _LOGGER.info("�️ Nuovo filtro peso minimo per nascondere entità poco importanti")
+    _LOGGER.info("🏠 HASS AI v1.9.5 - Unknown Entities Styling + Incremental Scanning")
+    _LOGGER.info("� Gray out unknown/unavailable entities, incremental scans for new entities")
     
     return True
 
@@ -192,6 +193,8 @@ async def handle_load_overrides(hass: HomeAssistant, connection: websocket_api.A
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/scan_entities",
     vol.Optional("language", default="en"): str,
+    vol.Optional("new_entities_only", default=False): bool,
+    vol.Optional("existing_entities", default=[]): list,
 })
 @websocket_api.async_response
 async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
@@ -201,6 +204,9 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
 
         # Get language from message
         language = msg.get("language", "en")
+        new_entities_only = msg.get("new_entities_only", False)
+        existing_entities = set(msg.get("existing_entities", []))
+        
         # Get the first config entry for this integration
         config_entry = None
         for entry in hass.config_entries.async_entries(DOMAIN):
@@ -228,8 +234,18 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
                 state.domain in ["persistent_notification", "system_log"]
             )
         ]
+        
+        # If scanning only new entities, filter out existing ones
+        if new_entities_only:
+            filtered_states = [
+                state for state in filtered_states
+                if state.entity_id not in existing_entities
+            ]
+            scan_type = "incremental"
+        else:
+            scan_type = "full"
 
-        _LOGGER.info(f"Starting scan of {len(filtered_states)} entities using {ai_provider}")
+        _LOGGER.info(f"Starting {scan_type} scan of {len(filtered_states)} entities using {ai_provider}")
 
         # Get conversation agent from config
         conversation_agent = entry.data.get(CONF_CONVERSATION_AGENT, "auto")
@@ -251,7 +267,7 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         await _save_ai_results(hass, importance_results)
             
         connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_complete"}))
-        _LOGGER.info(f"Scan completed successfully for {len(importance_results)} entities")
+        _LOGGER.info(f"{scan_type.capitalize()} scan completed successfully for {len(importance_results)} entities")
         
     except Exception as e:
         _LOGGER.error(f"Error during entity scan: {e}")
@@ -317,3 +333,62 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as e:
         _LOGGER.error(f"Error unloading HASS AI: {e}")
         return False
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/evaluate_single_entity",
+    vol.Required("entity_id"): str,
+    vol.Optional("language", default="en"): str,
+})
+@websocket_api.async_response
+async def handle_evaluate_single_entity(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to evaluate a single entity."""
+    try:
+        entity_id = msg["entity_id"]
+        language = msg.get("language", "en")
+        
+        # Get the entity state
+        entity_state = hass.states.get(entity_id)
+        if not entity_state:
+            connection.send_message(websocket_api.error_message(msg["id"], "entity_not_found", f"Entity {entity_id} not found"))
+            return
+        
+        # Get the first config entry for this integration
+        config_entry = None
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            config_entry = entry
+            break
+        
+        if not config_entry:
+            connection.send_message(websocket_api.error_message(msg["id"], "no_config", "No HASS AI configuration found"))
+            return
+        
+        # Get AI configuration
+        ai_provider = config_entry.data.get("ai_provider", "OpenAI")
+        api_key = config_entry.data.get("api_key")
+        conversation_agent = config_entry.data.get(CONF_CONVERSATION_AGENT, "auto")
+        
+        _LOGGER.info(f"Evaluating single entity: {entity_id}")
+        
+        # Use the same intelligence engine to evaluate single entity
+        from .intelligence import get_entities_importance_batched
+        
+        importance_results = await get_entities_importance_batched(
+            hass, [entity_state], 1, ai_provider, api_key, connection, msg["id"], conversation_agent, language
+        )
+        
+        if importance_results:
+            # Send the result
+            result = importance_results[0]
+            connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
+            
+            # Save to AI results automatically
+            await _save_ai_results(hass, importance_results)
+            
+            _LOGGER.info(f"Successfully evaluated entity: {entity_id}")
+        else:
+            connection.send_message(websocket_api.error_message(msg["id"], "evaluation_failed", f"Failed to evaluate {entity_id}"))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error evaluating single entity: {e}")
+        connection.send_message(websocket_api.error_message(msg["id"], "evaluation_error", str(e)))
