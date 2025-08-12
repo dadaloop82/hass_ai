@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import time
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -9,6 +9,7 @@ from homeassistant.components import frontend, websocket_api, http, conversation
 from homeassistant.components.conversation import async_get_agent
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.helpers import storage, event
+from homeassistant.util import dt
 import voluptuous as vol
 
 from .const import DOMAIN, CONF_CONVERSATION_AGENT
@@ -38,7 +39,7 @@ async def _save_ai_results(hass: HomeAssistant, results) -> None:
         if isinstance(results, list):
             # Old format - convert to new format
             results_data = {
-                "last_scan_timestamp": hass.helpers.utcnow().isoformat(),
+                "last_scan_timestamp": dt.utcnow().isoformat(),
                 "total_entities": len(results),
                 "results": {result["entity_id"]: result for result in results}
             }

@@ -49,7 +49,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.7 loaded - Sequential Analysis Steps + Enhanced UX!');
+    console.log('🚀 HASS AI Panel v1.9.8 loaded - Fixed correlations + progress + layout!');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
     this._loadOverrides();
@@ -132,7 +132,7 @@ class HassAiPanel extends LitElement {
         (entity.name && entity.name.toLowerCase().includes(this.searchTerm.toLowerCase()));
       
       return matchesWeight && matchesSearch;
-    });
+    }).map(([entityId, entity]) => entity); // Return just the entity objects, not tuples
   }
 
   _isEntityUnavailable(entityId) {
@@ -655,7 +655,7 @@ class HassAiPanel extends LitElement {
     // Get filtered entities based on minimum weight
     const filteredEntitiesArray = this._getFilteredEntities();
     
-    const sortedEntities = filteredEntitiesArray.map(([entityId, entity]) => entity)
+    const sortedEntities = filteredEntitiesArray
       .sort((a, b) => {
         const aWeight = this.overrides[a.entity_id]?.overall_weight ?? a.overall_weight;
         const bWeight = this.overrides[b.entity_id]?.overall_weight ?? b.overall_weight;
@@ -718,6 +718,44 @@ class HassAiPanel extends LitElement {
       <ha-card .header=${t.title}>
         <div class="card-content">
           <p>${t.description}</p>
+          
+          <!-- Fixed Progress Section -->
+          ${this.scanProgress.show ? html`
+            <div class="progress-section-fixed">
+              <div class="progress-message">
+                ${this.scanProgress.message}
+              </div>
+              
+              <div class="progress-bar-container">
+                <div class="progress-bar">
+                  <div class="progress-fill" 
+                       style="width: ${this.scanProgress.entitiesInBatch > 0 && this.scanProgress.remainingEntities !== undefined ? Math.round(((this.scanProgress.entitiesInBatch) / (this.scanProgress.entitiesInBatch + this.scanProgress.remainingEntities)) * 100) : 10}%">
+                  </div>
+                </div>
+                <div class="progress-text">
+                  ${this.scanProgress.entitiesInBatch > 0 ? 
+                    (isItalian ? 
+                      `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entità in elaborazione` :
+                      `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entities processing`
+                    ) :
+                    (isItalian ? 'Preparazione scansione...' : 'Preparing scan...')
+                  }
+                  ${this.scanProgress.remainingEntities > 0 ? 
+                    (isItalian ? ` (${this.scanProgress.remainingEntities} rimanenti)` : ` (${this.scanProgress.remainingEntities} remaining)`) : 
+                    ''
+                  }
+                </div>
+                
+                ${this.scanProgress.status === 'requesting' ? html`
+                  <div class="status-indicator">${isItalian ? '🔄 Invio richiesta...' : '🔄 Sending request...'}</div>
+                ` : ''}
+                
+                ${this.scanProgress.status === 'processing' ? html`
+                  <div class="status-indicator">${isItalian ? '⚙️ Elaborazione risposta...' : '⚙️ Processing response...'}</div>
+                ` : ''}
+            </div>
+          ` : ''}
+          
           <div class="analysis-steps">
             <div class="step-item ${Object.keys(this.entities).length === 0 ? 'active' : 'completed'}">
               <span class="step-number">1</span>
@@ -823,44 +861,6 @@ class HassAiPanel extends LitElement {
             </div>
           ` : '';
         })()}
-
-        <!-- Fixed Progress Section -->
-        ${this.scanProgress.show ? html`
-          <div class="progress-section-fixed">
-            <div class="progress-message">
-              ${this.scanProgress.message}
-            </div>
-            
-            <div class="progress-bar-container">
-              <div class="progress-bar">
-                <div class="progress-fill" 
-                     style="width: ${this.scanProgress.totalEntities > 0 ? Math.round((this.scanProgress.entitiesProcessed / this.scanProgress.totalEntities) * 100) : 0}%">
-                </div>
-              </div>
-              <div class="progress-text">
-                ${this.scanProgress.entitiesInBatch > 0 ? 
-                  (isItalian ? 
-                    `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entità in elaborazione` :
-                    `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entities processing`
-                  ) :
-                  (isItalian ? 'Preparazione scansione...' : 'Preparing scan...')
-                }
-                ${this.scanProgress.remainingEntities > 0 ? 
-                  (isItalian ? ` (${this.scanProgress.remainingEntities} rimanenti)` : ` (${this.scanProgress.remainingEntities} remaining)`) : 
-                  ''
-                }
-              </div>
-            </div>
-            
-            ${this.scanProgress.status === 'requesting' ? html`
-              <div class="status-indicator">${isItalian ? '🔄 Invio richiesta...' : '🔄 Sending request...'}</div>
-            ` : ''}
-            
-            ${this.scanProgress.status === 'processing' ? html`
-              <div class="status-indicator">${isItalian ? '⚙️ Elaborazione risposta...' : '⚙️ Processing response...'}</div>
-            ` : ''}
-          </div>
-        ` : ''}
 
         <!-- Scrollable Results Section -->
         ${Object.keys(this.entities).length > 0 ? html`
