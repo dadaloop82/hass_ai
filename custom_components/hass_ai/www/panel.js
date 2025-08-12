@@ -1,3 +1,5 @@
+// HASS AI Panel v1.9.0 - Updated 2025-08-12
+// Interfaccia completamente rinnovata con localizzazione
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -41,6 +43,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    console.log('🚀 HASS AI Panel v1.9.0 loaded - Interfaccia Rinnovata!');
     this.language = this.hass.language || 'en';
     this._loadOverrides();
     this._loadAiResults();
