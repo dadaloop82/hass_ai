@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.0 - Updated 2025-08-12T15:30:00Z - CACHE BUSTER
-// Interfaccia completamente rinnovata con localizzazione
-// Force reload timestamp: 1723471800000
+// HASS AI Panel v1.9.1 - Updated 2025-08-12T16:00:00Z - CACHE BUSTER
+// Interfaccia completamente rinnovata con localizzazione + WebSocket fix
+// Force reload timestamp: 1723475600000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -44,7 +44,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.0 loaded - Interfaccia Rinnovata!');
+    console.log('🚀 HASS AI Panel v1.9.1 loaded - WebSocket Fix + Cache Busting!');
     this.language = this.hass.language || 'en';
     this._loadOverrides();
     this._loadAiResults();

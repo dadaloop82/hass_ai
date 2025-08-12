@@ -22,7 +22,7 @@ AI_RESULTS_KEY = f"{DOMAIN}_ai_results"
 PANEL_URL_PATH = "hass-ai-panel"
 
 # Cache busting timestamp
-CACHE_BUSTER = int(time.time())
+CACHE_BUSTER = int(time.time())  # v1.9.1 - Fresh timestamp
 
 
 async def _save_ai_results(hass: HomeAssistant, results) -> None:
@@ -142,8 +142,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info(f"HASS AI integration loaded successfully with scan interval: {scan_interval_days} days")
     
-    _LOGGER.info("🏠 HASS AI v1.7.0 - Local Agent Only mode")
-    _LOGGER.info("🤖 Only local conversation agents supported - no external dependencies required")
+    _LOGGER.info("🏠 HASS AI v1.9.1 - WebSocket Fix + Cache Busting")
+    _LOGGER.info("🔧 Risolti errori WebSocket e problemi di cache - Interfaccia completamente funzionante")
     
     return True
 
