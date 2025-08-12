@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.2 - Updated 2025-08-12T16:30:00Z - CACHE BUSTER
-// UI Fixes: Localized AI responses, smaller reason text, better progress tracking
-// Force reload timestamp: 1723477800000
+// HASS AI Panel v1.9.3 - Updated 2025-08-12T17:00:00Z - CACHE BUSTER
+// FASE 1: Smart Filter implementato! Filtro peso minimo per entità
+// Force reload timestamp: 1723479600000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -16,6 +16,7 @@ class HassAiPanel extends LitElement {
       loading: { state: true },
       language: { state: true },
       agentInfo: { state: true },
+      minWeight: { state: true },
     };
   }
 
@@ -26,6 +27,7 @@ class HassAiPanel extends LitElement {
     this.overrides = {};
     this.saveTimeout = null;
     this.language = 'en'; // Default language
+    this.minWeight = 0; // Filter: minimum weight to show entities
     this.scanProgress = {
       show: false,
       message: '',
@@ -44,8 +46,9 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.2 loaded - UI Fixes & Better Localization!');
+    console.log('🚀 HASS AI Panel v1.9.3 loaded - FASE 1: Smart Filter Implementato!');
     this.language = this.hass.language || 'en';
+    this._loadMinWeightFilter();
     this._loadOverrides();
     this._loadAiResults();
   }
@@ -99,6 +102,27 @@ class HassAiPanel extends LitElement {
       const isItalian = (this.hass.language || navigator.language).startsWith('it');
       console.log(isItalian ? 'Nessun risultato AI precedente trovato:' : 'No previous AI results found:', error);
     }
+  }
+
+  async _loadMinWeightFilter() {
+    // Load minimum weight filter from localStorage
+    const saved = localStorage.getItem('hass_ai_min_weight');
+    this.minWeight = saved ? parseInt(saved) : 0;
+  }
+
+  async _saveMinWeightFilter(value) {
+    // Save minimum weight filter to localStorage
+    this.minWeight = parseInt(value);
+    localStorage.setItem('hass_ai_min_weight', this.minWeight.toString());
+    this.requestUpdate();
+  }
+
+  _getFilteredEntities() {
+    // Filter entities by minimum weight
+    return Object.entries(this.entities).filter(([entityId, entity]) => {
+      const weight = this.overrides[entityId]?.overall_weight ?? entity.overall_weight;
+      return weight >= this.minWeight;
+    });
   }
 
   async _runScan() {
@@ -479,11 +503,15 @@ class HassAiPanel extends LitElement {
   }
 
   render() {
-    const sortedEntities = Object.values(this.entities).sort((a, b) => {
-      const aWeight = this.overrides[a.entity_id]?.overall_weight ?? a.overall_weight;
-      const bWeight = this.overrides[b.entity_id]?.overall_weight ?? b.overall_weight;
-      return bWeight - aWeight;
-    });
+    // Get filtered entities based on minimum weight
+    const filteredEntitiesArray = this._getFilteredEntities();
+    
+    const sortedEntities = filteredEntitiesArray.map(([entityId, entity]) => entity)
+      .sort((a, b) => {
+        const aWeight = this.overrides[a.entity_id]?.overall_weight ?? a.overall_weight;
+        const bWeight = this.overrides[b.entity_id]?.overall_weight ?? b.overall_weight;
+        return bWeight - aWeight;
+      });
 
     // Translations based on browser language or HA language
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
@@ -554,6 +582,41 @@ class HassAiPanel extends LitElement {
             </div>
           ` : ''}
         </div>
+
+        <!-- Smart Filter Panel -->
+        ${Object.keys(this.entities).length > 0 ? html`
+          <div class="smart-filter-panel">
+            <div class="filter-header">
+              <ha-icon icon="mdi:filter"></ha-icon>
+              <span>${isItalian ? '🎛️ Filtro Intelligente' : '🎛️ Smart Filter'}</span>
+            </div>
+            <div class="filter-controls">
+              <div class="filter-row">
+                <label for="weight-filter">${isItalian ? 'Peso Minimo:' : 'Minimum Weight:'}</label>
+                <input 
+                  id="weight-filter" 
+                  type="range" 
+                  min="0" 
+                  max="5" 
+                  step="1" 
+                  .value=${this.minWeight}
+                  @input=${(e) => this._saveMinWeightFilter(e.target.value)}
+                  class="weight-slider"
+                />
+                <span class="weight-value">${this.minWeight}</span>
+              </div>
+              <div class="filter-stats">
+                ${(() => {
+                  const filteredEntities = this._getFilteredEntities();
+                  const totalEntities = Object.keys(this.entities).length;
+                  return html`
+                    📊 ${isItalian ? 'Mostrando' : 'Showing'} <strong>${filteredEntities.length}</strong> ${isItalian ? 'di' : 'of'} <strong>${totalEntities}</strong> ${isItalian ? 'entità' : 'entities'}
+                  `;
+                })()}
+              </div>
+            </div>
+          </div>
+        ` : ''}
 
         <!-- Fixed Progress Section -->
         ${this.scanProgress.show ? html`
@@ -1038,6 +1101,102 @@ class HassAiPanel extends LitElement {
       }
       ha-icon {
         --mdc-icon-size: 20px;
+      }
+      
+      /* Smart Filter Panel Styles */
+      .smart-filter-panel {
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        margin: 16px;
+        padding: 16px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .filter-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 1.1em;
+        margin-bottom: 12px;
+        color: var(--primary-text-color);
+      }
+      
+      .filter-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      
+      .filter-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        justify-content: space-between;
+      }
+      
+      .filter-row label {
+        font-weight: 500;
+        min-width: 120px;
+        color: var(--primary-text-color);
+      }
+      
+      .weight-slider {
+        flex: 1;
+        height: 6px;
+        border-radius: 3px;
+        background: var(--divider-color);
+        outline: none;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      
+      .weight-slider::-webkit-slider-thumb {
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+      
+      .weight-slider::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        cursor: pointer;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+      
+      .weight-value {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        height: 30px;
+        background: var(--primary-color);
+        color: white;
+        border-radius: 50%;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      
+      .filter-stats {
+        padding: 8px 12px;
+        background: var(--secondary-background-color);
+        border-radius: 6px;
+        font-size: 0.9em;
+        color: var(--secondary-text-color);
+        text-align: center;
+      }
+      
+      .filter-stats strong {
+        color: var(--primary-text-color);
+        font-weight: 600;
       }
     `;
   }

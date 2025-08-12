@@ -142,8 +142,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info(f"HASS AI integration loaded successfully with scan interval: {scan_interval_days} days")
     
-    _LOGGER.info("🏠 HASS AI v1.9.2 - UI Fixes & Better Localization")
-    _LOGGER.info("🎨 Testo motivazione AI più piccolo, progress bar corretta, risposte localizzate")
+    _LOGGER.info("🏠 HASS AI v1.9.3 - FASE 1: Smart Filter Implementato")
+    _LOGGER.info("�️ Nuovo filtro peso minimo per nascondere entità poco importanti")
     
     return True
 
