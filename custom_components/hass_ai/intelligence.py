@@ -47,10 +47,32 @@ def _get_localized_message(message_key: str, language: str, **kwargs) -> str:
     
     return messages.get(message_key, {}).get('it' if is_italian else 'en', f"Message key '{message_key}' not found")
 
-def _create_localized_prompt(batch_states: list[State], entity_details: list[str], language: str) -> str:
-    """Create a localized prompt based on the user's language preference."""
+def _create_localized_prompt(batch_states: list[State], entity_details: list[str], language: str, compact_mode: bool = False) -> str:
+    """Create a localized prompt for entity analysis with optional compact mode for token limit recovery."""
     
     is_italian = language.startswith('it')
+    
+    if compact_mode:
+        # Ultra-compact prompt when hitting token limits
+        entity_summary = []
+        for state in batch_states:
+            # Essential info only: entity_id, domain, state, name
+            name = state.attributes.get('friendly_name', state.entity_id.split('.')[-1])
+            summary = f"{state.entity_id}({state.domain},{state.state},{name[:20]})"
+            entity_summary.append(summary)
+        
+        if is_italian:
+            return (
+                f"Analizza {len(batch_states)} entità HA. Punteggio 0-5. "
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"REASON IN INGLESE. Entità: " + ", ".join(entity_summary[:30])
+            )
+        else:
+            return (
+                f"Analyze {len(batch_states)} HA entities. Score 0-5. "
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"REASON IN ENGLISH. Entities: " + ", ".join(entity_summary[:30])
+            )
     
     if is_italian:
         return (
@@ -176,6 +198,7 @@ async def get_entities_importance_batched(
     overall_batch_num = 0
     token_limit_retries = 0
     max_retries = 3
+    use_compact_mode = False  # Start with full mode
     
     _LOGGER.info(f"🚀 Starting batch processing with initial batch size: {current_batch_size}")
     
@@ -185,7 +208,7 @@ async def get_entities_importance_batched(
         # Take entities for current batch
         batch_states = remaining_states[:current_batch_size]
         
-        _LOGGER.info(f"📦 Processing batch {overall_batch_num} with {len(batch_states)} entities (batch size: {current_batch_size}, retry: {token_limit_retries})")
+        _LOGGER.info(f"📦 Processing batch {overall_batch_num} with {len(batch_states)} entities (batch size: {current_batch_size}, retry: {token_limit_retries}, compact: {use_compact_mode})")
         
         # Send batch info to frontend
         if connection and msg_id:
@@ -196,30 +219,57 @@ async def get_entities_importance_batched(
                     "batch_size": current_batch_size,
                     "entities_in_batch": len(batch_states),
                     "remaining_entities": len(remaining_states) - len(batch_states),
-                    "retry_attempt": token_limit_retries
+                    "retry_attempt": token_limit_retries,
+                    "compact_mode": use_compact_mode,
+                    "total_entities": len(states),
+                    "processed_entities": len(all_results)
                 }
             }))
         
         success = await _process_single_batch(
             hass, batch_states, overall_batch_num, ai_provider, 
-            connection, msg_id, conversation_agent, all_results, language
+            connection, msg_id, conversation_agent, all_results, language, use_compact_mode
         )
         
         if success:
             # Batch successful - remove processed entities and reset retry counter
             remaining_states = remaining_states[current_batch_size:]
             token_limit_retries = 0
+            use_compact_mode = False  # Reset to full mode on success
             _LOGGER.info(f"✅ Batch {overall_batch_num} completed successfully")
             
         else:
-            # Token limit exceeded - reduce batch size and retry
+            # Token limit exceeded - try different strategies
             token_limit_retries += 1
+            
+            # First try: enable compact mode if not already enabled
+            if not use_compact_mode and token_limit_retries == 1:
+                use_compact_mode = True
+                _LOGGER.warning(f"🔄 Token limit in batch {overall_batch_num}, trying compact mode (retry {token_limit_retries}/{max_retries})")
+                
+                # Send compact mode info to frontend
+                if connection and msg_id:
+                    connection.send_message(websocket_api.event_message(msg_id, {
+                        "type": "batch_compact_mode",
+                        "data": {
+                            "batch": overall_batch_num,
+                            "retry_attempt": token_limit_retries,
+                            "reason": "Attivazione modalità compatta per gestire limite token",
+                            "message": _get_localized_message('batch_reduction', language, 
+                                                            retry_attempt=token_limit_retries)
+                        }
+                    }))
+                
+                # Don't increment overall_batch_num since we're retrying the same batch
+                overall_batch_num -= 1
+                continue
             
             if token_limit_retries > max_retries:
                 # Max retries exceeded, try with minimum batch size one more time
                 if current_batch_size > MIN_BATCH_SIZE:
                     _LOGGER.warning(f"🔄 Max retries exceeded, trying with minimum batch size {MIN_BATCH_SIZE}")
                     current_batch_size = MIN_BATCH_SIZE
+                    use_compact_mode = True  # Force compact mode
                     token_limit_retries = 1  # Reset for one final attempt
                 else:
                     # Even minimum batch size failed, use fallback for remaining entities
@@ -292,60 +342,68 @@ async def _process_single_batch(
     msg_id: str,
     conversation_agent: str,
     all_results: list,
-    language: str = "en"  # Add language parameter
+    language: str = "en",  # Add language parameter
+    use_compact_prompt: bool = False  # Add compact mode flag
 ) -> bool:
     """Process a single batch and return True if successful, False if token limit exceeded."""
     
     # Create detailed entity information for AI analysis
     entity_details = []
-    for state in batch_states:
-        # Get comprehensive entity info including key attributes
-        attributes = dict(state.attributes)
-        
-        # Extract important attributes for analysis
-        important_attrs = {}
-        
-        # Common important attributes
-        attr_keys = [
-            'device_class', 'unit_of_measurement', 'friendly_name', 
-            'supported_features', 'entity_category', 'icon',
-            'room', 'area', 'location', 'zone', 'floor',
-            # Climate specific
-            'temperature', 'target_temperature', 'hvac_mode', 'hvac_modes',
-            # Light specific  
-            'brightness', 'color_mode', 'supported_color_modes',
-            # Sensor specific
-            'state_class', 'last_changed', 'last_updated',
-            # Security specific
-            'device_type', 'tamper', 'battery_level',
-            # Media specific
-            'source', 'volume_level', 'media_title',
-            # Cover specific
-            'current_position', 'position',
-            # Switch/Binary sensor specific
-            'device_class',
-        ]
-        
-        for key in attr_keys:
-            if key in attributes and attributes[key] is not None:
-                important_attrs[key] = attributes[key]
-        
-        # Create detailed description
-        entity_description = (
-            f"- Entity: {state.entity_id}\n"
-            f"  Domain: {state.domain}\n" 
-            f"  Name: {state.attributes.get('friendly_name', state.entity_id.split('.')[-1])}\n"
-            f"  Current State: {state.state}\n"
-            f"  Attributes: {json.dumps(important_attrs, default=str)}\n"
-        )
-        
-        entity_details.append(entity_description)
     
-    # Add delay to make AI analysis visible (2-3 seconds per batch)
-    await asyncio.sleep(2.5)
+    if not use_compact_prompt:
+        # Full detailed analysis
+        for state in batch_states:
+            # Get comprehensive entity info including key attributes
+            attributes = dict(state.attributes)
+            
+            # Extract important attributes for analysis
+            important_attrs = {}
+            
+            # Common important attributes
+            attr_keys = [
+                'device_class', 'unit_of_measurement', 'friendly_name', 
+                'supported_features', 'entity_category', 'icon',
+                'room', 'area', 'location', 'zone', 'floor',
+                # Climate specific
+                'temperature', 'target_temperature', 'hvac_mode', 'hvac_modes',
+                # Light specific  
+                'brightness', 'color_mode', 'supported_color_modes',
+                # Sensor specific
+                'state_class', 'last_changed', 'last_updated',
+                # Security specific
+                'device_type', 'tamper', 'battery_level',
+                # Media specific
+                'source', 'volume_level', 'media_title',
+                # Cover specific
+                'current_position', 'position',
+                # Switch/Binary sensor specific
+                'device_class',
+            ]
+            
+            for key in attr_keys:
+                if key in attributes and attributes[key] is not None:
+                    important_attrs[key] = attributes[key]
+            
+            # Create detailed description
+            entity_description = (
+                f"- Entity: {state.entity_id}\n"
+                f"  Domain: {state.domain}\n" 
+                f"  Name: {state.attributes.get('friendly_name', state.entity_id.split('.')[-1])}\n"
+                f"  Current State: {state.state}\n"
+                f"  Attributes: {json.dumps(important_attrs, default=str)}\n"
+            )
+            
+            entity_details.append(entity_description)
     
-    # Create localized prompt based on user's language
-    prompt = _create_localized_prompt(batch_states, entity_details, language)
+    # Add delay to make AI analysis visible
+    await asyncio.sleep(1.5 if use_compact_prompt else 2.5)
+    
+    # Create localized prompt based on user's language and mode
+    prompt = _create_localized_prompt(batch_states, entity_details, language, compact_mode=use_compact_prompt)
+    
+    # Log prompt size for debugging
+    prompt_size = len(prompt)
+    _LOGGER.info(f"📝 Batch {batch_num} prompt size: {prompt_size} chars ({'compact' if use_compact_prompt else 'full'} mode)")
 
     try:
         # Send simple progress info to frontend instead of full debug
@@ -353,9 +411,11 @@ async def _process_single_batch(
             connection.send_message(websocket_api.event_message(msg_id, {
                 "type": "scan_progress", 
                 "data": {
-                    "message": _get_localized_message('batch_request', language, batch_num=batch_num, entities_count=len(batch_states)),
+                    "message": _get_localized_message('batch_request', language, batch_num=batch_num, entities_count=len(batch_states)) + (" (modalità compatta)" if use_compact_prompt else ""),
                     "batch_number": batch_num,
-                    "entities_count": len(batch_states)
+                    "entities_count": len(batch_states),
+                    "compact_mode": use_compact_prompt,
+                    "prompt_size": prompt_size
                 }
             }))
         
@@ -371,13 +431,14 @@ async def _process_single_batch(
                     "data": {
                         "message": _get_localized_message('batch_response', language, batch_num=batch_num, entities_count=len(batch_states)),
                         "batch_number": batch_num,
-                        "entities_count": len(batch_states)
+                        "entities_count": len(batch_states),
+                        "response_size": len(response_text)
                     }
                 }))
             
             # Check for token limit exceeded
             if _check_token_limit_exceeded(response_text):
-                _LOGGER.error(f"🚨 Token limit exceeded in batch {batch_num}")
+                _LOGGER.error(f"🚨 Token limit exceeded in batch {batch_num} ({'compact' if use_compact_prompt else 'full'} mode)")
                 
                 # Send token limit error to frontend
                 if connection and msg_id:
@@ -385,9 +446,10 @@ async def _process_single_batch(
                         "type": "token_limit_exceeded",
                         "data": {
                             "batch": batch_num,
+                            "compact_mode": use_compact_prompt,
                             "title": _get_localized_message('token_limit_title', language),
                             "message": _get_localized_message('token_limit_message', language, batch=batch_num),
-                            "response": response_text
+                            "response": response_text[:500]  # Show only first 500 chars
                         }
                     }))
                 

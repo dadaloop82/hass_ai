@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.5 - Updated 2025-08-12T18:00:00Z - CACHE BUSTER
-// Features: Unknown entities styling + Incremental scanning + Enhanced UX
-// Force reload timestamp: 1723483200000
+// HASS AI Panel v1.9.9 - Updated 2025-08-12T19:00:00Z - CACHE BUSTER
+// Features: Enhanced progress tracking + Token limit recovery + Compact mode
+// Force reload timestamp: 1723486800000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -337,15 +337,19 @@ class HassAiPanel extends LitElement {
         show: true,
         message: message.data.message,
         currentBatch: message.data.batch_number,
+        entitiesCount: message.data.entities_count,
+        compactMode: message.data.compact_mode || false,
+        promptSize: message.data.prompt_size || 0,
+        responseSize: message.data.response_size || 0,
         status: message.data.message.includes('📤') ? 'requesting' : 'processing'
       };
       this.requestUpdate();
     }
     if (message.type === "batch_info") {
-      // Update batch progress info - fix total calculation
+      // Update batch progress info - improved calculation
       const currentProgress = this.scanProgress.entitiesProcessed || 0;
       const remaining = message.data.remaining_entities || 0;
-      const totalCalculated = currentProgress + remaining + message.data.entities_in_batch;
+      const totalCalculated = message.data.total_entities || (currentProgress + remaining + message.data.entities_in_batch);
       
       this.scanProgress = {
         ...this.scanProgress,
@@ -354,8 +358,9 @@ class HassAiPanel extends LitElement {
         entitiesInBatch: message.data.entities_in_batch,
         remainingEntities: remaining,
         retryAttempt: message.data.retry_attempt,
-        // Use a more stable total calculation
-        totalEntities: this.scanProgress.totalEntities || totalCalculated,
+        compactMode: message.data.compact_mode || false,
+        entitiesProcessed: message.data.processed_entities || currentProgress,
+        totalEntities: totalCalculated,
         show: true
       };
       this.requestUpdate();
@@ -363,6 +368,13 @@ class HassAiPanel extends LitElement {
     if (message.type === "batch_size_reduced") {
       // Show batch size reduction notification
       this._showBatchReductionNotification(message.data);
+    }
+    if (message.type === "batch_compact_mode") {
+      // Show compact mode activation notification
+      this._showSimpleNotification(
+        `🔄 ${message.data.reason}`,
+        'info'
+      );
     }
     if (message.type === "token_limit_exceeded") {
       this.loading = false;
@@ -373,11 +385,12 @@ class HassAiPanel extends LitElement {
         status: 'error'
       };
       
-      // Handle automatically without popup - just show a small notification
+      // Handle automatically without popup - show enhanced notification
+      const compactText = message.data.compact_mode ? ' (modalità compatta)' : '';
       this._showSimpleNotification(
         isItalian ? 
-          `⚠️ Limite token raggiunto. La scansione si è fermata al set ${message.data.batch}.` :
-          `⚠️ Token limit reached. Scan stopped at set ${message.data.batch}.`,
+          `⚠️ Limite token raggiunto${compactText}. La scansione si è fermata al set ${message.data.batch}.` :
+          `⚠️ Token limit reached${compactText}. Scan stopped at set ${message.data.batch}.`,
         'warning'
       );
       this.requestUpdate();
@@ -719,40 +732,42 @@ class HassAiPanel extends LitElement {
         <div class="card-content">
           <p>${t.description}</p>
           
-          <!-- Fixed Progress Section -->
+          <!-- Enhanced Progress Section -->
           ${this.scanProgress.show ? html`
             <div class="progress-section-fixed">
               <div class="progress-message">
                 ${this.scanProgress.message}
+                ${this.scanProgress.compactMode ? html`<span class="compact-indicator">📦 Compact</span>` : ''}
               </div>
               
               <div class="progress-bar-container">
                 <div class="progress-bar">
                   <div class="progress-fill" 
-                       style="width: ${this.scanProgress.entitiesInBatch > 0 && this.scanProgress.remainingEntities !== undefined ? Math.round(((this.scanProgress.entitiesInBatch) / (this.scanProgress.entitiesInBatch + this.scanProgress.remainingEntities)) * 100) : 10}%">
+                       style="width: ${this._calculateProgressPercentage()}%">
                   </div>
                 </div>
                 <div class="progress-text">
-                  ${this.scanProgress.entitiesInBatch > 0 ? 
-                    (isItalian ? 
-                      `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entità in elaborazione` :
-                      `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entities processing`
-                    ) :
-                    (isItalian ? 'Preparazione scansione...' : 'Preparing scan...')
-                  }
-                  ${this.scanProgress.remainingEntities > 0 ? 
-                    (isItalian ? ` (${this.scanProgress.remainingEntities} rimanenti)` : ` (${this.scanProgress.remainingEntities} remaining)`) : 
-                    ''
-                  }
+                  ${this._renderProgressText(isItalian)}
                 </div>
                 
-                ${this.scanProgress.status === 'requesting' ? html`
-                  <div class="status-indicator">${isItalian ? '🔄 Invio richiesta...' : '🔄 Sending request...'}</div>
-                ` : ''}
-                
-                ${this.scanProgress.status === 'processing' ? html`
-                  <div class="status-indicator">${isItalian ? '⚙️ Elaborazione risposta...' : '⚙️ Processing response...'}</div>
-                ` : ''}
+                <div class="progress-details">
+                  ${this.scanProgress.status === 'requesting' ? html`
+                    <div class="status-indicator">${isItalian ? '🔄 Invio richiesta...' : '🔄 Sending request...'}</div>
+                  ` : ''}
+                  
+                  ${this.scanProgress.status === 'processing' ? html`
+                    <div class="status-indicator">${isItalian ? '⚙️ Elaborazione risposta...' : '⚙️ Processing response...'}</div>
+                  ` : ''}
+                  
+                  ${this.scanProgress.retryAttempt > 0 ? html`
+                    <div class="retry-indicator">${isItalian ? `� Tentativo ${this.scanProgress.retryAttempt}` : `� Retry ${this.scanProgress.retryAttempt}`}</div>
+                  ` : ''}
+                  
+                  ${this.scanProgress.promptSize > 0 ? html`
+                    <div class="debug-info">${isItalian ? `Prompt: ${this.scanProgress.promptSize} caratteri` : `Prompt: ${this.scanProgress.promptSize} chars`}</div>
+                  ` : ''}
+                </div>
+              </div>
             </div>
           ` : ''}
           
@@ -1683,7 +1698,69 @@ class HassAiPanel extends LitElement {
       .entity-info.unavailable small {
         color: var(--disabled-text-color);
       }
+      
+      .compact-indicator {
+        background: #e3f2fd;
+        color: #1976d2;
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-size: 0.8em;
+        margin-left: 8px;
+      }
+      
+      .progress-details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+        font-size: 0.85em;
+      }
+      
+      .retry-indicator {
+        background: #fff3e0;
+        color: #f57c00;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      
+      .debug-info {
+        background: #f5f5f5;
+        color: #666;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
     `;
+  }
+
+  // Progress calculation helper
+  _calculateProgressPercentage() {
+    if (!this.scanProgress.entitiesProcessed || !this.scanProgress.totalEntities) {
+      return 10; // Show minimal progress when starting
+    }
+    
+    const percentage = Math.round((this.scanProgress.entitiesProcessed / this.scanProgress.totalEntities) * 100);
+    return Math.max(10, Math.min(percentage, 100)); // Ensure between 10-100%
+  }
+
+  // Progress text rendering helper
+  _renderProgressText(isItalian) {
+    if (this.scanProgress.entitiesInBatch > 0) {
+      const currentText = isItalian ? 
+        `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entità` :
+        `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entities`;
+      
+      const remainingText = this.scanProgress.remainingEntities > 0 ? 
+        (isItalian ? ` (${this.scanProgress.remainingEntities} rimanenti)` : ` (${this.scanProgress.remainingEntities} remaining)`) : 
+        '';
+      
+      const totalText = this.scanProgress.totalEntities > 0 ?
+        (isItalian ? ` | Totale: ${this.scanProgress.totalEntities}` : ` | Total: ${this.scanProgress.totalEntities}`) :
+        '';
+      
+      return `${currentText}${remainingText}${totalText}`;
+    } else {
+      return isItalian ? 'Preparazione scansione...' : 'Preparing scan...';
+    }
   }
 }
 
