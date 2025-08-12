@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+import time
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
@@ -19,6 +20,9 @@ STORAGE_VERSION = 1
 INTELLIGENCE_DATA_KEY = f"{DOMAIN}_intelligence_data"
 AI_RESULTS_KEY = f"{DOMAIN}_ai_results"
 PANEL_URL_PATH = "hass-ai-panel"
+
+# Cache busting timestamp
+CACHE_BUSTER = int(time.time())
 
 
 async def _save_ai_results(hass: HomeAssistant, results) -> None:
@@ -91,7 +95,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "name": "hass-ai-panel",
                 "embed_iframe": False,
                 "trust_external": False,
-                "module_url": f"/api/{DOMAIN}/static/panel.js",
+                "module_url": f"/api/{DOMAIN}/static/panel.js?v={CACHE_BUSTER}",
                 "extra_module_url": [
                     "https://unpkg.com/@material/mwc-select@0.25.3/mwc-select.js?module",
                     "https://unpkg.com/@material/mwc-list@0.25.3/mwc-list-item.js?module",
@@ -187,6 +191,7 @@ async def handle_load_overrides(hass: HomeAssistant, connection: websocket_api.A
 
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/scan_entities",
+    vol.Optional("language", default="en"): str,
 })
 @websocket_api.async_response
 async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
@@ -194,6 +199,8 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
     try:
         connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
 
+        # Get language from message
+        language = msg.get("language", "en")
         # Get the first config entry for this integration
         config_entry = None
         for entry in hass.config_entries.async_entries(DOMAIN):

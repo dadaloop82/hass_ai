@@ -1,5 +1,6 @@
-// HASS AI Panel v1.9.0 - Updated 2025-08-12
+// HASS AI Panel v1.9.0 - Updated 2025-08-12T15:30:00Z - CACHE BUSTER
 // Interfaccia completamente rinnovata con localizzazione
+// Force reload timestamp: 1723471800000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
