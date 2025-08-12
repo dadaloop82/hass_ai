@@ -32,8 +32,8 @@ def _get_localized_message(message_key: str, language: str, **kwargs) -> str:
             'en': f"📥 Response received for group {kwargs.get('batch_num')} ({kwargs.get('entities_count')} devices)"
         },
         'batch_reduction': {
-            'it': f"🔄 Ridotto gruppo da {kwargs.get('old_size')} a {kwargs.get('new_size')} dispositivi (tentativo {kwargs.get('retry_attempt')})",
-            'en': f"🔄 Reduced group from {kwargs.get('old_size')} to {kwargs.get('new_size')} devices (attempt {kwargs.get('retry_attempt')})"
+            'it': f"⚠️ Errore di risposta, riprovo con gruppo più piccolo (tentativo {kwargs.get('retry_attempt')})",
+            'en': f"⚠️ Response error, retrying with smaller group (attempt {kwargs.get('retry_attempt')})"
         },
         'token_limit_title': {
             'it': "Token Limit Raggiunti",
@@ -77,6 +77,7 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"- Complessità dell'integrazione vs valore per automazioni\n"
             f"- Distingui tra fonti di dati e dispositivi controllabili\n\n"
             f"Analizza sia lo stato dell'entità CHE i suoi attributi per una valutazione completa.\n"
+            f"RISPONDI SEMPRE IN ITALIANO. La tua motivazione (reason) DEVE essere scritta in italiano.\n"
             f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating', 'reason', 'category' (DATA o CONTROL) e 'management_type' (USER o SERVICE).\n\n"
             f"Entità da analizzare:\n" + "\n".join(entity_details)
         )
@@ -105,6 +106,7 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"- Integration complexity vs. automation value\n"
             f"- Distinguish between data sources and controllable devices\n\n"
             f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
+            f"ALWAYS RESPOND IN ENGLISH. Your reason field MUST be in English.\n"
             f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', 'reason', 'category' (DATA or CONTROL), and 'management_type' (USER or SERVICE).\n\n"
             f"Entities to analyze:\n" + "\n".join(entity_details)
         )

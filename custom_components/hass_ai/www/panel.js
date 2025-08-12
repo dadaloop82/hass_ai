@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.1 - Updated 2025-08-12T16:00:00Z - CACHE BUSTER
-// Interfaccia completamente rinnovata con localizzazione + WebSocket fix
-// Force reload timestamp: 1723475600000
+// HASS AI Panel v1.9.2 - Updated 2025-08-12T16:30:00Z - CACHE BUSTER
+// UI Fixes: Localized AI responses, smaller reason text, better progress tracking
+// Force reload timestamp: 1723477800000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -44,7 +44,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.1 loaded - WebSocket Fix + Cache Busting!');
+    console.log('🚀 HASS AI Panel v1.9.2 loaded - UI Fixes & Better Localization!');
     this.language = this.hass.language || 'en';
     this._loadOverrides();
     this._loadAiResults();
@@ -169,15 +169,20 @@ class HassAiPanel extends LitElement {
       this.requestUpdate();
     }
     if (message.type === "batch_info") {
-      // Update batch progress info and calculate totals
+      // Update batch progress info - fix total calculation
+      const currentProgress = this.scanProgress.entitiesProcessed || 0;
+      const remaining = message.data.remaining_entities || 0;
+      const totalCalculated = currentProgress + remaining + message.data.entities_in_batch;
+      
       this.scanProgress = {
         ...this.scanProgress,
         currentBatch: message.data.batch_number,
         batchSize: message.data.batch_size,
         entitiesInBatch: message.data.entities_in_batch,
-        remainingEntities: message.data.remaining_entities,
+        remainingEntities: remaining,
         retryAttempt: message.data.retry_attempt,
-        totalEntities: message.data.entities_in_batch + message.data.remaining_entities,
+        // Use a more stable total calculation
+        totalEntities: this.scanProgress.totalEntities || totalCalculated,
         show: true
       };
       this.requestUpdate();
@@ -718,7 +723,8 @@ class HassAiPanel extends LitElement {
       }
       
       .results-container.with-progress {
-        max-height: 50vh;
+        max-height: 75vh;
+        min-height: 60vh;
       }
       
       .flash-new {
@@ -931,7 +937,9 @@ class HassAiPanel extends LitElement {
       }
       .reason-text {
         font-style: italic;
+        font-size: 0.85em;
         color: var(--secondary-text-color);
+        line-height: 1.3;
       }
       ha-select {
         width: 90px;

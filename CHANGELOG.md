@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.2] - 2025-08-12
+
+### 🎨 UI Improvements & Localization Fixes
+- **Fixed AI Response Language**: Added explicit language instruction to ensure AI responds in user's language
+- **Smaller Reason Text**: Reduced AI motivation text size to 0.85em for better readability
+- **Better Progress Tracking**: Fixed entity count calculation that showed incorrect progress (e.g., "46 of 42")
+- **Simplified Error Messages**: Changed confusing "Reduced group from 1 to 1" to clearer "Response error, retrying"
+- **Taller Results Container**: Increased height from 50vh to 75vh with 60vh minimum for better space utilization
+
+#### Technical Fixes
+- Fixed total entity calculation in progress tracking
+- Enhanced batch retry message clarity
+- Improved CSS for reason text styling
+- Better container height management during scans
+
+#### User Experience
+- AI responses now properly localized in Italian when using Italian interface
+- Cleaner progress messages without confusing technical details
+- More readable text sizing throughout the interface
+- Better use of vertical space for results display
+
+---
+
 ## [1.9.1] - 2025-08-12
 
 ### 🔧 Critical Bug Fixes
