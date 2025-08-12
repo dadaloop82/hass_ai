@@ -24,12 +24,24 @@ def _get_localized_message(message_key: str, language: str, **kwargs) -> str:
     
     messages = {
         'batch_request': {
-            'it': f"📤 Richiesta inviata per batch {kwargs.get('batch_num')} ({kwargs.get('entities_count')} entità)",
-            'en': f"📤 Request sent for batch {kwargs.get('batch_num')} ({kwargs.get('entities_count')} entities)"
+            'it': f"📤 Invio richiesta per gruppo {kwargs.get('batch_num')} ({kwargs.get('entities_count')} dispositivi)",
+            'en': f"📤 Sending request for group {kwargs.get('batch_num')} ({kwargs.get('entities_count')} devices)"
         },
         'batch_response': {
-            'it': f"📥 Risposta ottenuta per batch {kwargs.get('batch_num')} ({kwargs.get('entities_count')} entità)",
-            'en': f"📥 Response received for batch {kwargs.get('batch_num')} ({kwargs.get('entities_count')} entities)"
+            'it': f"📥 Risposta ricevuta per gruppo {kwargs.get('batch_num')} ({kwargs.get('entities_count')} dispositivi)",
+            'en': f"📥 Response received for group {kwargs.get('batch_num')} ({kwargs.get('entities_count')} devices)"
+        },
+        'batch_reduction': {
+            'it': f"🔄 Ridotto gruppo da {kwargs.get('old_size')} a {kwargs.get('new_size')} dispositivi (tentativo {kwargs.get('retry_attempt')})",
+            'en': f"🔄 Reduced group from {kwargs.get('old_size')} to {kwargs.get('new_size')} devices (attempt {kwargs.get('retry_attempt')})"
+        },
+        'token_limit_title': {
+            'it': "Token Limit Raggiunti",
+            'en': "Token Limit Reached"
+        },
+        'token_limit_message': {
+            'it': f"Scansione fermata al gruppo {kwargs.get('batch')}. Riprova con gruppi più piccoli.",
+            'en': f"Scan stopped at group {kwargs.get('batch')}. Try again with smaller groups."
         }
     }
     
@@ -50,15 +62,19 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"3 = Media (comunemente utile, buon potenziale per automazioni)\n"
             f"4 = Alta (frequentemente importante, valore significativo per automazioni)\n"
             f"5 = Critica (essenziale per automazioni, sicurezza o protezione)\n\n"
+            f"IMPORTANTE - Classifica anche il tipo di entità:\n"
+            f"- DATA: Entità che forniscono informazioni (sensori, meteo, stato sistemi)\n"
+            f"- CONTROL: Entità controllabili dall'utente (interruttori, luci, termostati)\n\n"
             f"Considera questi fattori:\n"
             f"- Tipo di dispositivo e funzionalità (dal dominio e device_class)\n"
             f"- Attributi che indicano potenziale per automazioni (caratteristiche controllabili)\n"
             f"- Rilevanza di posizione/area (informazioni stanza, zona)\n"
             f"- Importanza per sicurezza e protezione\n"
             f"- Cambiamenti di stato che attivano automazioni utili\n"
-            f"- Complessità dell'integrazione vs valore per automazioni\n\n"
+            f"- Complessità dell'integrazione vs valore per automazioni\n"
+            f"- Distingui tra fonti di dati e dispositivi controllabili\n\n"
             f"Analizza sia lo stato dell'entità CHE i suoi attributi per una valutazione completa.\n"
-            f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating' e 'reason'.\n\n"
+            f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating', 'reason' e 'category' (DATA o CONTROL).\n\n"
             f"Entità da analizzare:\n" + "\n".join(entity_details)
         )
     else:
@@ -71,15 +87,19 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"3 = Medium (commonly useful, good automation potential)\n"
             f"4 = High (frequently important, significant automation value)\n"
             f"5 = Critical (essential for automations, security, or safety)\n\n"
+            f"IMPORTANT - Also classify the entity type:\n"
+            f"- DATA: Entities that provide information (sensors, weather, system status)\n"
+            f"- CONTROL: Entities controllable by user (switches, lights, thermostats)\n\n"
             f"Consider these factors:\n"
             f"- Device type and functionality (from domain and device_class)\n"
             f"- Attributes that indicate automation potential (controllable features)\n"
             f"- Location/area relevance (room, zone information)\n"
             f"- Security and safety importance\n"
             f"- State changes that trigger useful automations\n"
-            f"- Integration complexity vs. automation value\n\n"
+            f"- Integration complexity vs. automation value\n"
+            f"- Distinguish between data sources and controllable devices\n\n"
             f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
-            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'.\n\n"
+            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', 'reason', and 'category' (DATA or CONTROL).\n\n"
             f"Entities to analyze:\n" + "\n".join(entity_details)
         )
 
@@ -223,7 +243,11 @@ async def get_entities_importance_batched(
                             "old_size": current_batch_size,
                             "new_size": new_batch_size,
                             "retry_attempt": token_limit_retries,
-                            "reason": "Token limit exceeded"
+                            "reason": "Token limit exceeded",
+                            "message": _get_localized_message('batch_reduction', language, 
+                                                            old_size=current_batch_size, 
+                                                            new_size=new_batch_size, 
+                                                            retry_attempt=token_limit_retries)
                         }
                     }))
                 
@@ -353,7 +377,8 @@ async def _process_single_batch(
                         "type": "token_limit_exceeded",
                         "data": {
                             "batch": batch_num,
-                            "message": TOKEN_LIMIT_ERROR_MESSAGE,
+                            "title": _get_localized_message('token_limit_title', language),
+                            "message": _get_localized_message('token_limit_message', language, batch=batch_num),
                             "response": response_text
                         }
                     }))
@@ -402,10 +427,16 @@ async def _process_single_batch(
                     # Validate rating is within bounds
                     rating = int(item["rating"])
                     if 0 <= rating <= 5:
+                        # Get category, default to UNKNOWN if not provided
+                        category = item.get("category", "UNKNOWN")
+                        if category not in ["DATA", "CONTROL"]:
+                            category = "UNKNOWN"
+                            
                         result = {
                             "entity_id": item["entity_id"],
                             "overall_weight": rating,
                             "overall_reason": item["reason"],
+                            "category": category,
                             "analysis_method": "ai_conversation",
                             "batch_number": batch_num,
                         }

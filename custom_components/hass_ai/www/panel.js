@@ -198,12 +198,14 @@ class HassAiPanel extends LitElement {
   }
 
   _showBatchReductionNotification(data) {
-    // Use a simpler approach for notifications
+    // Use localized message from backend if available
+    const message = data.message || `🔄 Gruppo ridotto: ${data.old_size} → ${data.new_size} dispositivi (tentativo ${data.retry_attempt})`;
+    
     console.log(`🔄 Batch Size Reduced: ${data.old_size} → ${data.new_size} (retry ${data.retry_attempt})`);
     
     // Create a simple toast notification
     const toast = document.createElement('div');
-    toast.textContent = `🔄 Batch size reduced: ${data.old_size} → ${data.new_size} entities (retry ${data.retry_attempt})`;
+    toast.textContent = message;
     toast.style.cssText = `
       position: fixed;
       top: 20px;
@@ -278,14 +280,18 @@ class HassAiPanel extends LitElement {
   }
 
   _showTokenLimitNotification(data) {
+    // Use localized messages from backend
+    const title = data.title || "Token Limit Raggiunti";
+    const message = data.message || `Scansione fermata al gruppo ${data.batch}. Riprova con gruppi più piccoli.`;
+    
     // Create elegant token limit notification
     const toast = document.createElement('div');
     toast.innerHTML = `
       <div style="display: flex; align-items: center; gap: 12px;">
         <div style="font-size: 24px;">🚨</div>
         <div>
-          <div style="font-weight: 600; margin-bottom: 4px;">Token Limit Raggiunti</div>
-          <div style="font-size: 14px; opacity: 0.9;">Scansione fermata al batch ${data.batch}. Riprova con batch più piccoli.</div>
+          <div style="font-weight: 600; margin-bottom: 4px;">${title}</div>
+          <div style="font-size: 14px; opacity: 0.9;">${message}</div>
         </div>
       </div>
     `;
@@ -406,6 +412,30 @@ class HassAiPanel extends LitElement {
       weight_legend: "(0=Ignore, 5=Critical)"
     };
 
+    // Function to get category info with localization
+    const getCategoryInfo = (category) => {
+      switch (category) {
+        case 'DATA':
+          return { 
+            icon: 'mdi:chart-line', 
+            color: '#2196F3', 
+            label: isItalian ? 'Dati' : 'Data' 
+          };
+        case 'CONTROL':
+          return { 
+            icon: 'mdi:tune', 
+            color: '#4CAF50', 
+            label: isItalian ? 'Controllo' : 'Control' 
+          };
+        default:
+          return { 
+            icon: 'mdi:help-circle', 
+            color: '#9E9E9E', 
+            label: isItalian ? '?' : '?' 
+          };
+      }
+    };
+
     return html`
       <ha-card .header=${t.title}>
         <div class="card-content">
@@ -465,13 +495,16 @@ class HassAiPanel extends LitElement {
                   <tr>
                     <th>${t.enabled}</th>
                     <th>${t.entity}</th>
+                    <th>Tipo</th>
                     <th>${t.ai_weight}</th>
                     <th>${t.reason}</th>
                     <th>${t.your_weight} <span class="legend">${t.weight_legend}</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${sortedEntities.map(entity => html`
+                  ${sortedEntities.map(entity => {
+                    const categoryInfo = getCategoryInfo(entity.category);
+                    return html`
                     <tr data-entity-id="${entity.entity_id}">
                       <td>
                         <ha-switch
@@ -484,6 +517,12 @@ class HassAiPanel extends LitElement {
                         <div class="entity-info">
                           <strong>${entity.entity_id}</strong>
                           <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="category-badge" style="color: ${categoryInfo.color}">
+                          <ha-icon icon="${categoryInfo.icon}"></ha-icon>
+                          <span>${categoryInfo.label}</span>
                         </div>
                       </td>
                       <td><span class="weight-badge weight-${entity.overall_weight}">${entity.overall_weight}</span></td>
@@ -519,7 +558,8 @@ class HassAiPanel extends LitElement {
                         </ha-select>
                       </td>
                     </tr>
-                  `)}
+                    `;
+                  })}
                 </tbody>
               </table>
             </div>
@@ -771,6 +811,19 @@ class HassAiPanel extends LitElement {
         min-width: 20px;
         text-align: center;
         color: white;
+      }
+      
+      .category-badge {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      
+      .category-badge ha-icon {
+        --mdi-icon-size: 16px;
       }
       .weight-0 { background-color: #9e9e9e; }  /* Grey - Ignore */
       .weight-1 { background-color: #f44336; }  /* Red - Very Low */
