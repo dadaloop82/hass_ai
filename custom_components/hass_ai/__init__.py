@@ -113,7 +113,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_load_overrides)
     websocket_api.async_register_command(hass, handle_load_ai_results)
     websocket_api.async_register_command(hass, handle_save_ai_results)
-    websocket_api.async_register_command(hass, handle_evaluate_single_entity)
+    websocket_api.async_register_command(hass, handle_find_correlations)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -392,3 +392,64 @@ async def handle_evaluate_single_entity(hass: HomeAssistant, connection: websock
     except Exception as e:
         _LOGGER.error(f"Error evaluating single entity: {e}")
         connection.send_message(websocket_api.error_message(msg["id"], "evaluation_error", str(e)))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/find_correlations",
+    vol.Required("entities"): [vol.Schema({
+        vol.Required("entity_id"): str,
+        vol.Required("ai_weight"): vol.Any(int, float),
+        vol.Required("reason"): str,
+        vol.Required("category"): str,
+    })],
+    vol.Optional("language", default="en"): str,
+})
+@websocket_api.async_response
+async def handle_find_correlations(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to find correlations between entities using AI."""
+    try:
+        entities = msg["entities"]
+        language = msg.get("language", "en")
+        
+        _LOGGER.info(f"Finding correlations for {len(entities)} entities")
+        
+        # Import the correlation analysis function
+        from .intelligence import find_entity_correlations
+        
+        # Process entities one by one to find correlations
+        for entity in entities:
+            entity_id = entity["entity_id"]
+            
+            try:
+                # Find correlations for this entity against all others
+                correlations = await find_entity_correlations(
+                    hass, entity, entities, language
+                )
+                
+                # Send result for this entity
+                connection.send_message(websocket_api.event_message(
+                    msg["id"], 
+                    {
+                        "type": "correlation_result", 
+                        "result": {
+                            "entity_id": entity_id,
+                            "correlations": correlations
+                        }
+                    }
+                ))
+                
+            except Exception as e:
+                _LOGGER.error(f"Error finding correlations for {entity_id}: {e}")
+                
+        # Send completion message
+        connection.send_message(websocket_api.event_message(
+            msg["id"], {"type": "correlation_complete"}
+        ))
+        
+        _LOGGER.info("Correlation analysis completed")
+        
+    except Exception as e:
+        _LOGGER.error(f"Error in correlation analysis: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "correlation_error", str(e)
+        ))
