@@ -112,11 +112,25 @@ class HassAiPanel extends LitElement {
   _handleScanUpdate(message) {
     if (message.type === "entity_result") {
       const entity = message.result;
+      const isNewEntity = !this.entities[entity.entity_id];
       this.entities[entity.entity_id] = entity;
       
       // Update entities processed count
       this.scanProgress.entitiesProcessed = Object.keys(this.entities).length;
       this.requestUpdate("entities");
+      
+      // Add flash effect for new entities
+      if (isNewEntity) {
+        setTimeout(() => {
+          const entityRow = document.querySelector(`tr[data-entity-id="${entity.entity_id}"]`);
+          if (entityRow) {
+            entityRow.classList.add('flash-new');
+            setTimeout(() => {
+              entityRow.classList.remove('flash-new');
+            }, 1000);
+          }
+        }, 100);
+      }
     }
     if (message.type === "scan_progress") {
       // Update detailed progress info
@@ -408,84 +422,107 @@ class HassAiPanel extends LitElement {
               ` : ''}
             </div>
           ` : ''}
-          
-          ${this.scanProgress.show ? html`
-            <div class="progress-section">
-              <div class="progress-message">
-                ${this.scanProgress.message}
-              </div>
-              
-              <div class="progress-bar-container">
-                <div class="progress-bar">
-                  <div class="progress-fill" 
-                       style="width: ${this.scanProgress.totalEntities > 0 ? Math.round((this.scanProgress.entitiesProcessed / this.scanProgress.totalEntities) * 100) : 0}%">
-                  </div>
-                </div>
-                <div class="progress-text">
-                  ${this.scanProgress.totalEntities > 0 ? 
-                    `${this.scanProgress.entitiesProcessed} / ${this.scanProgress.totalEntities} entità` :
-                    'Inizializzazione...'
-                  }
-                  ${this.scanProgress.currentBatch > 0 ? ` (Batch ${this.scanProgress.currentBatch})` : ''}
-                </div>
-              </div>
-              
-              ${this.scanProgress.status === 'requesting' ? html`
-                <div class="status-indicator">🔄 Invio richiesta...</div>
-              ` : ''}
-              
-              ${this.scanProgress.status === 'processing' ? html`
-                <div class="status-indicator">⚙️ Elaborazione risposta...</div>
-              ` : ''}
-            </div>
-          ` : ''}
         </div>
 
+        <!-- Fixed Progress Section -->
+        ${this.scanProgress.show ? html`
+          <div class="progress-section-fixed">
+            <div class="progress-message">
+              ${this.scanProgress.message}
+            </div>
+            
+            <div class="progress-bar-container">
+              <div class="progress-bar">
+                <div class="progress-fill" 
+                     style="width: ${this.scanProgress.totalEntities > 0 ? Math.round((this.scanProgress.entitiesProcessed / this.scanProgress.totalEntities) * 100) : 0}%">
+                </div>
+              </div>
+              <div class="progress-text">
+                ${this.scanProgress.totalEntities > 0 ? 
+                  `${this.scanProgress.entitiesProcessed} completate di ${this.scanProgress.totalEntities}` :
+                  'Preparazione scansione...'
+                }
+                ${this.scanProgress.currentBatch > 0 ? ` (Gruppo ${this.scanProgress.currentBatch})` : ''}
+              </div>
+            </div>
+            
+            ${this.scanProgress.status === 'requesting' ? html`
+              <div class="status-indicator">🔄 Invio richiesta...</div>
+            ` : ''}
+            
+            ${this.scanProgress.status === 'processing' ? html`
+              <div class="status-indicator">⚙️ Elaborazione risposta...</div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <!-- Scrollable Results Section -->
         ${Object.keys(this.entities).length > 0 ? html`
-          <div class="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>${t.enabled}</th>
-                  <th>${t.entity}</th>
-                  <th>${t.ai_weight}</th>
-                  <th>${t.reason}</th>
-                  <th>${t.your_weight} <span class="legend">${t.weight_legend}</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                ${sortedEntities.map(entity => html`
+          <div class="results-container ${this.scanProgress.show ? 'with-progress' : ''}">
+            <div class="table-container">
+              <table>
+                <thead>
                   <tr>
-                    <td>
-                      <ha-switch
-                        .checked=${this.overrides[entity.entity_id]?.enabled ?? true}
-                        data-entity-id=${entity.entity_id}
-                        @change=${this._handleToggle}
-                      ></ha-switch>
-                    </td>
-                    <td>
-                      <div class="entity-info">
-                        <strong>${entity.entity_id}</strong>
-                        <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
-                      </div>
-                    </td>
-                    <td><span class="weight-badge weight-${entity.overall_weight}">${entity.overall_weight}</span></td>
-                    <td><span class="reason-text">${entity.overall_reason}</span></td>
-                    <td>
-                      <ha-select
-                        .value=${String(this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight)}
-                        data-entity-id=${entity.entity_id}
-                        @selectionChanged=${this._handleWeightChange}
-                      >
-                        ${[0, 1, 2, 3, 4, 5].map(i => html`
-                          <ha-list-item value="${i}">${i}</ha-list-item>
-                        `)}
-                      </ha-select>
-                    </td>
+                    <th>${t.enabled}</th>
+                    <th>${t.entity}</th>
+                    <th>${t.ai_weight}</th>
+                    <th>${t.reason}</th>
+                    <th>${t.your_weight} <span class="legend">${t.weight_legend}</span></th>
                   </tr>
-                `)}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  ${sortedEntities.map(entity => html`
+                    <tr data-entity-id="${entity.entity_id}">
+                      <td>
+                        <ha-switch
+                          .checked=${this.overrides[entity.entity_id]?.enabled ?? true}
+                          data-entity-id=${entity.entity_id}
+                          @change=${this._handleToggle}
+                        ></ha-switch>
+                      </td>
+                      <td>
+                        <div class="entity-info">
+                          <strong>${entity.entity_id}</strong>
+                          <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
+                        </div>
+                      </td>
+                      <td><span class="weight-badge weight-${entity.overall_weight}">${entity.overall_weight}</span></td>
+                      <td>
+                        <div class="reason-section">
+                          <div class="reason-text">${entity.overall_reason}</div>
+                          ${entity.analysis_details ? html`
+                            <details class="analysis-details">
+                              <summary>📋 Dettagli Analisi</summary>
+                              <div class="analysis-content">
+                                <div><strong>Dominio:</strong> ${entity.analysis_details.domain || entity.entity_id.split('.')[0]}</div>
+                                <div><strong>Stato Attuale:</strong> ${entity.analysis_details.state || 'N/A'}</div>
+                                <div><strong>Attributi Chiave:</strong></div>
+                                <ul class="attributes-list">
+                                  ${Object.entries(entity.analysis_details.attributes || {}).map(([key, value]) => html`
+                                    <li><code>${key}</code>: ${JSON.stringify(value)}</li>
+                                  `)}
+                                </ul>
+                              </div>
+                            </details>
+                          ` : ''}
+                        </div>
+                      </td>
+                      <td>
+                        <ha-select
+                          .value=${String(this.overrides[entity.entity_id]?.overall_weight ?? entity.overall_weight)}
+                          data-entity-id=${entity.entity_id}
+                          @selectionChanged=${this._handleWeightChange}
+                        >
+                          ${[0, 1, 2, 3, 4, 5].map(i => html`
+                            <ha-list-item value="${i}">${i}</ha-list-item>
+                          `)}
+                        </ha-select>
+                      </td>
+                    </tr>
+                  `)}
+                </tbody>
+              </table>
+            </div>
           </div>
         ` : ''}
       </ha-card>
@@ -503,6 +540,102 @@ class HassAiPanel extends LitElement {
           transform: translateX(0);
           opacity: 1;
         }
+      }
+      
+      .progress-section-fixed {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: var(--card-background-color);
+        border-bottom: 2px solid var(--info-color, #2196f3);
+        padding: 16px;
+        margin: 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .results-container {
+        max-height: 70vh;
+        overflow-y: auto;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        margin-top: 0;
+      }
+      
+      .results-container.with-progress {
+        max-height: 50vh;
+      }
+      
+      .flash-new {
+        animation: flashHighlight 1s ease-out;
+        background-color: var(--success-color, #4caf50) !important;
+      }
+      
+      @keyframes flashHighlight {
+        0% { 
+          background-color: var(--success-color, #4caf50);
+          transform: scale(1.02);
+        }
+        50% { 
+          background-color: rgba(76, 175, 80, 0.3);
+          transform: scale(1.01);
+        }
+        100% { 
+          background-color: transparent;
+          transform: scale(1);
+        }
+      }
+      
+      .reason-section {
+        max-width: 300px;
+      }
+      
+      .analysis-details {
+        margin-top: 8px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        padding: 4px;
+      }
+      
+      .analysis-details summary {
+        cursor: pointer;
+        font-size: 12px;
+        color: var(--info-color, #2196f3);
+        padding: 4px;
+        border-radius: 3px;
+      }
+      
+      .analysis-details summary:hover {
+        background-color: var(--primary-background-color);
+      }
+      
+      .analysis-content {
+        padding: 8px;
+        font-size: 11px;
+        background-color: var(--primary-background-color);
+        border-radius: 3px;
+        margin-top: 4px;
+      }
+      
+      .analysis-content div {
+        margin-bottom: 4px;
+      }
+      
+      .attributes-list {
+        margin: 4px 0 0 16px;
+        padding: 0;
+      }
+      
+      .attributes-list li {
+        margin-bottom: 2px;
+        font-family: monospace;
+        font-size: 10px;
+      }
+      
+      .attributes-list code {
+        background-color: var(--code-background-color, #f5f5f5);
+        padding: 1px 3px;
+        border-radius: 2px;
+        color: var(--info-color, #2196f3);
       }
       
       .progress-section {
