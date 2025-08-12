@@ -1,89 +1,93 @@
-# Miglioramenti HASS AI - Implementati
+# HASS AI Improvements - v1.9.0 Update
 
-## ✅ Modifiche Completate
+## ✅ Completed Modifications
 
-### 1. Messaggi di Progresso Semplificati
-- **PRIMA**: "0 / 88 entità (Batch 1)" - confuso per gli utenti
-- **DOPO**: "0 entità analizzate di 88 (Set 1)" - più chiaro e comprensibile
-- Localizzazione: italiano/inglese in base alla lingua di Home Assistant
+### 1. Simplified Progress Messages
+- **BEFORE**: "0 / 88 entità (Batch 1)" - confusing for users
+- **AFTER**: "0 entities analyzed of 88 (Set 1)" - clearer and understandable
+- Localization: Italian/English based on Home Assistant language
 
-### 2. Gestione Automatica Token Limit
-- **PRIMA**: Popup fastidioso che richiedeva azione dell'utente
-- **DOPO**: Notifica discreta in basso a destra che scompare automaticamente
-- Niente più interruzioni nel flusso di lavoro
+### 2. Automatic Token Limit Management
+- **BEFORE**: Annoying popup requiring user action
+- **AFTER**: Discrete notification at bottom-right that disappears automatically
+- No more workflow interruptions
 
-### 3. Salvataggio Automatico Risultati
-- **PRIMA**: Risultati persi al refresh della pagina
-- **DOPO**: Salvataggio automatico durante la scansione + al completamento
-- Persistenza dei dati tra sessioni
+### 3. Automatic Results Saving
+- **BEFORE**: Results lost on page refresh
+- **AFTER**: Automatic saving during scan + on completion
+- Data persistence between sessions
 
-### 4. Indicatori di Progresso Migliorati
-- Progress bar fissa durante la scansione
-- Area risultati scrollabile separata
-- Messaggi di stato localizzati ("Invio richiesta...", "Elaborazione risposta...")
+### 4. Improved Progress Indicators
+- Fixed progress bar during scanning
+- Separate scrollable results area
+- Localized status messages ("Sending request...", "Processing response...")
 
-### 5. Effetto Lampeggio per Nuove Entità
-- **NUOVO**: Entità lampeggiano in verde quando vengono analizzate
-- Feedback visivo immediato del progresso
+### 5. Flash Effect for New Entities
+- **NEW**: Entities flash green when analyzed
+- Immediate visual feedback of progress
 
-### 6. Analisi Attributi Dettagliata
-- **NUOVO**: Sezione espandibile "Dettagli Analisi" per ogni entità
-- Mostra dominio, stato attuale, tipo di gestione
-- Lista attributi con eventuali pesi
+### 6. Detailed Attributes Analysis
+- **NEW**: Expandable "Analysis Details" section for each entity
+- Shows domain, current state, management type
+- Attributes list with optional weights
 
-### 7. Classificazione Tipo Gestione
-- **NUOVO**: Distinzione tra:
-  - 👤 **Gestita dall'utente** (luci, interruttori, termostati)
-  - 🔧 **Gestita da servizio** (sensori di sistema, diagnostiche)
-- Visualizzazione con badge colorati
+### 7. Management Type Classification
+- **NEW**: Distinction between:
+  - 👤 **User-managed** (lights, switches, thermostats)
+  - 🔧 **Service-managed** (system sensors, diagnostics)
+- Visualization with colored badges
 
-### 8. Prompt AI Migliorati
-- **NUOVO**: Richiesta alla AI di classificare management_type (USER/SERVICE)
-- Prompt localizzati in italiano/inglese
-- Istruzioni più precise per l'AI
+### 8. Improved AI Prompts
+- **NEW**: AI request to classify management_type (USER/SERVICE)
+- Localized prompts in Italian/English
+- More precise instructions for AI
 
-### 9. Progress Bar con Contatori Chiari
-- **PRIMA**: Contatori confusi
-- **DOPO**: "X entità analizzate di Y" con numero di set
-- Barra di progresso percentuale accurata
+### 9. Progress Bar with Clear Counters
+- **BEFORE**: Confusing counters
+- **AFTER**: "X entities analyzed of Y" with set number
+- Accurate percentage progress bar
 
-### 10. Notifiche Eleganti
-- **NUOVO**: Sistema di notifiche toast moderno
-- Diverse per successo/warning/errore
-- Auto-dismiss con animazioni fluide
+### 10. Elegant Notifications
+- **NEW**: Modern toast notification system
+- Different types for success/warning/error
+- Auto-dismiss with smooth animations
 
-## 🛠 Modifiche Tecniche
+## 🛠 Technical Changes
 
 ### Frontend (panel.js)
-- Aggiunta localizzazione completa
-- Nuovo sistema di notifiche
-- Salvataggio automatico tramite WebSocket
-- Gestione migliorata degli stati di scansione
-- Effetti di animazione per feedback utente
+- Complete localization added
+- New notification system
+- Automatic saving via WebSocket
+- Improved scan state management
+- Animation effects for user feedback
 
 ### Backend (__init__.py)
-- Nuovo endpoint WebSocket `hass_ai/save_ai_results`
-- Gestione formato dati migliorata per metadata
-- Supporto salvataggio incrementale
+- New WebSocket endpoint `hass_ai/save_ai_results`
+- Improved data format handling for metadata
+- Incremental saving support
 
 ### Intelligence (intelligence.py)
-- Prompt localizzati con classificazione management_type
-- Funzione fallback migliorata con nuovi campi
-- Validazione management_type nelle risposte AI
-- Supporto categoria e tipo gestione
+- Localized prompts with management_type classification
+- Improved fallback function with new fields
+- Management_type validation in AI responses
+- Category and management type support
 
-### Localizzazione
-- Messaggi completamente tradotti IT/EN
-- Rilevamento automatico lingua Home Assistant
-- Consistency tra frontend e backend
+### Localization
+- Completely translated messages IT/EN
+- Automatic Home Assistant language detection
+- Consistency between frontend and backend
 
-## 🎯 Risultato Finale
+## 🎯 Final Result
 
-L'esperienza utente è ora molto più fluida e informativa:
-1. ✅ Niente più popup fastidiosi
-2. ✅ Progresso chiaro e comprensibile  
-3. ✅ Risultati salvati automaticamente
-4. ✅ Feedback visivo immediato
-5. ✅ Analisi dettagliata per ogni entità
-6. ✅ Classificazione intelligente gestione/tipo
-7. ✅ Interfaccia completamente localizzata
+User experience is now much smoother and informative:
+1. ✅ No more annoying popups
+2. ✅ Clear and understandable progress  
+3. ✅ Automatically saved results
+4. ✅ Immediate visual feedback
+5. ✅ Detailed analysis for each entity
+6. ✅ Intelligent management/type classification
+7. ✅ Completely localized interface
+
+### Force Cache Refresh
+- Added version comments to panel.js to force browser refresh
+- Console.log added to verify new version loading
