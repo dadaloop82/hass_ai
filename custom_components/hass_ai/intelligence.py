@@ -65,6 +65,9 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"IMPORTANTE - Classifica anche il tipo di entità:\n"
             f"- DATA: Entità che forniscono informazioni (sensori, meteo, stato sistemi)\n"
             f"- CONTROL: Entità controllabili dall'utente (interruttori, luci, termostati)\n\n"
+            f"INOLTRE - Determina il tipo di gestione:\n"
+            f"- USER: Entità che un utente normale può e dovrebbe gestire (luci, interruttori, termostati)\n"
+            f"- SERVICE: Entità gestite automaticamente da servizi/integrazioni (sensori di sistema, diagnostiche)\n\n"
             f"Considera questi fattori:\n"
             f"- Tipo di dispositivo e funzionalità (dal dominio e device_class)\n"
             f"- Attributi che indicano potenziale per automazioni (caratteristiche controllabili)\n"
@@ -74,7 +77,7 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"- Complessità dell'integrazione vs valore per automazioni\n"
             f"- Distingui tra fonti di dati e dispositivi controllabili\n\n"
             f"Analizza sia lo stato dell'entità CHE i suoi attributi per una valutazione completa.\n"
-            f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating', 'reason' e 'category' (DATA o CONTROL).\n\n"
+            f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating', 'reason', 'category' (DATA o CONTROL) e 'management_type' (USER o SERVICE).\n\n"
             f"Entità da analizzare:\n" + "\n".join(entity_details)
         )
     else:
@@ -90,6 +93,9 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"IMPORTANT - Also classify the entity type:\n"
             f"- DATA: Entities that provide information (sensors, weather, system status)\n"
             f"- CONTROL: Entities controllable by user (switches, lights, thermostats)\n\n"
+            f"ALSO - Determine the management type:\n"
+            f"- USER: Entities that a normal user can and should manage (lights, switches, thermostats)\n"
+            f"- SERVICE: Entities managed automatically by services/integrations (system sensors, diagnostics)\n\n"
             f"Consider these factors:\n"
             f"- Device type and functionality (from domain and device_class)\n"
             f"- Attributes that indicate automation potential (controllable features)\n"
@@ -99,7 +105,7 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"- Integration complexity vs. automation value\n"
             f"- Distinguish between data sources and controllable devices\n\n"
             f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
-            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', 'reason', and 'category' (DATA or CONTROL).\n\n"
+            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', 'reason', 'category' (DATA or CONTROL), and 'management_type' (USER or SERVICE).\n\n"
             f"Entities to analyze:\n" + "\n".join(entity_details)
         )
 
@@ -431,12 +437,20 @@ async def _process_single_batch(
                         category = item.get("category", "UNKNOWN")
                         if category not in ["DATA", "CONTROL"]:
                             category = "UNKNOWN"
+                        
+                        # Get management_type, default to 'user' if not provided
+                        management_type = item.get("management_type", "user")
+                        if management_type.lower() not in ["user", "service"]:
+                            management_type = "user"
+                        else:
+                            management_type = management_type.lower()
                             
                         result = {
                             "entity_id": item["entity_id"],
                             "overall_weight": rating,
                             "overall_reason": item["reason"],
                             "category": category,
+                            "management_type": management_type,
                             "analysis_method": "ai_conversation",
                             "batch_number": batch_num,
                         }
@@ -528,6 +542,21 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
     # Use domain-based importance mapping
     importance = ENTITY_IMPORTANCE_MAP.get(domain, 2)
     
+    # Determine management type based on domain
+    user_managed_domains = {"light", "switch", "climate", "cover", "fan", "lock", "alarm_control_panel", "input_boolean", "input_number", "input_select", "input_text"}
+    service_managed_domains = {"sensor", "binary_sensor", "weather", "sun", "system_log", "automation", "script"}
+    
+    if domain in user_managed_domains:
+        management_type = "user"
+    elif domain in service_managed_domains:
+        management_type = "service"
+    else:
+        management_type = "user"  # Default to user for unknown domains
+    
+    # Determine category based on domain
+    data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker"}
+    category = "DATA" if domain in data_domains else "CONTROL"
+    
     reason_map = {
         0: "Entity marked as ignore - likely diagnostic or unnecessary",
         1: "Very low importance - rarely used in automations",
@@ -548,6 +577,8 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         "entity_id": entity_id,
         "overall_weight": importance,
         "overall_reason": fallback_reason,
+        "category": category,
+        "management_type": management_type,
         "analysis_method": analysis_method,
         "batch_number": batch_num,
     }

@@ -46,6 +46,20 @@ class HassAiPanel extends LitElement {
     this._loadAiResults();
   }
 
+  async _saveAiResults() {
+    try {
+      await this.hass.callWS({ 
+        type: "hass_ai/save_ai_results", 
+        results: this.entities,
+        timestamp: new Date().toISOString(),
+        total_entities: Object.keys(this.entities).length
+      });
+    } catch (error) {
+      const isItalian = (this.hass.language || navigator.language).startsWith('it');
+      console.error(isItalian ? 'Impossibile salvare i risultati AI:' : 'Failed to save AI results:', error);
+    }
+  }
+
   async _loadOverrides() {
     this.overrides = await this.hass.callWS({ type: "hass_ai/load_overrides" });
   }
@@ -73,12 +87,13 @@ class HassAiPanel extends LitElement {
         }
         
         if (Object.keys(this.entities).length > 0) {
-          console.log(`📂 Loaded ${Object.keys(this.entities).length} saved AI analysis results`);
+          console.log(`📂 ${isItalian ? 'Caricati' : 'Loaded'} ${Object.keys(this.entities).length} ${isItalian ? 'risultati di analisi AI salvati' : 'saved AI analysis results'}`);
           this.requestUpdate();
         }
       }
     } catch (error) {
-      console.log('No previous AI results found:', error);
+      const isItalian = (this.hass.language || navigator.language).startsWith('it');
+      console.log(isItalian ? 'Nessun risultato AI precedente trovato:' : 'No previous AI results found:', error);
     }
   }
 
@@ -87,9 +102,10 @@ class HassAiPanel extends LitElement {
     this.entities = {};
     
     // Initialize progress tracking
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
     this.scanProgress = {
       show: true,
-      message: '🚀 Avvio scansione...',
+      message: isItalian ? '🚀 Avvio scansione...' : '🚀 Starting scan...',
       currentBatch: 0,
       totalBatches: 0,
       entitiesProcessed: 0,
@@ -110,6 +126,8 @@ class HassAiPanel extends LitElement {
 
 
   _handleScanUpdate(message) {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
     if (message.type === "entity_result") {
       const entity = message.result;
       const isNewEntity = !this.entities[entity.entity_id];
@@ -118,6 +136,9 @@ class HassAiPanel extends LitElement {
       // Update entities processed count
       this.scanProgress.entitiesProcessed = Object.keys(this.entities).length;
       this.requestUpdate("entities");
+      
+      // Auto-save results as they come in
+      this._saveAiResults();
       
       // Add flash effect for new entities
       if (isNewEntity) {
@@ -170,8 +191,13 @@ class HassAiPanel extends LitElement {
         status: 'error'
       };
       
-      // Show elegant token limit notification
-      this._showTokenLimitNotification(message.data);
+      // Handle automatically without popup - just show a small notification
+      this._showSimpleNotification(
+        isItalian ? 
+          `⚠️ Limite token raggiunto. La scansione si è fermata al set ${message.data.batch}.` :
+          `⚠️ Token limit reached. Scan stopped at set ${message.data.batch}.`,
+        'warning'
+      );
       this.requestUpdate();
     }
     if (message.type === "scan_complete") {
@@ -181,7 +207,9 @@ class HassAiPanel extends LitElement {
         show: false, // Hide progress immediately on completion
         isComplete: true,
         status: 'complete',
-        message: `🎉 Scansione completata! Analizzate ${Object.keys(this.entities).length} entità`
+        message: isItalian ? 
+          `🎉 Scansione completata! Analizzate ${Object.keys(this.entities).length} entità` :
+          `🎉 Scan completed! Analyzed ${Object.keys(this.entities).length} entities`
       };
       
       // Update last scan info
@@ -190,6 +218,9 @@ class HassAiPanel extends LitElement {
         entityCount: Object.keys(this.entities).length
       };
       
+      // Final save of all results
+      this._saveAiResults();
+      
       // Show completion notification
       this._showCompletionNotification(Object.keys(this.entities).length);
       
@@ -197,11 +228,61 @@ class HassAiPanel extends LitElement {
     }
   }
 
-  _showBatchReductionNotification(data) {
-    // Use localized message from backend if available
-    const message = data.message || `🔄 Gruppo ridotto: ${data.old_size} → ${data.new_size} dispositivi (tentativo ${data.retry_attempt})`;
+  _showSimpleNotification(message, type = 'info') {
+    const colors = {
+      'info': '#2196f3',
+      'success': '#4caf50',
+      'warning': '#ff9800',
+      'error': '#f44336'
+    };
+
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: ${colors[type]};
+      color: white;
+      padding: 12px 16px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 9999;
+      font-size: 14px;
+      max-width: 350px;
+      transform: translateY(100%);
+      transition: transform 0.3s ease-out;
+    `;
     
-    console.log(`🔄 Batch Size Reduced: ${data.old_size} → ${data.new_size} (retry ${data.retry_attempt})`);
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => {
+      toast.style.transform = 'translateY(0)';
+    }, 100);
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+      toast.style.transform = 'translateY(100%)';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.remove();
+        }
+      }, 300);
+    }, 4000);
+  }
+
+  _showBatchReductionNotification(data) {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    // Use localized message from backend if available
+    const message = data.message || (isItalian ? 
+      `🔄 Gruppo ridotto: ${data.old_size} → ${data.new_size} dispositivi (tentativo ${data.retry_attempt})` :
+      `🔄 Group reduced: ${data.old_size} → ${data.new_size} devices (attempt ${data.retry_attempt})`);
+    
+    console.log(isItalian ? 
+      `🔄 Dimensione Gruppo Ridotta: ${data.old_size} → ${data.new_size} (tentativo ${data.retry_attempt})` :
+      `🔄 Batch Size Reduced: ${data.old_size} → ${data.new_size} (retry ${data.retry_attempt})`
+    );
     
     // Create a simple toast notification
     const toast = document.createElement('div');
@@ -241,9 +322,13 @@ class HassAiPanel extends LitElement {
   }
 
   _showCompletionNotification(entityCount) {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
     // Create completion toast notification
     const toast = document.createElement('div');
-    toast.textContent = `🎉 Scansione completata! Analizzate ${entityCount} entità`;
+    toast.textContent = isItalian ? 
+      `🎉 Scansione completata! Analizzate ${entityCount} entità` :
+      `🎉 Scan completed! Analyzed ${entityCount} entities`;
     toast.style.cssText = `
       position: fixed;
       top: 20px;
@@ -280,9 +365,12 @@ class HassAiPanel extends LitElement {
   }
 
   _showTokenLimitNotification(data) {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
     // Use localized messages from backend
-    const title = data.title || "Token Limit Raggiunti";
-    const message = data.message || `Scansione fermata al gruppo ${data.batch}. Riprova con gruppi più piccoli.`;
+    const title = data.title || (isItalian ? "Token Limit Raggiunti" : "Token Limit Reached");
+    const message = data.message || (isItalian ? 
+      `Scansione fermata al gruppo ${data.batch}. Riprova con gruppi più piccoli.` :
+      `Scan stopped at group ${data.batch}. Try again with smaller groups.`);
     
     // Create elegant token limit notification
     const toast = document.createElement('div');
@@ -342,7 +430,9 @@ class HassAiPanel extends LitElement {
     }, 8000);
     
     // Log details to console for debugging
-    console.log('🚨 HASS AI Token Limit Details:', {
+    console.log(isItalian ? 
+      '🚨 Dettagli HASS AI Token Limit:' : 
+      '🚨 HASS AI Token Limit Details:', {
       batch: data.batch,
       message: data.message,
       response: data.response
@@ -395,6 +485,7 @@ class HassAiPanel extends LitElement {
       scanning_button: "Scansione in corso...",
       enabled: "Abilitato",
       entity: "Entità",
+      type: "Tipo",
       ai_weight: "Peso IA",
       reason: "Motivazione AI",
       your_weight: "Tuo Peso",
@@ -406,6 +497,7 @@ class HassAiPanel extends LitElement {
       scanning_button: "Scanning...",
       enabled: "Enabled",
       entity: "Entity",
+      type: "Type",
       ai_weight: "AI Weight",
       reason: "AI Reason",
       your_weight: "Your Weight",
@@ -431,7 +523,7 @@ class HassAiPanel extends LitElement {
           return { 
             icon: 'mdi:help-circle', 
             color: '#9E9E9E', 
-            label: isItalian ? '?' : '?' 
+            label: isItalian ? 'Sconosciuto' : 'Unknown' 
           };
       }
     };
@@ -446,7 +538,7 @@ class HassAiPanel extends LitElement {
           
           ${this.lastScanInfo.entityCount > 0 ? html`
             <div class="last-scan-info">
-              📊 Ultima scansione: ${this.lastScanInfo.entityCount} entità analizzate
+              ${isItalian ? '📊 Ultima scansione:' : '📊 Last scan:'} ${this.lastScanInfo.entityCount} ${isItalian ? 'entità analizzate' : 'entities analyzed'}
               ${this.lastScanInfo.timestamp ? html`
                 <br><small>🕐 ${new Date(this.lastScanInfo.timestamp).toLocaleString()}</small>
               ` : ''}
@@ -469,19 +561,25 @@ class HassAiPanel extends LitElement {
               </div>
               <div class="progress-text">
                 ${this.scanProgress.totalEntities > 0 ? 
-                  `${this.scanProgress.entitiesProcessed} completate di ${this.scanProgress.totalEntities}` :
-                  'Preparazione scansione...'
+                  (isItalian ? 
+                    `${this.scanProgress.entitiesProcessed} entità analizzate di ${this.scanProgress.totalEntities}` :
+                    `${this.scanProgress.entitiesProcessed} entities analyzed of ${this.scanProgress.totalEntities}`
+                  ) :
+                  (isItalian ? 'Preparazione scansione...' : 'Preparing scan...')
                 }
-                ${this.scanProgress.currentBatch > 0 ? ` (Gruppo ${this.scanProgress.currentBatch})` : ''}
+                ${this.scanProgress.currentBatch > 0 ? 
+                  (isItalian ? ` (Set ${this.scanProgress.currentBatch})` : ` (Set ${this.scanProgress.currentBatch})`) : 
+                  ''
+                }
               </div>
             </div>
             
             ${this.scanProgress.status === 'requesting' ? html`
-              <div class="status-indicator">🔄 Invio richiesta...</div>
+              <div class="status-indicator">${isItalian ? '🔄 Invio richiesta...' : '🔄 Sending request...'}</div>
             ` : ''}
             
             ${this.scanProgress.status === 'processing' ? html`
-              <div class="status-indicator">⚙️ Elaborazione risposta...</div>
+              <div class="status-indicator">${isItalian ? '⚙️ Elaborazione risposta...' : '⚙️ Processing response...'}</div>
             ` : ''}
           </div>
         ` : ''}
@@ -495,7 +593,7 @@ class HassAiPanel extends LitElement {
                   <tr>
                     <th>${t.enabled}</th>
                     <th>${t.entity}</th>
-                    <th>Tipo</th>
+                    <th>${t.type}</th>
                     <th>${t.ai_weight}</th>
                     <th>${t.reason}</th>
                     <th>${t.your_weight} <span class="legend">${t.weight_legend}</span></th>
@@ -531,15 +629,29 @@ class HassAiPanel extends LitElement {
                           <div class="reason-text">${entity.overall_reason}</div>
                           ${entity.analysis_details ? html`
                             <details class="analysis-details">
-                              <summary>📋 Dettagli Analisi</summary>
+                              <summary>${isItalian ? '📋 Dettagli Analisi' : '📋 Analysis Details'}</summary>
                               <div class="analysis-content">
-                                <div><strong>Dominio:</strong> ${entity.analysis_details.domain || entity.entity_id.split('.')[0]}</div>
-                                <div><strong>Stato Attuale:</strong> ${entity.analysis_details.state || 'N/A'}</div>
-                                <div><strong>Attributi Chiave:</strong></div>
+                                <div><strong>${isItalian ? 'Dominio:' : 'Domain:'}</strong> ${entity.analysis_details.domain || entity.entity_id.split('.')[0]}</div>
+                                <div><strong>${isItalian ? 'Stato Attuale:' : 'Current State:'}</strong> ${entity.analysis_details.state || (isItalian ? 'N/D' : 'N/A')}</div>
+                                <div><strong>${isItalian ? 'Tipo Gestione:' : 'Management Type:'}</strong> 
+                                  <span class="management-type ${entity.management_type || 'unknown'}">
+                                    ${entity.management_type === 'user' ? 
+                                      (isItalian ? '👤 Gestita dall\'utente' : '👤 User-managed') : 
+                                      entity.management_type === 'service' ? 
+                                        (isItalian ? '🔧 Gestita da servizio' : '🔧 Service-managed') :
+                                        (isItalian ? '❓ Non determinato' : '❓ Undetermined')
+                                    }
+                                  </span>
+                                </div>
+                                <div><strong>${isItalian ? 'Attributi con Peso:' : 'Weighted Attributes:'}</strong></div>
                                 <ul class="attributes-list">
-                                  ${Object.entries(entity.analysis_details.attributes || {}).map(([key, value]) => html`
-                                    <li><code>${key}</code>: ${JSON.stringify(value)}</li>
-                                  `)}
+                                  ${Object.entries(entity.analysis_details.attributes || {}).map(([key, value]) => {
+                                    const weight = entity.attribute_weights && entity.attribute_weights[key] ? 
+                                      ` (${isItalian ? 'peso' : 'weight'}: ${entity.attribute_weights[key]})` : '';
+                                    return html`
+                                      <li><code>${key}</code>: ${JSON.stringify(value)}${weight}</li>
+                                    `;
+                                  })}
                                 </ul>
                               </div>
                             </details>
@@ -676,6 +788,28 @@ class HassAiPanel extends LitElement {
         padding: 1px 3px;
         border-radius: 2px;
         color: var(--info-color, #2196f3);
+      }
+      
+      .management-type {
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      
+      .management-type.user {
+        background-color: rgba(76, 175, 80, 0.1);
+        color: #4caf50;
+      }
+      
+      .management-type.service {
+        background-color: rgba(255, 152, 0, 0.1);
+        color: #ff9800;
+      }
+      
+      .management-type.unknown {
+        background-color: rgba(158, 158, 158, 0.1);
+        color: #9e9e9e;
       }
       
       .progress-section {

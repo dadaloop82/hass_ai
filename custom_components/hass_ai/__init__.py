@@ -21,7 +21,7 @@ AI_RESULTS_KEY = f"{DOMAIN}_ai_results"
 PANEL_URL_PATH = "hass-ai-panel"
 
 
-async def _save_ai_results(hass: HomeAssistant, results: list[dict]) -> None:
+async def _save_ai_results(hass: HomeAssistant, results) -> None:
     """Save AI analysis results to storage."""
     try:
         # Get the first config entry for this integration
@@ -30,15 +30,20 @@ async def _save_ai_results(hass: HomeAssistant, results: list[dict]) -> None:
         # Create a separate store for AI results
         ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
         
-        # Prepare data for storage
-        results_data = {
-            "last_scan_timestamp": hass.helpers.utcnow().isoformat(),
-            "total_entities": len(results),
-            "results": {result["entity_id"]: result for result in results}
-        }
+        # Handle both formats: list of results or already formatted data
+        if isinstance(results, list):
+            # Old format - convert to new format
+            results_data = {
+                "last_scan_timestamp": hass.helpers.utcnow().isoformat(),
+                "total_entities": len(results),
+                "results": {result["entity_id"]: result for result in results}
+            }
+        else:
+            # New format - use as is
+            results_data = results
         
         await ai_results_store.async_save(results_data)
-        _LOGGER.info(f"💾 Saved AI analysis results for {len(results)} entities")
+        _LOGGER.info(f"💾 Saved AI analysis results for {results_data['total_entities']} entities")
         
     except Exception as e:
         _LOGGER.error(f"Error saving AI results: {e}")
@@ -103,6 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_save_overrides)
     websocket_api.async_register_command(hass, handle_load_overrides)
     websocket_api.async_register_command(hass, handle_load_ai_results)
+    websocket_api.async_register_command(hass, handle_save_ai_results)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -263,6 +269,30 @@ async def handle_save_overrides(hass: HomeAssistant, connection: websocket_api.A
         
     except Exception as e:
         _LOGGER.error(f"Error saving overrides: {e}")
+        connection.send_message(websocket_api.error_message(msg["id"], "save_failed", str(e)))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/save_ai_results",
+    vol.Required("results"): dict,
+    vol.Optional("timestamp"): str,
+    vol.Optional("total_entities"): int,
+})
+@websocket_api.async_response
+async def handle_save_ai_results(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to save AI analysis results."""
+    try:
+        results_data = {
+            "results": msg["results"],
+            "last_scan_timestamp": msg.get("timestamp"),
+            "total_entities": msg.get("total_entities", len(msg["results"]))
+        }
+        
+        await _save_ai_results(hass, results_data)
+        connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error saving AI results: {e}")
         connection.send_message(websocket_api.error_message(msg["id"], "save_failed", str(e)))
 
 
