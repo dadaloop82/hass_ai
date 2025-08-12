@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import logging
 import time
 from datetime import timedelta, datetime
@@ -407,21 +408,51 @@ async def handle_evaluate_single_entity(hass: HomeAssistant, connection: websock
 })
 @websocket_api.async_response
 async def handle_find_correlations(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Handle the command to find correlations between entities using AI."""
+    """Handle the command to find correlations between entities using AI with progress tracking."""
     try:
         entities = msg["entities"]
         language = msg.get("language", "en")
         
-        _LOGGER.info(f"Finding correlations for {len(entities)} entities")
+        total_entities = len(entities)
+        _LOGGER.info(f"Finding correlations for {total_entities} entities")
+        
+        # Send initial progress
+        connection.send_message(websocket_api.event_message(
+            msg["id"], 
+            {
+                "type": "correlation_progress", 
+                "data": {
+                    "message": "🚀 Iniziando analisi correlazioni..." if language.startswith('it') else "🚀 Starting correlation analysis...",
+                    "current": 0,
+                    "total": total_entities,
+                    "percentage": 0
+                }
+            }
+        ))
         
         # Import the correlation analysis function
         from .intelligence import find_entity_correlations
         
         # Process entities one by one to find correlations
-        for entity in entities:
+        for index, entity in enumerate(entities, 1):
             entity_id = entity["entity_id"]
             
             try:
+                # Send progress update
+                connection.send_message(websocket_api.event_message(
+                    msg["id"], 
+                    {
+                        "type": "correlation_progress", 
+                        "data": {
+                            "message": f"🔍 Analizzando {entity_id}..." if language.startswith('it') else f"🔍 Analyzing {entity_id}...",
+                            "current": index,
+                            "total": total_entities,
+                            "percentage": round((index / total_entities) * 100),
+                            "entity_id": entity_id
+                        }
+                    }
+                ))
+                
                 # Find correlations for this entity against all others
                 correlations = await find_entity_correlations(
                     hass, entity, entities, language
@@ -439,12 +470,34 @@ async def handle_find_correlations(hass: HomeAssistant, connection: websocket_ap
                     }
                 ))
                 
+                # Small delay to show progress
+                await asyncio.sleep(0.5)
+                
             except Exception as e:
                 _LOGGER.error(f"Error finding correlations for {entity_id}: {e}")
                 
+                # Send error result
+                connection.send_message(websocket_api.event_message(
+                    msg["id"], 
+                    {
+                        "type": "correlation_result", 
+                        "result": {
+                            "entity_id": entity_id,
+                            "correlations": [],
+                            "error": str(e)
+                        }
+                    }
+                ))
+        
         # Send completion message
         connection.send_message(websocket_api.event_message(
-            msg["id"], {"type": "correlation_complete"}
+            msg["id"], {
+                "type": "correlation_complete",
+                "data": {
+                    "message": "🎉 Analisi correlazioni completata!" if language.startswith('it') else "🎉 Correlation analysis completed!",
+                    "total_processed": total_entities
+                }
+            }
         ))
         
         _LOGGER.info("Correlation analysis completed")

@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.9 - Updated 2025-08-12T19:00:00Z - CACHE BUSTER
-// Features: Enhanced progress tracking + Token limit recovery + Compact mode
-// Force reload timestamp: 1723486800000
+// HASS AI Panel v1.9.10 - Updated 2025-08-12T19:30:00Z - CACHE BUSTER
+// Features: Ultra-simplified correlation prompts + Progress tracking for correlations
+// Force reload timestamp: 1723488600000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -277,6 +277,20 @@ class HassAiPanel extends LitElement {
   _handleCorrelationUpdate(message) {
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     
+    if (message.type === "correlation_progress") {
+      // Update correlation progress
+      this.scanProgress = {
+        ...this.scanProgress,
+        show: true,
+        message: message.data.message,
+        currentBatch: message.data.current,
+        totalEntities: message.data.total,
+        entitiesProcessed: message.data.current,
+        status: 'processing'
+      };
+      this.requestUpdate();
+    }
+    
     if (message.type === "correlation_result") {
       const { entity_id, correlations } = message.result;
       this.correlations[entity_id] = correlations;
@@ -285,8 +299,14 @@ class HassAiPanel extends LitElement {
     
     if (message.type === "correlation_complete") {
       this.loading = false;
+      this.scanProgress = {
+        ...this.scanProgress,
+        show: false,
+        isComplete: true,
+        status: 'complete'
+      };
       this._showSimpleNotification(
-        isItalian ? '✅ Ricerca correlazioni completata!' : '✅ Correlation analysis completed!',
+        message.data?.message || (isItalian ? '✅ Ricerca correlazioni completata!' : '✅ Correlation analysis completed!'),
         'success'
       );
       this.requestUpdate();
@@ -294,6 +314,11 @@ class HassAiPanel extends LitElement {
 
     if (message.type === "correlation_error") {
       this.loading = false;
+      this.scanProgress = {
+        ...this.scanProgress,
+        show: false,
+        status: 'error'
+      };
       this._showSimpleNotification(
         isItalian ? '❌ Errore durante l\'analisi correlazioni' : '❌ Error during correlation analysis',
         'error'
