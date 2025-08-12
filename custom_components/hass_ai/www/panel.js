@@ -30,6 +30,7 @@ class HassAiPanel extends LitElement {
     this.language = 'en'; // Default language
     this.minWeight = 3; // Filter: minimum weight to show entities (default 3)
     this.searchTerm = ''; // Search filter
+    this.correlations = {}; // Store correlations for each entity
     this.scanProgress = {
       show: false,
       message: '',
@@ -48,7 +49,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.5 loaded - Unknown entities styling + Incremental scanning!');
+    console.log('🚀 HASS AI Panel v1.9.6 loaded - AI Correlations + Enhanced UX!');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
     this._loadOverrides();
@@ -176,46 +177,6 @@ class HassAiPanel extends LitElement {
     return isItalian ? "Avvia Nuova Scansione" : "Start New Scan";
   }
 
-  async _evaluateSingleEntity(entityId) {
-    // Evaluate a single entity using the same AI logic
-    const isItalian = (this.hass.language || navigator.language).startsWith('it');
-    
-    try {
-      this._showSimpleNotification(
-        isItalian ? `🔍 Valutazione ${entityId}...` : `🔍 Evaluating ${entityId}...`,
-        'info'
-      );
-
-      // Call the same WebSocket endpoint but with a single entity
-      // We'll need to add this endpoint or modify the existing one
-      await this.hass.connection.subscribeMessage(
-        (message) => {
-          if (message.type === "entity_result") {
-            const entity = message.result;
-            this.entities[entity.entity_id] = entity;
-            this.requestUpdate("entities");
-            this._saveAiResults();
-            
-            this._showSimpleNotification(
-              isItalian ? `✅ ${entityId} valutato!` : `✅ ${entityId} evaluated!`,
-              'success'
-            );
-          }
-        },
-        { 
-          type: "hass_ai/evaluate_single_entity",
-          entity_id: entityId,
-          language: this.hass.language || navigator.language || 'en'
-        }
-      );
-    } catch (error) {
-      this._showSimpleNotification(
-        isItalian ? `❌ Errore valutazione ${entityId}` : `❌ Error evaluating ${entityId}`,
-        'error'
-      );
-    }
-  }
-
   async _runScan() {
     this.loading = true;
     
@@ -253,6 +214,83 @@ class HassAiPanel extends LitElement {
         existing_entities: shouldScanOnlyNew ? Object.keys(this.entities) : []
       }
     );
+  }
+
+  async _findCorrelations() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    const filteredEntities = this._getFilteredEntities();
+    
+    if (filteredEntities.length === 0) {
+      this._showSimpleNotification(
+        isItalian ? '❌ Nessuna entità da analizzare con il filtro attuale' : '❌ No entities to analyze with current filter',
+        'error'
+      );
+      return;
+    }
+
+    // Ask user confirmation
+    const confirmed = confirm(
+      isItalian ? 
+        `🔍 Vuoi cercare le correlazioni tra ${filteredEntities.length} entità filtrate?\n\nQuesto potrebbe richiedere alcuni minuti.` :
+        `🔍 Do you want to find correlations between ${filteredEntities.length} filtered entities?\n\nThis might take several minutes.`
+    );
+    
+    if (!confirmed) return;
+
+    this.loading = true;
+    this._showSimpleNotification(
+      isItalian ? '🧠 Ricerca correlazioni in corso...' : '🧠 Finding correlations...',
+      'info'
+    );
+
+    try {
+      await this.hass.connection.subscribeMessage(
+        (message) => this._handleCorrelationUpdate(message),
+        { 
+          type: "hass_ai/find_correlations",
+          entities: filteredEntities.map(e => ({
+            entity_id: e.entity_id,
+            ai_weight: e.ai_weight,
+            reason: e.reason,
+            category: e.category
+          })),
+          language: this.hass.language || navigator.language || 'en'
+        }
+      );
+    } catch (error) {
+      this.loading = false;
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore durante la ricerca correlazioni' : '❌ Error finding correlations',
+        'error'
+      );
+    }
+  }
+
+  _handleCorrelationUpdate(message) {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    if (message.type === "correlation_result") {
+      const { entity_id, correlations } = message.result;
+      this.correlations[entity_id] = correlations;
+      this.requestUpdate();
+    }
+    
+    if (message.type === "correlation_complete") {
+      this.loading = false;
+      this._showSimpleNotification(
+        isItalian ? '✅ Ricerca correlazioni completata!' : '✅ Correlation analysis completed!',
+        'success'
+      );
+      this.requestUpdate();
+    }
+
+    if (message.type === "correlation_error") {
+      this.loading = false;
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore durante l\'analisi correlazioni' : '❌ Error during correlation analysis',
+        'error'
+      );
+    }
   }
 
 
@@ -672,9 +710,22 @@ class HassAiPanel extends LitElement {
       <ha-card .header=${t.title}>
         <div class="card-content">
           <p>${t.description}</p>
-          <ha-button raised @click=${this._runScan} .disabled=${this.loading || (this.scanProgress.show && !this.scanProgress.isComplete)}>
-            ${this._getScanButtonText()}
-          </ha-button>
+          <div class="button-row">
+            <ha-button raised @click=${this._runScan} .disabled=${this.loading || (this.scanProgress.show && !this.scanProgress.isComplete)}>
+              ${this._getScanButtonText()}
+            </ha-button>
+            
+            ${Object.keys(this.entities).length > 0 ? html`
+              <ha-button 
+                outlined 
+                @click=${this._findCorrelations} 
+                .disabled=${this.loading || this.scanProgress.show}
+                class="correlations-btn"
+              >
+                ${isItalian ? '🔍 Cerca Correlazioni' : '🔍 Find Correlations'}
+              </ha-button>
+            ` : ''}
+          </div>
           
           ${this.lastScanInfo.entityCount > 0 ? html`
             <div class="last-scan-info">
@@ -747,35 +798,16 @@ class HassAiPanel extends LitElement {
         ${(() => {
           const unevaluatedEntities = this._getUnevaluatedEntities();
           return unevaluatedEntities.length > 0 ? html`
-            <div class="unevaluated-panel">
+            <div class="unevaluated-panel-compact">
               <div class="filter-header">
                 <ha-icon icon="mdi:alert-circle"></ha-icon>
                 <span>${isItalian ? '⚠️ Entità Non Valutate' : '⚠️ Unevaluated Entities'}</span>
               </div>
-              <div class="unevaluated-content">
+              <div class="unevaluated-summary">
                 <p>${isItalian ? 
-                  `Trovate ${unevaluatedEntities.length} nuove entità non ancora valutate:` :
-                  `Found ${unevaluatedEntities.length} new entities not yet evaluated:`
+                  `${unevaluatedEntities.length} nuove entità non ancora valutate` :
+                  `${unevaluatedEntities.length} new entities not yet evaluated`
                 }</p>
-                <div class="unevaluated-list">
-                  ${unevaluatedEntities.slice(0, 10).map(entityId => html`
-                    <div class="unevaluated-item">
-                      <span class="entity-id">${entityId}</span>
-                      <ha-button 
-                        size="small" 
-                        @click=${() => this._evaluateSingleEntity(entityId)}
-                        class="evaluate-btn"
-                      >
-                        ${isItalian ? 'Valuta' : 'Evaluate'}
-                      </ha-button>
-                    </div>
-                  `)}
-                  ${unevaluatedEntities.length > 10 ? html`
-                    <div class="more-entities">
-                      ${isItalian ? `... e altre ${unevaluatedEntities.length - 10} entità` : `... and ${unevaluatedEntities.length - 10} more entities`}
-                    </div>
-                  ` : ''}
-                </div>
               </div>
             </div>
           ` : '';
@@ -795,15 +827,15 @@ class HassAiPanel extends LitElement {
                 </div>
               </div>
               <div class="progress-text">
-                ${this.scanProgress.totalEntities > 0 ? 
+                ${this.scanProgress.entitiesInBatch > 0 ? 
                   (isItalian ? 
-                    `${this.scanProgress.entitiesProcessed} entità analizzate di ${this.scanProgress.totalEntities}` :
-                    `${this.scanProgress.entitiesProcessed} entities analyzed of ${this.scanProgress.totalEntities}`
+                    `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entità in elaborazione` :
+                    `Set ${this.scanProgress.currentBatch}: ${this.scanProgress.entitiesInBatch} entities processing`
                   ) :
                   (isItalian ? 'Preparazione scansione...' : 'Preparing scan...')
                 }
-                ${this.scanProgress.currentBatch > 0 ? 
-                  (isItalian ? ` (Set ${this.scanProgress.currentBatch})` : ` (Set ${this.scanProgress.currentBatch})`) : 
+                ${this.scanProgress.remainingEntities > 0 ? 
+                  (isItalian ? ` (${this.scanProgress.remainingEntities} rimanenti)` : ` (${this.scanProgress.remainingEntities} remaining)`) : 
                   ''
                 }
               </div>
@@ -864,6 +896,23 @@ class HassAiPanel extends LitElement {
                       <td>
                         <div class="reason-section">
                           <div class="reason-text">${entity.overall_reason}</div>
+                          
+                          ${this.correlations[entity.entity_id] && this.correlations[entity.entity_id].length > 0 ? html`
+                            <div class="correlations-section">
+                              <strong>${isItalian ? '🔗 Correlazioni:' : '🔗 Correlations:'}</strong>
+                              <ul class="correlations-list">
+                                ${this.correlations[entity.entity_id].map(corr => html`
+                                  <li class="correlation-item">
+                                    <span class="correlation-entity">${corr.entity_id}</span>
+                                    <span class="correlation-type ${corr.correlation_type}">${corr.correlation_type}</span>
+                                    <span class="correlation-strength strength-${corr.strength}">★${corr.strength}</span>
+                                    <small class="correlation-reason">${corr.reason}</small>
+                                  </li>
+                                `)}
+                              </ul>
+                            </div>
+                          ` : ''}
+                          
                           ${entity.analysis_details ? html`
                             <details class="analysis-details">
                               <summary>${isItalian ? '📋 Dettagli Analisi' : '📋 Analysis Details'}</summary>
@@ -1404,6 +1453,36 @@ class HassAiPanel extends LitElement {
         box-shadow: 0 2px 4px rgba(255, 152, 0, 0.2);
       }
       
+      /* Compact version of unevaluated panel - just shows count */
+      .unevaluated-panel-compact {
+        background: rgba(255, 152, 0, 0.1);
+        border: 1px solid var(--warning-color, #ff9800);
+        border-radius: 6px;
+        margin: 16px;
+        padding: 12px;
+        text-align: center;
+      }
+      
+      .unevaluated-summary p {
+        margin: 0;
+        font-weight: 500;
+        color: var(--warning-color, #ff9800);
+      }
+      
+      /* Button row styling */
+      .button-row {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 16px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      
+      .correlations-btn {
+        --mdc-theme-primary: var(--accent-color, #2196f3);
+        --mdc-theme-on-primary: white;
+      }
+      
       .unevaluated-content p {
         margin: 0 0 12px 0;
         font-weight: 500;
@@ -1448,6 +1527,83 @@ class HassAiPanel extends LitElement {
         opacity: 0.4;
         background-color: rgba(128, 128, 128, 0.1);
         pointer-events: none;
+      }
+      
+      /* Correlations styling */
+      .correlations-section {
+        margin-top: 8px;
+        padding: 8px;
+        background: rgba(var(--rgb-primary-color), 0.05);
+        border-radius: 4px;
+        border-left: 3px solid var(--primary-color);
+      }
+      
+      .correlations-list {
+        list-style: none;
+        padding: 0;
+        margin: 4px 0 0 0;
+      }
+      
+      .correlation-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        font-size: 0.9em;
+        flex-wrap: wrap;
+      }
+      
+      .correlation-entity {
+        font-family: monospace;
+        font-weight: 500;
+        color: var(--primary-color);
+      }
+      
+      .correlation-type {
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.8em;
+        font-weight: 500;
+        text-transform: capitalize;
+      }
+      
+      .correlation-type.functional {
+        background: #e3f2fd;
+        color: #1976d2;
+      }
+      
+      .correlation-type.location {
+        background: #f3e5f5;
+        color: #7b1fa2;
+      }
+      
+      .correlation-type.temporal {
+        background: #e8f5e8;
+        color: #388e3c;
+      }
+      
+      .correlation-type.data_dependency {
+        background: #fff3e0;
+        color: #f57c00;
+      }
+      
+      .correlation-strength {
+        font-weight: 500;
+        padding: 1px 4px;
+        border-radius: 2px;
+        font-size: 0.8em;
+      }
+      
+      .correlation-strength.strength-1 { background: #ffebee; color: #c62828; }
+      .correlation-strength.strength-2 { background: #fff3e0; color: #ef6c00; }
+      .correlation-strength.strength-3 { background: #fffde7; color: #f9a825; }
+      .correlation-strength.strength-4 { background: #f1f8e9; color: #689f38; }
+      .correlation-strength.strength-5 { background: #e8f5e8; color: #388e3c; }
+      
+      .correlation-reason {
+        color: var(--secondary-text-color);
+        font-style: italic;
+        flex: 1;
       }
       
       .entity-unavailable td {

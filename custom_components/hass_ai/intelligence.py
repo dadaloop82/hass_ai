@@ -655,3 +655,76 @@ async def _query_local_agent(hass: HomeAssistant, prompt: str, conversation_agen
         return """[
 {"entity_id": "fallback", "rating": 2, "reason": "Servizio conversazione non disponibile - verifica configurazione agente in Impostazioni > Assistenti vocali"}
 ]"""
+
+
+async def find_entity_correlations(hass: HomeAssistant, target_entity: dict, all_entities: list[dict], language: str) -> list[dict]:
+    """Find correlations between a target entity and other entities using AI."""
+    try:
+        target_id = target_entity["entity_id"]
+        target_weight = target_entity["ai_weight"]
+        target_reason = target_entity["reason"]
+        target_category = target_entity["category"]
+        
+        # Only consider entities with weight >= target's weight for correlations
+        candidate_entities = [e for e in all_entities if e["entity_id"] != target_id and e["ai_weight"] >= target_weight]
+        
+        if not candidate_entities:
+            return []
+        
+        # Create a concise prompt for correlation analysis
+        is_italian = language.startswith('it')
+        
+        if is_italian:
+            prompt = f"""Analizza se l'entità "{target_id}" (categoria: {target_category}, peso: {target_weight}, motivo: {target_reason}) potrebbe essere correlata con queste altre entità importanti:
+
+{chr(10).join([f"- {e['entity_id']} (categoria: {e['category']}, peso: {e['ai_weight']}, motivo: {e['reason']})" for e in candidate_entities[:10]])}
+
+Rispondi SOLO con un JSON array di correlazioni trovate. Ogni correlazione deve avere:
+- "entity_id": ID dell'entità correlata
+- "correlation_type": "functional" | "location" | "temporal" | "data_dependency" 
+- "strength": numero da 1-5 (5=molto forte)
+- "reason": breve spiegazione della correlazione
+
+Se non trovi correlazioni, rispondi con array vuoto: []"""
+        else:
+            prompt = f"""Analyze if entity "{target_id}" (category: {target_category}, weight: {target_weight}, reason: {target_reason}) could be correlated with these other important entities:
+
+{chr(10).join([f"- {e['entity_id']} (category: {e['category']}, weight: {e['ai_weight']}, reason: {e['reason']})" for e in candidate_entities[:10]])}
+
+Reply ONLY with a JSON array of found correlations. Each correlation must have:
+- "entity_id": ID of correlated entity  
+- "correlation_type": "functional" | "location" | "temporal" | "data_dependency"
+- "strength": number 1-5 (5=very strong)
+- "reason": brief explanation of correlation
+
+If no correlations found, reply with empty array: []"""
+        
+        # Query AI for correlations
+        response_text = await _query_local_agent(hass, prompt)
+        
+        # Parse the response
+        try:
+            correlations = json.loads(response_text.strip())
+            if isinstance(correlations, list):
+                # Validate and clean up correlations
+                valid_correlations = []
+                for corr in correlations:
+                    if (isinstance(corr, dict) and 
+                        "entity_id" in corr and 
+                        "correlation_type" in corr and 
+                        "strength" in corr and 
+                        "reason" in corr):
+                        valid_correlations.append(corr)
+                
+                _LOGGER.info(f"Found {len(valid_correlations)} correlations for {target_id}")
+                return valid_correlations
+            else:
+                _LOGGER.warning(f"Invalid correlation response format for {target_id}")
+                return []
+        except json.JSONDecodeError as e:
+            _LOGGER.error(f"Failed to parse correlation response for {target_id}: {e}")
+            return []
+            
+    except Exception as e:
+        _LOGGER.error(f"Error finding correlations for {target_entity.get('entity_id', 'unknown')}: {e}")
+        return []
