@@ -49,7 +49,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.6 loaded - AI Correlations + Enhanced UX!');
+    console.log('🚀 HASS AI Panel v1.9.7 loaded - Sequential Analysis Steps + Enhanced UX!');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
     this._loadOverrides();
@@ -228,11 +228,19 @@ class HassAiPanel extends LitElement {
       return;
     }
 
-    // Ask user confirmation
+    // Ask user confirmation with filter explanation
     const confirmed = confirm(
       isItalian ? 
-        `🔍 Vuoi cercare le correlazioni tra ${filteredEntities.length} entità filtrate?\n\nQuesto potrebbe richiedere alcuni minuti.` :
-        `🔍 Do you want to find correlations between ${filteredEntities.length} filtered entities?\n\nThis might take several minutes.`
+        `🔍 Ricerca Correlazioni AI\n\n` +
+        `Verranno analizzate ${filteredEntities.length} entità con peso ≥ ${this.minWeight}.\n\n` +
+        `💡 Suggerimento: Usa il "Peso Minimo" nel filtro sopra per escludere entità di poco valore e concentrare l'analisi su quelle più importanti.\n\n` +
+        `Nota: La ricerca testuale non influisce sulla selezione delle entità.\n\n` +
+        `Continuare con l'analisi? (potrebbe richiedere alcuni minuti)` :
+        `🔍 AI Correlation Analysis\n\n` +
+        `Will analyze ${filteredEntities.length} entities with weight ≥ ${this.minWeight}.\n\n` +
+        `💡 Tip: Use "Minimum Weight" filter above to exclude low-value entities and focus analysis on important ones.\n\n` +
+        `Note: Text search doesn't affect entity selection.\n\n` +
+        `Continue with analysis? (may take several minutes)`
     );
     
     if (!confirmed) return;
@@ -250,8 +258,8 @@ class HassAiPanel extends LitElement {
           type: "hass_ai/find_correlations",
           entities: filteredEntities.map(e => ({
             entity_id: e.entity_id,
-            ai_weight: e.ai_weight,
-            reason: e.reason,
+            ai_weight: this.overrides[e.entity_id]?.overall_weight ?? e.overall_weight,
+            reason: e.overall_reason,
             category: e.category
           })),
           language: this.hass.language || navigator.language || 'en'
@@ -710,21 +718,32 @@ class HassAiPanel extends LitElement {
       <ha-card .header=${t.title}>
         <div class="card-content">
           <p>${t.description}</p>
-          <div class="button-row">
-            <ha-button raised @click=${this._runScan} .disabled=${this.loading || (this.scanProgress.show && !this.scanProgress.isComplete)}>
-              ${this._getScanButtonText()}
-            </ha-button>
+          <div class="analysis-steps">
+            <div class="step-item ${Object.keys(this.entities).length === 0 ? 'active' : 'completed'}">
+              <span class="step-number">1</span>
+              <ha-button 
+                raised 
+                @click=${this._runScan} 
+                .disabled=${this.loading || (this.scanProgress.show && !this.scanProgress.isComplete)}
+                class="step-button"
+              >
+                ${this._getScanButtonText()}
+              </ha-button>
+            </div>
             
-            ${Object.keys(this.entities).length > 0 ? html`
+            <div class="step-arrow ${Object.keys(this.entities).length > 0 ? 'visible' : ''}">→</div>
+            
+            <div class="step-item ${Object.keys(this.entities).length > 0 ? 'active' : 'disabled'}">
+              <span class="step-number">2</span>
               <ha-button 
                 outlined 
                 @click=${this._findCorrelations} 
-                .disabled=${this.loading || this.scanProgress.show}
-                class="correlations-btn"
+                .disabled=${this.loading || this.scanProgress.show || Object.keys(this.entities).length === 0}
+                class="step-button correlations-btn"
               >
                 ${isItalian ? '🔍 Cerca Correlazioni' : '🔍 Find Correlations'}
               </ha-button>
-            ` : ''}
+            </div>
           </div>
           
           ${this.lastScanInfo.entityCount > 0 ? html`
@@ -798,17 +817,9 @@ class HassAiPanel extends LitElement {
         ${(() => {
           const unevaluatedEntities = this._getUnevaluatedEntities();
           return unevaluatedEntities.length > 0 ? html`
-            <div class="unevaluated-panel-compact">
-              <div class="filter-header">
-                <ha-icon icon="mdi:alert-circle"></ha-icon>
-                <span>${isItalian ? '⚠️ Entità Non Valutate' : '⚠️ Unevaluated Entities'}</span>
-              </div>
-              <div class="unevaluated-summary">
-                <p>${isItalian ? 
-                  `${unevaluatedEntities.length} nuove entità non ancora valutate` :
-                  `${unevaluatedEntities.length} new entities not yet evaluated`
-                }</p>
-              </div>
+            <div class="unevaluated-compact">
+              <ha-icon icon="mdi:alert-circle"></ha-icon>
+              <span>${isItalian ? `⚠️ ${unevaluatedEntities.length} entità non valutate` : `⚠️ ${unevaluatedEntities.length} unevaluated entities`}</span>
             </div>
           ` : '';
         })()}
@@ -1453,34 +1464,84 @@ class HassAiPanel extends LitElement {
         box-shadow: 0 2px 4px rgba(255, 152, 0, 0.2);
       }
       
-      /* Compact version of unevaluated panel - just shows count */
-      .unevaluated-panel-compact {
-        background: rgba(255, 152, 0, 0.1);
-        border: 1px solid var(--warning-color, #ff9800);
-        border-radius: 6px;
-        margin: 16px;
-        padding: 12px;
-        text-align: center;
-      }
-      
-      .unevaluated-summary p {
-        margin: 0;
-        font-weight: 500;
-        color: var(--warning-color, #ff9800);
-      }
-      
-      /* Button row styling */
-      .button-row {
+      /* Analysis Steps styling */
+      .analysis-steps {
         display: flex;
-        gap: 12px;
-        margin-bottom: 16px;
         align-items: center;
-        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 16px;
+        padding: 16px;
+        background: var(--card-background-color);
+        border-radius: 8px;
+        border: 1px solid var(--divider-color);
       }
       
-      .correlations-btn {
-        --mdc-theme-primary: var(--accent-color, #2196f3);
-        --mdc-theme-on-primary: white;
+      .step-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        opacity: 0.6;
+        transition: opacity 0.3s;
+      }
+      
+      .step-item.active {
+        opacity: 1;
+      }
+      
+      .step-item.completed {
+        opacity: 1;
+      }
+      
+      .step-item.completed .step-number {
+        background: var(--success-color, #4caf50);
+        color: white;
+      }
+      
+      .step-number {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        color: white;
+        font-weight: 500;
+        font-size: 12px;
+      }
+      
+      .step-arrow {
+        font-size: 18px;
+        color: var(--primary-color);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      
+      .step-arrow.visible {
+        opacity: 1;
+      }
+      
+      .step-button {
+        margin: 0;
+      }
+      
+      /* Ultra compact unevaluated entities - single line */
+      .unevaluated-compact {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        margin: 8px 16px;
+        background: rgba(255, 152, 0, 0.1);
+        border-left: 3px solid var(--warning-color, #ff9800);
+        border-radius: 3px;
+        color: var(--warning-color, #ff9800);
+        font-size: 0.9em;
+        font-weight: 500;
+      }
+      
+      .unevaluated-compact ha-icon {
+        --mdc-icon-size: 16px;
       }
       
       .unevaluated-content p {
