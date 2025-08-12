@@ -21,6 +21,7 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 INTELLIGENCE_DATA_KEY = f"{DOMAIN}_intelligence_data"
 AI_RESULTS_KEY = f"{DOMAIN}_ai_results"
+CORRELATIONS_KEY = f"{DOMAIN}_correlations"
 PANEL_URL_PATH = "hass-ai-panel"
 
 # Cache busting timestamp
@@ -53,6 +54,42 @@ async def _save_ai_results(hass: HomeAssistant, results) -> None:
         
     except Exception as e:
         _LOGGER.error(f"Error saving AI results: {e}")
+
+
+async def _save_correlations(hass: HomeAssistant, correlations) -> None:
+    """Save correlation analysis results to storage."""
+    try:
+        correlations_store = storage.Store(hass, STORAGE_VERSION, CORRELATIONS_KEY)
+        
+        correlations_data = {
+            "last_correlation_timestamp": dt.utcnow().isoformat(),
+            "total_entities": len(correlations),
+            "correlations": correlations
+        }
+        
+        await correlations_store.async_save(correlations_data)
+        _LOGGER.info(f"💾 Saved correlations for {correlations_data['total_entities']} entities")
+        
+    except Exception as e:
+        _LOGGER.error(f"Error saving correlations: {e}")
+
+
+async def _load_correlations(hass: HomeAssistant) -> dict:
+    """Load correlation analysis results from storage."""
+    try:
+        correlations_store = storage.Store(hass, STORAGE_VERSION, CORRELATIONS_KEY)
+        correlations_data = await correlations_store.async_load()
+        
+        if correlations_data:
+            _LOGGER.info(f"📂 Loaded correlations for {correlations_data.get('total_entities', 0)} entities from {correlations_data.get('last_correlation_timestamp', 'unknown time')}")
+            return correlations_data.get("correlations", {})
+        else:
+            _LOGGER.info("📂 No previous correlations found")
+            return {}
+            
+    except Exception as e:
+        _LOGGER.error(f"Error loading correlations: {e}")
+        return {}
 
 
 async def _load_ai_results(hass: HomeAssistant) -> dict:
@@ -116,6 +153,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_load_ai_results)
     websocket_api.async_register_command(hass, handle_save_ai_results)
     websocket_api.async_register_command(hass, handle_find_correlations)
+    websocket_api.async_register_command(hass, handle_save_correlations)
+    websocket_api.async_register_command(hass, handle_load_correlations)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -416,6 +455,9 @@ async def handle_find_correlations(hass: HomeAssistant, connection: websocket_ap
         total_entities = len(entities)
         _LOGGER.info(f"Finding correlations for {total_entities} entities")
         
+        # Initialize correlations dictionary to collect results
+        all_correlations = {}
+        
         # Send initial progress
         connection.send_message(websocket_api.event_message(
             msg["id"], 
@@ -458,6 +500,9 @@ async def handle_find_correlations(hass: HomeAssistant, connection: websocket_ap
                     hass, entity, entities, language
                 )
                 
+                # Store correlations in our collection
+                all_correlations[entity_id] = correlations
+                
                 # Send result for this entity
                 connection.send_message(websocket_api.event_message(
                     msg["id"], 
@@ -470,11 +515,17 @@ async def handle_find_correlations(hass: HomeAssistant, connection: websocket_ap
                     }
                 ))
                 
+                # Auto-save correlations as they come in (incremental save)
+                await _save_correlations(hass, all_correlations)
+                
                 # Small delay to show progress
                 await asyncio.sleep(0.5)
                 
             except Exception as e:
                 _LOGGER.error(f"Error finding correlations for {entity_id}: {e}")
+                
+                # Store empty correlations for this entity
+                all_correlations[entity_id] = []
                 
                 # Send error result
                 connection.send_message(websocket_api.event_message(
@@ -488,6 +539,9 @@ async def handle_find_correlations(hass: HomeAssistant, connection: websocket_ap
                         }
                     }
                 ))
+        
+        # Final save of all correlations
+        await _save_correlations(hass, all_correlations)
         
         # Send completion message
         connection.send_message(websocket_api.event_message(
@@ -506,4 +560,45 @@ async def handle_find_correlations(hass: HomeAssistant, connection: websocket_ap
         _LOGGER.error(f"Error in correlation analysis: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "correlation_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/save_correlations",
+    vol.Required("correlations"): dict,
+    vol.Optional("timestamp"): str,
+    vol.Optional("total_entities"): int,
+})
+@websocket_api.async_response
+async def handle_save_correlations(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to save correlation results."""
+    try:
+        correlations = msg["correlations"]
+        
+        await _save_correlations(hass, correlations)
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error saving correlations: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "save_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/load_correlations",
+})
+@websocket_api.async_response
+async def handle_load_correlations(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to load correlation results."""
+    try:
+        correlations = await _load_correlations(hass)
+        
+        connection.send_message(websocket_api.result_message(msg["id"], correlations))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error loading correlations: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "load_error", str(e)
         ))

@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.10 - Updated 2025-08-12T19:30:00Z - CACHE BUSTER
-// Features: Ultra-simplified correlation prompts + Progress tracking for correlations
-// Force reload timestamp: 1723488600000
+// HASS AI Panel v1.9.11 - Updated 2025-08-12T20:00:00Z - CACHE BUSTER
+// Features: Auto-save correlations + Load correlations on startup + Progress tracking
+// Force reload timestamp: 1723490400000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -49,11 +49,12 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.8 loaded - Fixed correlations + progress + layout!');
+    console.log('🚀 HASS AI Panel v1.9.10 loaded - Enhanced correlations + auto-save!');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
     this._loadOverrides();
     this._loadAiResults();
+    this._loadCorrelations();
   }
 
   async _saveAiResults() {
@@ -70,8 +71,39 @@ class HassAiPanel extends LitElement {
     }
   }
 
+  async _saveCorrelations() {
+    try {
+      await this.hass.callWS({ 
+        type: "hass_ai/save_correlations", 
+        correlations: this.correlations,
+        timestamp: new Date().toISOString(),
+        total_entities: Object.keys(this.correlations).length
+      });
+    } catch (error) {
+      const isItalian = (this.hass.language || navigator.language).startsWith('it');
+      console.error(isItalian ? 'Impossibile salvare le correlazioni:' : 'Failed to save correlations:', error);
+    }
+  }
+
   async _loadOverrides() {
     this.overrides = await this.hass.callWS({ type: "hass_ai/load_overrides" });
+  }
+
+  async _loadCorrelations() {
+    try {
+      const correlations = await this.hass.callWS({ type: "hass_ai/load_correlations" });
+      if (correlations && Object.keys(correlations).length > 0) {
+        this.correlations = correlations;
+        const isItalian = (this.hass.language || navigator.language).startsWith('it');
+        console.log(isItalian ? 
+          `📂 Caricate ${Object.keys(correlations).length} correlazioni salvate` : 
+          `📂 Loaded ${Object.keys(correlations).length} saved correlations`
+        );
+        this.requestUpdate();
+      }
+    } catch (error) {
+      console.error('Failed to load correlations:', error);
+    }
   }
 
   async _loadAiResults() {
@@ -294,6 +326,10 @@ class HassAiPanel extends LitElement {
     if (message.type === "correlation_result") {
       const { entity_id, correlations } = message.result;
       this.correlations[entity_id] = correlations;
+      
+      // Auto-save correlations as they come in
+      this._saveCorrelations();
+      
       this.requestUpdate();
     }
     
