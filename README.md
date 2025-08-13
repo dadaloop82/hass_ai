@@ -5,10 +5,13 @@
 ## 🚀 Key Features
 
 - **Automatic AI Analysis**: Intelligent entity evaluation based on type, name, attributes, and historical data
-- **Interactive Interface**: Dedicated panel with intuitive controls to manage entity importance  
+- **Three Entity Categories**: Smart classification into DATA, CONTROL, and HEALTH types
+- **Health Monitoring**: Proactive detection of device problems, anomalies, and alerts
+- **Interactive Interface**: Dedicated panel with intuitive controls and advanced filtering
 - **Complete Transparency**: Clear explanations of why each entity received a specific score
 - **User Control**: Complete override of AI evaluations to adapt them to your needs
-- **Persistence**: All customizations are automatically saved
+- **Advanced Filtering**: Filter by category, importance weight, and search terms
+- **Persistence**: All customizations and correlations automatically saved
 - **Multilingual Support**: Interface available in Italian and English
 
 ## 🏠 How It Works
@@ -24,15 +27,19 @@ The system integrates with **any** Home Assistant conversation agent to provide 
 ### 📊 **Intelligent Analysis Process**
 1. **Auto-Detection**: Automatically finds and uses your preferred conversation agent
 2. **Analyze** all system entities using your chosen AI
-3. **Evaluate** their importance on a 0-5 scale:
+3. **Categorize** entities into three types:
+   - 📊 **DATA** - Information providers (sensors, weather, system status)
+   - 🎛️ **CONTROL** - User-controllable devices (lights, switches, thermostats)  
+   - 🏥 **HEALTH** - Problem indicators (offline devices, low battery, anomalies)
+4. **Evaluate** their importance on a 0-5 scale:
    - 0 = Ignore (diagnostic/unnecessary)
    - 1 = Very Low (rarely useful)
    - 2 = Low (occasionally useful) 
    - 3 = Medium (commonly useful)
    - 4 = High (frequently important)
    - 5 = Critical (essential for automations)
-4. **Provide** detailed reasons for each evaluation
-5. **Allow** complete user customizations
+5. **Provide** detailed reasons for each evaluation
+6. **Allow** complete user customizations and advanced filtering
 
 ## 📦 Installation
 
@@ -98,11 +105,31 @@ HASS AI will automatically stop scanning and show helpful suggestions if limits 
 
 After installation, you'll find a new "HASS AI" panel in the sidebar:
 
-- **Start Scan**: Analyze all system entities
-- **Interactive Table**: View and modify entity weights
-- **Analysis Log**: See details of AI evaluations
+- **Start Scan**: Analyze all system entities with AI categorization
+- **Advanced Filtering**: Filter by category (ALL/DATA/CONTROL/HEALTH), importance weight, and search terms
+- **Interactive Table**: View and modify entity weights with category badges
+- **Health Monitoring**: Dedicated view for device problems and anomalies
+- **Correlation Analysis**: Find related entities and their connections
+- **Analysis Log**: See details of AI evaluations with explanations
 
-### 2. Available Services
+### 2. Entity Categories
+
+The system automatically categorizes entities into three types:
+
+- 📊 **DATA**: Information sources like sensors, weather stations, system monitors
+- 🎛️ **CONTROL**: User-controllable devices like lights, switches, thermostats
+- 🏥 **HEALTH**: Problem indicators like offline devices, low batteries, connection errors
+
+### 3. Health Monitoring Examples
+
+The AI automatically detects health issues such as:
+- 🔋 Battery levels below 20%
+- ⚠️ Devices with 'unavailable' or 'unknown' states
+- 🌡️ Temperature sensors with anomalous readings
+- 📶 Poor WiFi signal strength
+- 🔌 Connection timeouts and errors
+
+### 4. Available Services
 
 The integration exposes several services usable in automations:
 
@@ -124,7 +151,7 @@ data:
   confirm: true
 ```
 
-### 3. Example Automations
+### 5. Example Automations
 
 ```yaml
 # Automation for custom periodic scanning

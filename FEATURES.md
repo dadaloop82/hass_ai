@@ -1,5 +1,45 @@
 # HASS AI Features
 
+## V1.9.12: Health Monitoring & Advanced Entity Categorization
+
+This version introduces an intelligent health monitoring system that proactively identifies device problems and anomalies alongside enhanced entity categorization.
+
+### 🏥 **Health Monitoring System**
+- **🚨 Automatic Problem Detection**: AI identifies device issues, low batteries, offline devices, and anomalies
+- **📊 Three Entity Categories**: Smart classification into DATA, CONTROL, and HEALTH types
+- **🎯 Proactive Monitoring**: Focus on device health with dedicated HEALTH category filtering
+- **⚠️ Anomaly Detection**: Identifies unusual states, connection problems, and sensor anomalies
+
+### 🎛️ **Advanced Filtering & Organization**
+- **🔍 Category Filtering**: Filter entities by ALL, DATA, CONTROL, or HEALTH categories
+- **🏥 Health Dashboard**: Dedicated view for monitoring device problems and alerts
+- **📈 Weight-Based Prioritization**: Combine category filtering with importance weights
+- **🔎 Enhanced Search**: Multi-criteria filtering with persistent user preferences
+
+### 🎨 **Enhanced User Interface**
+- **🎨 Category Badges**: Color-coded badges with intuitive icons for each category type
+- **🏥 Health Indicators**: Orange HEALTH badges with heart-pulse icons for immediate problem identification
+- **📊 DATA Badges**: Blue chart-line icons for information-providing entities
+- **🎛️ CONTROL Badges**: Green tune icons for user-controllable devices
+
+### 🧠 **Intelligent AI Prompts**
+- **🔍 Health Pattern Recognition**: AI specifically looks for unavailable states, low batteries, and anomalies
+- **📊 Automatic Categorization**: Intelligent classification of entities into appropriate categories
+- **⚡ Optimized Analysis**: Enhanced prompts for better accuracy and faster processing
+- **🌐 Multilingual Support**: Health monitoring works in both Italian and English
+
+---
+
+## V1.9.11: Correlation Auto-Save & Enhanced Persistence
+
+### 🔄 **Auto-Save Correlations**
+- **💾 Automatic Persistence**: Correlations saved incrementally during analysis
+- **🚀 Startup Loading**: Auto-load saved correlations on panel startup
+- **📈 Progress Tracking**: Real-time progress indicators with detailed feedback
+- **🛡️ Error Recovery**: Robust error handling with fallback mechanisms
+
+---
+
 ## V1.7.0: Universal Conversation Agent Support & Local Agent Architecture
 
 This version introduces a completely redesigned agent selection system that works with **any** conversation agent provider, eliminating dependencies and assumptions about specific AI services.

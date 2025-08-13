@@ -36,10 +36,13 @@ hass_ai/
 
 ### 2. **intelligence.py** - AI Engine
 - Entity batch analysis (configurable batch size)
+- Three-category classification system (DATA/CONTROL/HEALTH)
+- Health monitoring and anomaly detection
 - Conversation agent integration 
 - Domain-based fallback
 - Robust error handling
 - Importance classification 0-5
+- Multilingual AI prompts with health pattern recognition
 
 ### 3. **config_flow.py** - Configuration
 - Initial configuration flow
@@ -78,9 +81,11 @@ graph TD
 
 ## 🎯 AI Evaluation Logic
 
-### Prompt Template
+### Enhanced Prompt Template (v1.9.12)
 ```
-"As a Home Assistant expert, analyze these {N} entities and rate their automation importance on a scale of 0-5:
+"As a Home Assistant expert, analyze these {N} entities and their attributes to rate their automation importance on a scale of 0-5:
+
+Rating Scale:
 0 = Ignore (diagnostic/unnecessary)
 1 = Very Low (rarely useful)  
 2 = Low (occasionally useful)
@@ -88,9 +93,21 @@ graph TD
 4 = High (frequently important)
 5 = Critical (essential for automations)
 
+IMPORTANT - Classify the entity type:
+- DATA: Entities that provide information (sensors, weather, system status)
+- CONTROL: Entities controllable by user (switches, lights, thermostats)
+- HEALTH: States/attributes indicating problems, alerts, anomalies or critical device conditions
+
 Consider: device type, location relevance, automation potential, security importance.
-Respond in strict JSON format as an array of objects with 'entity_id', 'rating', and 'reason'."
+For HEALTH: look for 'unavailable', 'unknown' states, low battery (<20%), anomalous temperatures, connection errors, offline devices, weak signals.
+
+Respond in strict JSON format as an array of objects with 'entity_id', 'rating', 'reason', 'category' (DATA, CONTROL, or HEALTH), and 'management_type' (USER or SERVICE)."
 ```
+
+### Three-Category Classification System
+- **📊 DATA**: Information providers (sensors, weather stations, system monitors)
+- **🎛️ CONTROL**: User-controllable devices (lights, switches, thermostats, covers)
+- **🏥 HEALTH**: Problem indicators (offline devices, low batteries, connection errors, anomalies)
 
 ### Domain Mapping (Fallback)
 ```python

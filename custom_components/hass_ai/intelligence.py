@@ -18,6 +18,10 @@ from homeassistant.exceptions import HomeAssistantError
 
 _LOGGER = logging.getLogger(__name__)
 
+def _estimate_tokens(text: str) -> int:
+    """Estimate token count for text (rough approximation: 1 token ≈ 4 characters)."""
+    return len(text) // 4
+
 def _get_localized_message(message_key: str, language: str, **kwargs) -> str:
     """Get localized messages based on language."""
     is_italian = language.startswith('it')
@@ -75,67 +79,27 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             )
     
     if is_italian:
-        return (
-            f"Come esperto di Home Assistant, analizza queste {len(batch_states)} entità e i loro attributi per valutare la loro importanza per le automazioni su una scala da 0-5:\n\n"
-            f"Scala di Valutazione:\n"
-            f"0 = Ignora (diagnostica/non necessaria per automazioni)\n"
-            f"1 = Molto Bassa (raramente utile, principalmente informativa)\n"
-            f"2 = Bassa (occasionalmente utile, piccola comodità)\n"
-            f"3 = Media (comunemente utile, buon potenziale per automazioni)\n"
-            f"4 = Alta (frequentemente importante, valore significativo per automazioni)\n"
-            f"5 = Critica (essenziale per automazioni, sicurezza o protezione)\n\n"
-            f"IMPORTANTE - Classifica il tipo di entità:\n"
-            f"- DATA: Entità che forniscono informazioni (sensori, meteo, stato sistemi)\n"
-            f"- CONTROL: Entità controllabili dall'utente (interruttori, luci, termostati)\n"
-            f"- HEALTH: Stati/attributi che indicano problemi, avvisi, anomalie o condizioni critiche del dispositivo\n\n"
-            f"INOLTRE - Determina il tipo di gestione:\n"
-            f"- USER: Entità che un utente normale può e dovrebbe gestire (luci, interruttori, termostati)\n"
-            f"- SERVICE: Entità gestite automaticamente da servizi/integrazioni (sensori di sistema, diagnostiche)\n\n"
-            f"Considera questi fattori:\n"
-            f"- Tipo di dispositivo e funzionalità (dal dominio e device_class)\n"
-            f"- Attributi che indicano potenziale per automazioni (caratteristiche controllabili)\n"
-            f"- Rilevanza di posizione/area (informazioni stanza, zona)\n"
-            f"- Importanza per sicurezza e protezione\n"
-            f"- Cambiamenti di stato che attivano automazioni utili\n"
-            f"- Complessità dell'integrazione vs valore per automazioni\n"
-            f"- Distingui tra fonti di dati e dispositivi controllabili\n"
-            f"- Per HEALTH: cerca stati 'unavailable', 'unknown', valori di batteria bassi (<20%), temperature anomale, errori di connessione, dispositivi offline, segnali deboli\n\n"
-            f"Analizza sia lo stato dell'entità CHE i suoi attributi per una valutazione completa.\n"
-            f"RISPONDI SEMPRE IN ITALIANO. La tua motivazione (reason) DEVE essere scritta in italiano.\n"
-            f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating', 'reason', 'category' (DATA, CONTROL o HEALTH) e 'management_type' (USER o SERVICE).\n\n"
-            f"Entità da analizzare:\n" + "\n".join(entity_details)
+        prompt = (
+            f"Analizza {len(batch_states)} entità HA. Importanza 0-5:\n"
+            f"0=Ignora, 1=Molto bassa, 2=Bassa, 3=Media, 4=Alta, 5=Critica\n"
+            f"Categorie: DATA (sensori), CONTROL (controlli), HEALTH (problemi/offline/batteria<20%)\n"
+            f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/HEALTH\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
         )
     else:
-        return (
-            f"As a Home Assistant expert, analyze these {len(batch_states)} entities and their attributes to rate their automation importance on a scale of 0-5:\n\n"
-            f"Rating Scale:\n"
-            f"0 = Ignore (diagnostic/unnecessary for automations)\n"
-            f"1 = Very Low (rarely useful, mostly informational)\n"
-            f"2 = Low (occasionally useful, minor convenience)\n"
-            f"3 = Medium (commonly useful, good automation potential)\n"
-            f"4 = High (frequently important, significant automation value)\n"
-            f"5 = Critical (essential for automations, security, or safety)\n\n"
-            f"IMPORTANT - Classify the entity type:\n"
-            f"- DATA: Entities that provide information (sensors, weather, system status)\n"
-            f"- CONTROL: Entities controllable by user (switches, lights, thermostats)\n"
-            f"- HEALTH: States/attributes indicating problems, alerts, anomalies or critical device conditions\n\n"
-            f"ALSO - Determine the management type:\n"
-            f"- USER: Entities that a normal user can and should manage (lights, switches, thermostats)\n"
-            f"- SERVICE: Entities managed automatically by services/integrations (system sensors, diagnostics)\n\n"
-            f"Consider these factors:\n"
-            f"- Device type and functionality (from domain and device_class)\n"
-            f"- Attributes that indicate automation potential (controllable features)\n"
-            f"- Location/area relevance (room, zone information)\n"
-            f"- Security and safety importance\n"
-            f"- State changes that trigger useful automations\n"
-            f"- Integration complexity vs. automation value\n"
-            f"- Distinguish between data sources and controllable devices\n"
-            f"- For HEALTH: look for 'unavailable', 'unknown' states, low battery (<20%), anomalous temperatures, connection errors, offline devices, weak signals\n\n"
-            f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
-            f"ALWAYS RESPOND IN ENGLISH. Your reason field MUST be in English.\n"
-            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', 'reason', 'category' (DATA, CONTROL, or HEALTH), and 'management_type' (USER or SERVICE).\n\n"
-            f"Entities to analyze:\n" + "\n".join(entity_details)
+        prompt = (
+            f"Analyze {len(batch_states)} HA entities. Importance 0-5:\n"
+            f"0=Ignore, 1=Very low, 2=Low, 3=Medium, 4=High, 5=Critical\n"
+            f"Categories: DATA (sensors), CONTROL (controls), HEALTH (problems/offline/battery<20%)\n"
+            f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/HEALTH\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
         )
+    
+    # Log token estimation
+    token_count = _estimate_tokens(prompt)
+    _LOGGER.info(f"Prompt tokens estimated: {token_count} (chars: {len(prompt)})")
+    
+    return prompt
 
 # Entity importance categories for better classification
 ENTITY_IMPORTANCE_MAP = {
@@ -503,7 +467,7 @@ async def _process_single_batch(
                     if 0 <= rating <= 5:
                         # Get category, default to UNKNOWN if not provided
                         category = item.get("category", "UNKNOWN")
-                        if category not in ["DATA", "CONTROL"]:
+                        if category not in ["DATA", "CONTROL", "HEALTH"]:
                             category = "UNKNOWN"
                         
                         # Get management_type, default to 'user' if not provided
@@ -621,9 +585,20 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
     else:
         management_type = "user"  # Default to user for unknown domains
     
-    # Determine category based on domain
+    # Determine category based on domain and entity name patterns
     data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker"}
-    category = "DATA" if domain in data_domains else "CONTROL"
+    
+    # Check for HEALTH conditions based on entity name patterns
+    entity_lower = entity_id.lower()
+    if ("battery" in entity_lower or 
+        "unavailable" in entity_lower or 
+        "offline" in entity_lower or
+        "signal" in entity_lower or
+        "error" in entity_lower or
+        "connection" in entity_lower):
+        category = "HEALTH"
+    else:
+        category = "DATA" if domain in data_domains else "CONTROL"
     
     reason_map = {
         0: "Entity marked as ignore - likely diagnostic or unnecessary",
