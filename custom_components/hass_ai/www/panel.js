@@ -510,12 +510,14 @@ class HassAiPanel extends LitElement {
         this.tokenStats = {
           ...this.tokenStats,
           currentBatchTokens: Math.ceil(message.data.prompt_size / 4), // Estimate tokens
+          promptChars: (this.tokenStats.promptChars || 0) + message.data.prompt_size, // Accumulate prompt chars
         };
       }
       if (message.data.response_size) {
         this.tokenStats = {
           ...this.tokenStats,
           currentBatchTokens: (this.tokenStats.currentBatchTokens || 0) + Math.ceil(message.data.response_size / 4),
+          responseChars: (this.tokenStats.responseChars || 0) + message.data.response_size, // Accumulate response chars
         };
         
         // Update total tokens - ensure we have valid numbers
@@ -601,13 +603,17 @@ class HassAiPanel extends LitElement {
           totalTokens: message.data.token_stats.total_tokens || this.tokenStats.totalTokens,
           averageTokensPerEntity: message.data.token_stats.average_tokens_per_entity || this.tokenStats.averageTokensPerEntity,
           estimatedCost: Math.round((message.data.token_stats.total_tokens || 0) * 0.00003 * 1000) / 1000,
-          currentBatchTokens: 0 // Reset current batch
+          currentBatchTokens: 0, // Reset current batch
+          promptChars: message.data.token_stats.prompt_chars || this.tokenStats.promptChars || 0,
+          responseChars: message.data.token_stats.response_chars || this.tokenStats.responseChars || 0
         };
       }
       
       // Auto-start correlations if requested
       if (message.data.auto_start_correlations) {
+        console.log('🔗 Auto-starting correlations in 1 second...');
         setTimeout(() => {
+          console.log('🔗 Starting correlation analysis now...');
           this._findCorrelations();
         }, 1000); // Wait 1 second after scan completion
       }

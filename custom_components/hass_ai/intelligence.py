@@ -82,41 +82,43 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
     # Comprehensive analysis prompt that covers all aspects
     if is_italian:
         prompt = (
-            f"Analizza completamente {len(batch_states)} entità HA. Valuta importanza e problemi. Punteggio 0-5:\n"
-            f"0=Ignora/Nessun problema, 1=Molto bassa/Minimo, 2=Bassa/Leggero, 3=Media/Moderato, 4=Alta/Grave, 5=Critica/Critico\n"
+            f"Analizza {len(batch_states)} entità HA per UTILITÀ DOMOTICA. Valuta quanto sono utili per automazioni, controllo casa, benessere e ottimizzazione. Punteggio 0-5:\n"
+            f"0=Inutile per domotica, 1=Molto poco utile, 2=Poco utile, 3=Mediamente utile, 4=Molto utile, 5=Essenziale per automazioni\n"
+            f"\nFOCUS SU: Utility per automazioni, controllo casa, comfort, sicurezza, risparmio energetico, benessere\n"
             f"\nCATEGORIE (importante assegnare quella corretta):\n"
             f"- DATA: sensori, misurazioni, informazioni (es. temperatura, umidità, batteria)\n"
             f"- CONTROL: interruttori, controlli, automazioni che l'utente può azionare\n" 
-            f"- ALERTS: problemi attivi (offline, batteria<20%, errori, dispositivi non disponibili)\n"
+            f"- ALERTS: sensori critici per sicurezza/manutenzione (batteria scarica, offline, errori)\n"
             f"\nTIPO GESTIONE:\n"
             f"- USER: entità controllabili dall'utente (luci, interruttori, climatizzatori)\n"
             f"- SERVICE: entità che richiedono servizi tecnici (telecamere per visione AI, sensori per diagnostica)\n"
             f"\nEsempi:\n"
             f"- camera.xyz → category=DATA, management_type=SERVICE (può usare visione AI)\n"
-            f"- sensor.temperatura → category=DATA, management_type=USER\n"
-            f"- switch.luce → category=CONTROL, management_type=USER\n"
-            f"- sensor.batteria_scarica → category=ALERTS, management_type=SERVICE\n"
-            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"descrizione\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"DESCRIZIONE IN ITALIANO.\n\n" + "\n".join(entity_details)
+            f"- sensor.temperatura → category=DATA, management_type=USER (utile per automazioni clima)\n"
+            f"- switch.luce → category=CONTROL, management_type=USER (controllo illuminazione)\n"
+            f"- sensor.batteria → category=ALERTS, management_type=SERVICE (manutenzione dispositivi)\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"utilità domotica specifica\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON: Spiega PERCHÉ ha questo punteggio per l'uso domotico, NON il valore attuale.\n\n" + "\n".join(entity_details)
         )
     else:
         prompt = (
-            f"Comprehensive analysis of {len(batch_states)} HA entities. Evaluate importance and issues. Score 0-5:\n"
-            f"0=Ignore/No problem, 1=Very low/Minimal, 2=Low/Minor, 3=Medium/Moderate, 4=High/Severe, 5=Critical\n"
+            f"Analyze {len(batch_states)} HA entities for HOME AUTOMATION UTILITY. Evaluate how useful they are for automations, house control, wellness and optimization. Score 0-5:\n"
+            f"0=Useless for automation, 1=Very low utility, 2=Low utility, 3=Medium utility, 4=High utility, 5=Essential for automations\n"
+            f"\nFOCUS ON: Utility for automations, house control, comfort, security, energy saving, wellness\n"
             f"\nCATEGORIES (important to assign correctly):\n"
             f"- DATA: sensors, measurements, information (e.g. temperature, humidity, battery level)\n"
             f"- CONTROL: switches, controls, automations that user can operate\n"
-            f"- ALERTS: active problems (offline, battery<20%, errors, unavailable devices)\n"
+            f"- ALERTS: critical sensors for security/maintenance (low battery, offline, errors)\n"
             f"\nMANAGEMENT TYPE:\n"
             f"- USER: user-controllable entities (lights, switches, climate)\n"
             f"- SERVICE: entities requiring technical services (cameras for AI vision, sensors for diagnostics)\n"
             f"\nExamples:\n"
             f"- camera.xyz → category=DATA, management_type=SERVICE (can use AI vision)\n"
-            f"- sensor.temperature → category=DATA, management_type=USER\n"
-            f"- switch.light → category=CONTROL, management_type=USER\n"
-            f"- sensor.low_battery → category=ALERTS, management_type=SERVICE\n"
-            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"description\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
+            f"- sensor.temperature → category=DATA, management_type=USER (useful for climate automations)\n"
+            f"- switch.light → category=CONTROL, management_type=USER (lighting control)\n"
+            f"- sensor.battery → category=ALERTS, management_type=SERVICE (device maintenance)\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"specific automation utility\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON: Explain WHY it has this score for home automation use, NOT the current value.\n\n" + "\n".join(entity_details)
         )
     
     # Log token estimation
@@ -157,9 +159,18 @@ def _auto_categorize_entity(state: State) -> tuple[str, str]:
     if entity_state in ['unavailable', 'unknown', 'error']:
         return 'ALERTS', 'SERVICE'
     
-    # Battery level check
+    # Battery level check - prioritize alerts for low battery
     battery_level = attributes.get('battery_level')
-    if battery_level is not None and battery_level < 20:
+    if battery_level is not None and battery_level < 30:  # More aggressive threshold
+        return 'ALERTS', 'SERVICE'
+    
+    # Special handling for battery sensors - they should be ALERTS if they track battery levels
+    if 'battery' in entity_id.lower() and domain == 'sensor':
+        # Battery sensors are primarily for alerts, not just data
+        return 'ALERTS', 'SERVICE'
+    
+    # Special handling for ink/toner sensors - alerts when low
+    if any(keyword in entity_id.lower() for keyword in ['ink', 'toner', 'cartridge']) and domain == 'sensor':
         return 'ALERTS', 'SERVICE'
     
     # Domain-based categorization with management type
@@ -1069,8 +1080,8 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
     importance = ENTITY_IMPORTANCE_MAP.get(domain, 2)
     
     # Determine management type based on domain
-    user_managed_domains = {"light", "switch", "climate", "cover", "fan", "lock", "alarm_control_panel", "input_boolean", "input_number", "input_select", "input_text"}
-    service_managed_domains = {"sensor", "binary_sensor", "weather", "sun", "system_log", "automation", "script"}
+    user_managed_domains = {"light", "switch", "climate", "cover", "fan", "lock", "alarm_control_panel", "input_boolean", "input_number", "input_select", "input_text", "media_player"}
+    service_managed_domains = {"sensor", "binary_sensor", "weather", "sun", "system_log", "automation", "script", "camera", "update", "device_tracker", "person", "zone"}
     
     if domain in user_managed_domains:
         management_type = "USER"
@@ -1084,8 +1095,8 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         category, management_type = _auto_categorize_entity(state)
     else:
         # Fallback domain-based categorization
-        data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker"}
-        control_domains = {"light", "switch", "climate", "cover", "fan", "lock", "input_boolean", "input_number", "input_select", "input_text"}
+        data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker", "camera", "update"}
+        control_domains = {"light", "switch", "climate", "cover", "fan", "lock", "input_boolean", "input_number", "input_select", "input_text", "media_player"}
         
         entity_lower = entity_id.lower()
         if ("battery" in entity_lower or 
