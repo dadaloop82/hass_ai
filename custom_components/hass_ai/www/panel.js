@@ -1261,6 +1261,29 @@ class HassAiPanel extends LitElement {
                                   </div>
                                 ` : ''}
                                 
+                                ${entity.auto_thresholds && entity.auto_thresholds.thresholds ? html`
+                                  <div class="auto-thresholds-section">
+                                    <strong>${isItalian ? '🤖 Soglie Automatiche Suggerite:' : '🤖 Auto-Generated Thresholds:'}</strong>
+                                    <div class="auto-thresholds-list">
+                                      ${Object.entries(entity.auto_thresholds.thresholds).map(([level, threshold]) => html`
+                                        <div class="auto-threshold-item">
+                                          <span class="threshold-level threshold-${level.toLowerCase()}">
+                                            ${level === 'LOW' ? '⚠️' : level === 'MEDIUM' ? '🔶' : '🔴'} ${level}
+                                          </span>
+                                          <span class="threshold-condition">${threshold.condition}</span>
+                                          <span class="threshold-description">${threshold.description}</span>
+                                        </div>
+                                      `)}
+                                      <div class="auto-threshold-info">
+                                        <small>${isItalian ? 
+                                          `💡 Tipo: ${entity.auto_thresholds.entity_type || 'non determinato'}` :
+                                          `💡 Type: ${entity.auto_thresholds.entity_type || 'undetermined'}`
+                                        }</small>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ` : ''}
+                                
                                 <div><strong>${isItalian ? 'Attributi con Peso:' : 'Weighted Attributes:'}</strong></div>
                                 <ul class="attributes-list">
                                   ${Object.entries(entity.analysis_details.attributes || {}).map(([key, value]) => {
@@ -1954,6 +1977,62 @@ class HassAiPanel extends LitElement {
       .customized-badge {
         color: var(--primary-color);
         font-weight: 600;
+      }
+      
+      /* Auto-thresholds styles */
+      .auto-thresholds-section {
+        margin-top: 8px;
+        padding: 8px;
+        border: 1px dashed var(--divider-color);
+        border-radius: 4px;
+        background: rgba(var(--rgb-primary-color), 0.05);
+      }
+      
+      .auto-thresholds-list {
+        margin-top: 4px;
+      }
+      
+      .auto-threshold-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 4px 0;
+        padding: 4px;
+        background: var(--card-background-color);
+        border-radius: 3px;
+        font-size: 0.85em;
+      }
+      
+      .threshold-level {
+        font-weight: 600;
+        min-width: 60px;
+        text-align: center;
+        padding: 2px 6px;
+        border-radius: 3px;
+      }
+      
+      .threshold-low { background: rgba(255, 165, 0, 0.2); color: #FFA500; }
+      .threshold-medium { background: rgba(255, 107, 107, 0.2); color: #FF6B6B; }
+      .threshold-high { background: rgba(220, 20, 60, 0.2); color: #DC143C; }
+      
+      .threshold-condition {
+        font-family: monospace;
+        background: var(--code-background-color, #f5f5f5);
+        padding: 2px 4px;
+        border-radius: 2px;
+        font-size: 0.9em;
+      }
+      
+      .threshold-description {
+        flex: 1;
+        color: var(--secondary-text-color);
+        font-style: italic;
+      }
+      
+      .auto-threshold-info {
+        margin-top: 6px;
+        padding-top: 4px;
+        border-top: 1px dotted var(--divider-color);
       }
       
       /* Ultra compact unevaluated entities - single line */

@@ -208,6 +208,136 @@ def _auto_categorize_entity(state: State) -> tuple[str, str]:
 
 # Alert Severity Levels for user notification thresholds
 ALERT_SEVERITY_LEVELS = {
+    "LOW": {"description": "Low priority - informational", "priority": 1},
+    "MEDIUM": {"description": "Medium priority - attention needed", "priority": 2}, 
+    "HIGH": {"description": "High priority - immediate action", "priority": 3},
+    "CRITICAL": {"description": "Critical - urgent intervention required", "priority": 4}
+}
+
+# Auto-threshold generation for different entity types
+async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: State) -> dict:
+    """Generate automatic thresholds for an entity based on its characteristics."""
+    domain = state.domain
+    attributes = state.attributes
+    current_value = state.state
+    
+    # Default thresholds
+    result = {
+        "auto_generated": True,
+        "thresholds": {},
+        "entity_type": "unknown"
+    }
+    
+    try:
+        # Binary sensors - simple on/off alerts
+        if domain == 'binary_sensor':
+            device_class = attributes.get('device_class', '')
+            if device_class in ['battery', 'problem', 'safety', 'smoke', 'gas', 'moisture']:
+                result.update({
+                    "entity_type": "binary_alert",
+                    "thresholds": {
+                        "LOW": {"condition": "state == 'on'", "description": "Sensor activated"},
+                        "MEDIUM": {"condition": "state == 'on' for > 5 minutes", "description": "Persistent activation"},
+                        "HIGH": {"condition": "state == 'on' for > 30 minutes", "description": "Long-term issue"}
+                    }
+                })
+            return result
+            
+        # Numeric sensors - threshold-based alerts
+        elif domain == 'sensor':
+            try:
+                num_value = float(current_value)
+                unit = attributes.get('unit_of_measurement', '')
+                device_class = attributes.get('device_class', '')
+                
+                # Battery percentage
+                if device_class == 'battery' or 'battery' in entity_id.lower():
+                    result.update({
+                        "entity_type": "battery_percent",
+                        "thresholds": {
+                            "LOW": {"value": 30, "condition": "< 30%", "description": "Battery getting low"},
+                            "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low - consider charging"},
+                            "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical - immediate attention"}
+                        }
+                    })
+                
+                # Temperature sensors
+                elif device_class == 'temperature' or 'temperature' in entity_id.lower():
+                    if 'C' in unit or 'celsius' in unit.lower():
+                        result.update({
+                            "entity_type": "temperature_celsius",
+                            "thresholds": {
+                                "LOW": {"value": 35, "condition": "> 35°C", "description": "High temperature warning"},
+                                "MEDIUM": {"value": 40, "condition": "> 40°C", "description": "Very high temperature"},
+                                "HIGH": {"value": 50, "condition": "> 50°C", "description": "Dangerous temperature level"}
+                            }
+                        })
+                
+                # Humidity sensors
+                elif device_class == 'humidity' or 'humidity' in entity_id.lower():
+                    result.update({
+                        "entity_type": "humidity_percent",
+                        "thresholds": {
+                            "LOW": {"value": 70, "condition": "> 70%", "description": "High humidity warning"},
+                            "MEDIUM": {"value": 80, "condition": "> 80%", "description": "Very high humidity"},
+                            "HIGH": {"value": 90, "condition": "> 90%", "description": "Excessive humidity - risk of mold"}
+                        }
+                    })
+                
+                # Signal strength (RSSI, Link Quality)
+                elif any(keyword in entity_id.lower() for keyword in ['rssi', 'signal', 'linkquality']):
+                    if 'rssi' in entity_id.lower():
+                        result.update({
+                            "entity_type": "signal_rssi",
+                            "thresholds": {
+                                "LOW": {"value": -70, "condition": "< -70 dBm", "description": "Weak signal strength"},
+                                "MEDIUM": {"value": -80, "condition": "< -80 dBm", "description": "Poor signal strength"},
+                                "HIGH": {"value": -90, "condition": "< -90 dBm", "description": "Very poor signal - connection issues"}
+                            }
+                        })
+                    else:  # Link quality percentage
+                        result.update({
+                            "entity_type": "link_quality",
+                            "thresholds": {
+                                "LOW": {"value": 50, "condition": "< 50", "description": "Low link quality"},
+                                "MEDIUM": {"value": 30, "condition": "< 30", "description": "Poor link quality"},
+                                "HIGH": {"value": 10, "condition": "< 10", "description": "Very poor link quality - device may disconnect"}
+                            }
+                        })
+                
+                # Memory/Storage usage
+                elif any(keyword in entity_id.lower() for keyword in ['memory', 'ram', 'disk', 'storage']):
+                    result.update({
+                        "entity_type": "usage_percent",
+                        "thresholds": {
+                            "LOW": {"value": 80, "condition": "> 80%", "description": "High resource usage"},
+                            "MEDIUM": {"value": 90, "condition": "> 90%", "description": "Very high resource usage"},
+                            "HIGH": {"value": 95, "condition": "> 95%", "description": "Critical resource usage - immediate attention"}
+                        }
+                    })
+                
+                # CPU usage
+                elif 'cpu' in entity_id.lower():
+                    result.update({
+                        "entity_type": "cpu_percent",
+                        "thresholds": {
+                            "LOW": {"value": 70, "condition": "> 70%", "description": "High CPU usage"},
+                            "MEDIUM": {"value": 85, "condition": "> 85%", "description": "Very high CPU usage"},
+                            "HIGH": {"value": 95, "condition": "> 95%", "description": "Critical CPU usage - system may be unresponsive"}
+                        }
+                    })
+                    
+            except (ValueError, TypeError):
+                # Non-numeric sensor
+                pass
+                
+    except Exception as e:
+        _LOGGER.warning(f"Error generating auto-thresholds for {entity_id}: {e}")
+    
+    return result
+
+# Alert Severity Levels for user notification thresholds (moved definition)
+ALERT_SEVERITY_LEVELS = {
     "MEDIUM": {
         "value": 1,
         "description": "Medium priority alert - normal monitoring",
@@ -809,6 +939,15 @@ async def _process_single_batch(
                             "analysis_method": "ai_conversation",
                             "batch_number": batch_num,
                         }
+                        
+                        # Generate auto-thresholds for alert-worthy entities
+                        if category == 'ALERTS' or any(keyword in item["entity_id"].lower() for keyword in ['battery', 'temperature', 'humidity', 'signal', 'cpu', 'memory']):
+                            state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
+                            if state and hass:
+                                auto_thresholds = await _generate_auto_thresholds(hass, item["entity_id"], state)
+                                if auto_thresholds.get("thresholds"):
+                                    result["auto_thresholds"] = auto_thresholds
+                        
                         all_results.append(result)
                         
                         # Send result to frontend immediately
@@ -985,7 +1124,7 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         fallback_reason = f"{reason_map[importance]} (using auto-categorization)"
         analysis_method = "auto_categorization"
     
-    return {
+    result = {
         "entity_id": entity_id,
         "overall_weight": importance,
         "overall_reason": fallback_reason,
@@ -994,6 +1133,30 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         "analysis_method": analysis_method,
         "batch_number": batch_num,
     }
+    
+    # Generate auto-thresholds for alert-worthy entities in fallback too
+    if category == 'ALERTS' or any(keyword in entity_id.lower() for keyword in ['battery', 'temperature', 'humidity', 'signal', 'cpu', 'memory']):
+        if state and hasattr(_generate_auto_thresholds, '__await__'):  # Async function check
+            try:
+                # Use a dummy hass context for fallback - in real scenario we'd pass proper hass
+                auto_thresholds = {
+                    "auto_generated": True,
+                    "entity_type": "fallback_generated",
+                    "thresholds": {}
+                }
+                
+                # Simple fallback threshold logic
+                if 'battery' in entity_id.lower():
+                    auto_thresholds["thresholds"] = {
+                        "LOW": {"value": 30, "condition": "< 30%", "description": "Battery getting low"},
+                        "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low"},
+                        "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical"}
+                    }
+                    result["auto_thresholds"] = auto_thresholds
+            except Exception:
+                pass  # Skip auto-thresholds if error
+    
+    return result
 
 
 async def _query_local_agent(hass: HomeAssistant, prompt: str, conversation_agent: str = None) -> str:
