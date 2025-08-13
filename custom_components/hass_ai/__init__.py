@@ -204,13 +204,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def handle_load_ai_results(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to load saved AI analysis results."""
     try:
+        _LOGGER.info(f"Loading AI results from storage key: {AI_RESULTS_KEY}")
         ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
         results_data = await ai_results_store.async_load()
         
         if results_data:
+            _LOGGER.info(f"Loaded AI results: {len(results_data.get('results', {}))} entities")
             # Send the full data including metadata
             connection.send_message(websocket_api.result_message(msg["id"], results_data))
         else:
+            _LOGGER.info("No AI results found in storage")
             # Send empty results
             connection.send_message(websocket_api.result_message(msg["id"], {
                 "results": {},
@@ -722,6 +725,9 @@ async def handle_clear_storage(hass: HomeAssistant, connection: websocket_api.Ac
     try:
         _LOGGER.info("Clearing all HASS AI stored data")
         
+        # Log the storage keys being used
+        _LOGGER.info(f"Storage keys: AI_RESULTS_KEY={AI_RESULTS_KEY}, CORRELATIONS_KEY={CORRELATIONS_KEY}, INTELLIGENCE_DATA_KEY={INTELLIGENCE_DATA_KEY}")
+        
         # Clear all stored data in hass.data
         keys_to_clear = [
             AI_RESULTS_KEY,
@@ -732,19 +738,24 @@ async def handle_clear_storage(hass: HomeAssistant, connection: websocket_api.Ac
         
         for key in keys_to_clear:
             if key in hass.data:
+                _LOGGER.info(f"Clearing hass.data key: {key}")
                 hass.data[key] = {}
                 
         # Clear the correct storage stores using the same keys as saving functions
+        _LOGGER.info(f"Clearing AI results store with key: {AI_RESULTS_KEY}")
         ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
         await ai_results_store.async_save({})
         
+        _LOGGER.info(f"Clearing intelligence store with key: {INTELLIGENCE_DATA_KEY}")
         intelligence_store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
         await intelligence_store.async_save({})
         
+        _LOGGER.info(f"Clearing correlations store with key: {CORRELATIONS_KEY}")
         correlations_store = storage.Store(hass, STORAGE_VERSION, CORRELATIONS_KEY)
         await correlations_store.async_save({})
         
         # Alert thresholds store (uses different naming convention)
+        _LOGGER.info("Clearing alert thresholds store")
         alert_thresholds_store = storage.Store(hass, STORAGE_VERSION, "hass_ai_alert_thresholds")
         await alert_thresholds_store.async_save({})
         
@@ -752,6 +763,7 @@ async def handle_clear_storage(hass: HomeAssistant, connection: websocket_api.Ac
         try:
             entry_id = next(iter(hass.data[DOMAIN]))
             entry_store = hass.data[DOMAIN][entry_id]["store"]
+            _LOGGER.info(f"Clearing overrides store from entry: {entry_id}")
             await entry_store.async_save({})
             _LOGGER.info("Cleared overrides store from config entry")
         except Exception as e:

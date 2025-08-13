@@ -1,4 +1,4 @@
-// HASS AI Panel v1.9.28 - Updated 2025-08-13T17:00:00Z - CACHE BUSTER
+// HASS AI Panel v1.9.29 - Updated 2025-08-13T17:00:00Z - CACHE BUSTER
 // Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds + Stop Operation
 // Force reload timestamp: 1723572000000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
@@ -1211,7 +1211,7 @@ class HassAiPanel extends LitElement {
                     class="reset-button"
                     ?disabled=${this.loading}
                   >
-                    🗑️ ${isItalian ? 'Cancella Tutto e Riavvia' : 'Clear All & Restart'}
+                    🗑️ ${isItalian ? 'Cancella Tutto' : 'Clear All'}
                   </mwc-button>
                 </div>
               ` : ''}
