@@ -84,30 +84,38 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
         prompt = (
             f"Analizza completamente {len(batch_states)} entità HA. Valuta importanza e problemi. Punteggio 0-5:\n"
             f"0=Ignora/Nessun problema, 1=Molto bassa/Minimo, 2=Bassa/Leggero, 3=Media/Moderato, 4=Alta/Grave, 5=Critica/Critico\n"
-            f"\nCATEGORIE:\n"
-            f"- DATA: sensori, misurazioni, informazioni\n"
-            f"- CONTROL: interruttori, controlli, automazioni\n" 
-            f"- ALERTS: problemi, offline, batteria<20%, errori, malfunzionamenti\n"
+            f"\nCATEGORIE (importante assegnare quella corretta):\n"
+            f"- DATA: sensori, misurazioni, informazioni (es. temperatura, umidità, batteria)\n"
+            f"- CONTROL: interruttori, controlli, automazioni che l'utente può azionare\n" 
+            f"- ALERTS: problemi attivi (offline, batteria<20%, errori, dispositivi non disponibili)\n"
             f"\nTIPO GESTIONE:\n"
-            f"- USER: entità controllabili dall'utente\n"
-            f"- SERVICE: problemi che richiedono intervento tecnico\n"
-            f"\nAssegna categoria appropriata basata su funzione dell'entità, non solo sui problemi.\n"
-            f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"descrizione\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"- USER: entità controllabili dall'utente (luci, interruttori, climatizzatori)\n"
+            f"- SERVICE: entità che richiedono servizi tecnici (telecamere per visione AI, sensori per diagnostica)\n"
+            f"\nEsempi:\n"
+            f"- camera.xyz → category=DATA, management_type=SERVICE (può usare visione AI)\n"
+            f"- sensor.temperatura → category=DATA, management_type=USER\n"
+            f"- switch.luce → category=CONTROL, management_type=USER\n"
+            f"- sensor.batteria_scarica → category=ALERTS, management_type=SERVICE\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"descrizione\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
             f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
         )
     else:
         prompt = (
             f"Comprehensive analysis of {len(batch_states)} HA entities. Evaluate importance and issues. Score 0-5:\n"
             f"0=Ignore/No problem, 1=Very low/Minimal, 2=Low/Minor, 3=Medium/Moderate, 4=High/Severe, 5=Critical\n"
-            f"\nCATEGORIES:\n"
-            f"- DATA: sensors, measurements, information\n"
-            f"- CONTROL: switches, controls, automations\n"
-            f"- ALERTS: problems, offline, battery<20%, errors, malfunctions\n"
+            f"\nCATEGORIES (important to assign correctly):\n"
+            f"- DATA: sensors, measurements, information (e.g. temperature, humidity, battery level)\n"
+            f"- CONTROL: switches, controls, automations that user can operate\n"
+            f"- ALERTS: active problems (offline, battery<20%, errors, unavailable devices)\n"
             f"\nMANAGEMENT TYPE:\n"
-            f"- USER: user-controllable entities\n"
-            f"- SERVICE: problems requiring technical intervention\n"
-            f"\nAssign appropriate category based on entity function, not just problems.\n"
-            f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"description\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"- USER: user-controllable entities (lights, switches, climate)\n"
+            f"- SERVICE: entities requiring technical services (cameras for AI vision, sensors for diagnostics)\n"
+            f"\nExamples:\n"
+            f"- camera.xyz → category=DATA, management_type=SERVICE (can use AI vision)\n"
+            f"- sensor.temperature → category=DATA, management_type=USER\n"
+            f"- switch.light → category=CONTROL, management_type=USER\n"
+            f"- sensor.low_battery → category=ALERTS, management_type=SERVICE\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"description\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
             f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
         )
     
@@ -137,8 +145,9 @@ ENTITY_IMPORTANCE_MAP = {
 }
 
 # Auto-categorization based on domain and entity characteristics
-def _auto_categorize_entity(state: State) -> str:
-    """Automatically categorize entity based on domain and characteristics."""
+def _auto_categorize_entity(state: State) -> tuple[str, str]:
+    """Automatically categorize entity based on domain and characteristics.
+    Returns (category, management_type)."""
     domain = state.domain
     entity_id = state.entity_id
     attributes = state.attributes
@@ -146,33 +155,47 @@ def _auto_categorize_entity(state: State) -> str:
     
     # Check for alerts/problems first
     if entity_state in ['unavailable', 'unknown', 'error']:
-        return 'ALERTS'
+        return 'ALERTS', 'SERVICE'
     
     # Battery level check
     battery_level = attributes.get('battery_level')
     if battery_level is not None and battery_level < 20:
-        return 'ALERTS'
+        return 'ALERTS', 'SERVICE'
     
-    # Domain-based categorization
-    if domain in ['sensor', 'binary_sensor', 'device_tracker', 'weather']:
-        # These provide data/information
-        return 'DATA'
-    elif domain in ['switch', 'light', 'climate', 'cover', 'lock', 'input_boolean', 'input_select', 'input_number', 'input_text']:
-        # These are controllable by user
-        return 'CONTROL'
-    elif domain in ['alarm_control_panel', 'alert', 'automation']:
-        # Security and system alerts
-        return 'ALERTS'
-    elif 'alarm' in entity_id or 'alert' in entity_id or 'problem' in entity_id:
-        return 'ALERTS'
-    else:
-        # Default based on typical usage
-        if any(keyword in entity_id for keyword in ['temperature', 'humidity', 'pressure', 'battery', 'signal']):
-            return 'DATA'
-        elif any(keyword in entity_id for keyword in ['switch', 'light', 'fan', 'heater']):
-            return 'CONTROL'
+    # Domain-based categorization with management type
+    if domain == 'camera':
+        # Cameras can benefit from AI vision services
+        return 'DATA', 'SERVICE'
+    elif domain in ['sensor', 'binary_sensor']:
+        # Sensors provide data, some may need diagnostic services
+        if any(keyword in entity_id.lower() for keyword in ['battery', 'signal', 'rssi', 'linkquality', 'voltage']):
+            return 'DATA', 'SERVICE'  # Diagnostic sensors
         else:
-            return 'DATA'  # Default to DATA for unknown entities
+            return 'DATA', 'USER'  # Regular data sensors
+    elif domain in ['device_tracker', 'weather']:
+        return 'DATA', 'USER'
+    elif domain in ['switch', 'light', 'climate', 'cover', 'fan']:
+        # User controllable devices
+        return 'CONTROL', 'USER'
+    elif domain in ['lock', 'alarm_control_panel']:
+        # Security devices - controllable but may need service alerts
+        return 'CONTROL', 'SERVICE'
+    elif domain in ['input_boolean', 'input_select', 'input_number', 'input_text']:
+        return 'CONTROL', 'USER'
+    elif domain in ['alert', 'automation']:
+        return 'ALERTS', 'SERVICE'
+    elif 'alarm' in entity_id or 'alert' in entity_id or 'problem' in entity_id:
+        return 'ALERTS', 'SERVICE'
+    else:
+        # Default based on entity name patterns
+        if any(keyword in entity_id for keyword in ['temperature', 'humidity', 'pressure']):
+            return 'DATA', 'USER'
+        elif any(keyword in entity_id for keyword in ['battery', 'signal', 'rssi', 'linkquality']):
+            return 'DATA', 'SERVICE'
+        elif any(keyword in entity_id for keyword in ['switch', 'light', 'fan', 'heater']):
+            return 'CONTROL', 'USER'
+        else:
+            return 'DATA', 'USER'  # Default to DATA/USER for unknown entities
 
 # Alert Severity Levels for user notification thresholds
 ALERT_SEVERITY_LEVELS = {
@@ -909,7 +932,7 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
     
     # Use auto-categorization if state is available, otherwise fallback to domain-based
     if state:
-        category = _auto_categorize_entity(state)
+        category, management_type = _auto_categorize_entity(state)
     else:
         # Fallback domain-based categorization
         data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker"}
@@ -925,12 +948,16 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
             "alarm" in entity_lower or
             "alert" in entity_lower):
             category = "ALERTS"
+            management_type = "SERVICE"
         elif domain in data_domains:
             category = "DATA"
+            management_type = "USER"
         elif domain in control_domains:
             category = "CONTROL"
+            management_type = "USER"
         else:
             category = "DATA"  # Default to DATA
+            management_type = "USER"
     
     reason_map = {
         0: "Entity marked as ignore - likely diagnostic or unnecessary",

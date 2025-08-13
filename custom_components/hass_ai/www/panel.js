@@ -965,9 +965,6 @@ class HassAiPanel extends LitElement {
                     <div class="retry-indicator">${isItalian ? `� Tentativo ${this.scanProgress.retryAttempt}` : `� Retry ${this.scanProgress.retryAttempt}`}</div>
                   ` : ''}
                   
-                  ${this.scanProgress.promptSize > 0 ? html`
-                    <div class="debug-info">${isItalian ? `Prompt: ${this.scanProgress.promptSize} caratteri` : `Prompt: ${this.scanProgress.promptSize} chars`}</div>
-                  ` : ''}
                 </div>
                 
                 <!-- Token Statistics -->
@@ -979,6 +976,12 @@ class HassAiPanel extends LitElement {
                         <span class="token-label">${isItalian ? 'Token Totali' : 'Total Tokens'}</span>
                         <span class="token-value">${this.tokenStats.totalTokens.toLocaleString()}</span>
                       </div>
+                      ${this.scanProgress.show && this.tokenStats.currentBatchTokens > 0 ? html`
+                        <div class="token-item current-batch">
+                          <span class="token-label">${isItalian ? 'Batch Corrente' : 'Current Batch'}</span>
+                          <span class="token-value">+${this.tokenStats.currentBatchTokens.toLocaleString()}</span>
+                        </div>
+                      ` : ''}
                       <div class="token-item">
                         <span class="token-label">${isItalian ? 'Media/Entità' : 'Avg/Entity'}</span>
                         <span class="token-value">${this.tokenStats.averageTokensPerEntity}</span>
@@ -2135,6 +2138,23 @@ class HassAiPanel extends LitElement {
         background: var(--card-background-color);
         border-radius: 4px;
         border: 1px solid var(--divider-color);
+      }
+      
+      .token-item.current-batch {
+        background: var(--primary-color);
+        color: var(--text-primary-color);
+        border-color: var(--primary-color);
+        animation: pulse 2s infinite;
+      }
+      
+      .token-item.current-batch .token-label,
+      .token-item.current-batch .token-value {
+        color: var(--text-primary-color);
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
       }
       
       .token-label {
