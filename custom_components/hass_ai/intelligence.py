@@ -769,8 +769,7 @@ async def get_entities_importance_batched(
                     "prompt_chars": total_prompt_chars,
                     "response_chars": total_response_chars,
                     "average_tokens_per_entity": round(total_tokens_used / len(all_results), 1) if all_results else 0
-                },
-                "auto_start_correlations": True  # Signal frontend to auto-start correlations
+                }
             }
         }))
 

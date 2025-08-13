@@ -1,5 +1,5 @@
-// HASS AI Panel v1.9.26 - Updated 2025-08-13T17:00:00Z - CACHE BUSTER
-// Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds
+// HASS AI Panel v1.9.28 - Updated 2025-08-13T17:00:00Z - CACHE BUSTER
+// Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds + Stop Operation
 // Force reload timestamp: 1723572000000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
@@ -21,6 +21,7 @@ class HassAiPanel extends LitElement {
       categoryFilter: { state: true },
       tokenStats: { state: true },
       alertThresholds: { state: true },
+      isOperationActive: { state: true },
     };
   }
 
@@ -35,6 +36,8 @@ class HassAiPanel extends LitElement {
     this.searchTerm = ''; // Search filter
     this.categoryFilter = 'ALL'; // Category filter: ALL, DATA, CONTROL, ALERTS, ENHANCED, ENHANCED
     this.correlations = {}; // Store correlations for each entity
+    this.isOperationActive = false; // Track if any operation is active
+    this.currentOperation = null; // Track current operation type
     this.scanProgress = {
       show: false,
       message: '',
@@ -301,6 +304,8 @@ class HassAiPanel extends LitElement {
   
   async _runScan() {
     this.loading = true;
+    this.isOperationActive = true;
+    this.currentOperation = (this.hass.language || navigator.language).startsWith('it') ? 'Scansione entità' : 'Entity scan';
     
     // Check if we should scan only new entities or all entities
     const unevaluatedEntities = this._getUnevaluatedEntities();
@@ -378,6 +383,8 @@ class HassAiPanel extends LitElement {
     if (!confirmed) return;
 
     this.loading = true;
+    this.isOperationActive = true;
+    this.currentOperation = isItalian ? 'Ricerca correlazioni' : 'Correlation analysis';
     this._showSimpleNotification(
       isItalian ? '🧠 Ricerca correlazioni in corso...' : '🧠 Finding correlations...',
       'info'
@@ -399,11 +406,75 @@ class HassAiPanel extends LitElement {
       );
     } catch (error) {
       this.loading = false;
+      this.isOperationActive = false;
+      this.currentOperation = null;
       this._showSimpleNotification(
         isItalian ? '❌ Errore durante la ricerca correlazioni' : '❌ Error finding correlations',
         'error'
       );
     }
+  }
+
+  async _stopOperation() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    if (!this.isOperationActive) {
+      this._showSimpleNotification(
+        isItalian ? '⚠️ Nessuna operazione in corso' : '⚠️ No operation in progress',
+        'warning'
+      );
+      return;
+    }
+
+    const confirmed = confirm(
+      isItalian ? 
+        `🛑 Fermare l'operazione in corso?\n\n` +
+        `Operazione attuale: ${this.currentOperation || 'Sconosciuta'}\n\n` +
+        `L'operazione verrà interrotta immediatamente. I dati già elaborati verranno conservati.` :
+        `🛑 Stop current operation?\n\n` +
+        `Current operation: ${this.currentOperation || 'Unknown'}\n\n` +
+        `The operation will be stopped immediately. Already processed data will be kept.`
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      // Send stop command to backend
+      await this.hass.callWS({
+        type: "hass_ai/stop_operation"
+      });
+      
+      // Reset frontend state
+      this._resetOperationState();
+      
+      this._showSimpleNotification(
+        isItalian ? '🛑 Operazione interrotta' : '🛑 Operation stopped',
+        'info'
+      );
+    } catch (error) {
+      console.error('Error stopping operation:', error);
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore durante l\'interruzione dell\'operazione' : '❌ Error stopping operation',
+        'error'
+      );
+    }
+  }
+
+  _resetOperationState() {
+    this.isOperationActive = false;
+    this.currentOperation = null;
+    this.loading = false;
+    this.scanProgress = {
+      show: false,
+      message: '',
+      currentBatch: 0,
+      totalBatches: 0,
+      entitiesProcessed: 0,
+      totalEntities: 0,
+      isComplete: false,
+      status: 'idle'
+    };
+    this.requestUpdate();
   }
 
   _handleCorrelationUpdate(message) {
@@ -435,6 +506,8 @@ class HassAiPanel extends LitElement {
     
     if (message.type === "correlation_complete") {
       this.loading = false;
+      this.isOperationActive = false;
+      this.currentOperation = null;
       this.scanProgress = {
         ...this.scanProgress,
         show: false,
@@ -450,6 +523,8 @@ class HassAiPanel extends LitElement {
 
     if (message.type === "correlation_error") {
       this.loading = false;
+      this.isOperationActive = false;
+      this.currentOperation = null;
       this.scanProgress = {
         ...this.scanProgress,
         show: false,
@@ -587,6 +662,8 @@ class HassAiPanel extends LitElement {
     }
     if (message.type === "scan_complete") {
       this.loading = false;
+      this.isOperationActive = false;
+      this.currentOperation = null;
       this.scanProgress = {
         ...this.scanProgress,
         show: false, // Hide progress immediately on completion
@@ -607,15 +684,6 @@ class HassAiPanel extends LitElement {
           promptChars: message.data.token_stats.prompt_chars || this.tokenStats.promptChars || 0,
           responseChars: message.data.token_stats.response_chars || this.tokenStats.responseChars || 0
         };
-      }
-      
-      // Auto-start correlations if requested
-      if (message.data.auto_start_correlations) {
-        console.log('🔗 Auto-starting correlations in 1 second...');
-        setTimeout(() => {
-          console.log('🔗 Starting correlation analysis now...');
-          this._findCorrelations();
-        }, 1000); // Wait 1 second after scan completion
       }
       
       // Update last scan info
@@ -1039,6 +1107,18 @@ class HassAiPanel extends LitElement {
                 ${isItalian ? '🔍 Cerca Correlazioni' : '🔍 Find Correlations'}
               </ha-button>
             </div>
+            
+            ${this.isOperationActive ? html`
+              <div class="step-item stop-operation">
+                <ha-button 
+                  raised
+                  @click=${this._stopOperation} 
+                  class="step-button stop-btn"
+                >
+                  ${isItalian ? '🛑 Ferma' : '🛑 Stop'}
+                </ha-button>
+              </div>
+            ` : ''}
           </div>
           
           ${this.lastScanInfo.entityCount > 0 ? html`
@@ -1912,6 +1992,23 @@ class HassAiPanel extends LitElement {
         margin: 0;
       }
       
+      .stop-btn {
+        --mdc-theme-primary: #f44336;
+        --mdc-theme-on-primary: white;
+        --mdc-button-raised-box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2);
+      }
+      
+      .stop-operation {
+        margin-left: 12px;
+        animation: pulse 1.5s infinite;
+      }
+      
+      @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+      }
+      
       /* Analysis Type Selection Styles */
       .analysis-type-selection {
         margin-bottom: 16px;
@@ -2394,13 +2491,20 @@ class HassAiPanel extends LitElement {
       this.categoryFilter = 'ALL';
       this.searchTerm = '';
       
+      // Clear localStorage filters as well
+      localStorage.removeItem('hass_ai_min_weight');
+      localStorage.removeItem('hass_ai_category_filter');
+      
       this._showSimpleNotification(
-        isItalian ? '🗑️ Tutti i dati sono stati cancellati. Pronto per una nuova analisi!' : 
-                   '🗑️ All data cleared. Ready for a new analysis!',
+        isItalian ? '🗑️ Tutti i dati sono stati cancellati. Aggiornamento della pagina...' : 
+                   '🗑️ All data cleared. Refreshing page...',
         'success'
       );
       
-      this.requestUpdate();
+      // Force a page refresh after a short delay to ensure clean state
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
       
     } catch (error) {
       console.error('Error resetting data:', error);

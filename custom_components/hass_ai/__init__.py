@@ -27,6 +27,9 @@ PANEL_URL_PATH = "hass-ai-panel"
 # Cache busting timestamp
 CACHE_BUSTER = int(time.time())  # v1.9.1 - Fresh timestamp
 
+# Global operation tracking
+_active_operations = {}  # Dict to track active operations by hass instance ID
+
 
 async def _save_ai_results(hass: HomeAssistant, results) -> None:
     """Save AI analysis results to storage."""
@@ -158,6 +161,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_save_alert_threshold)
     websocket_api.async_register_command(hass, handle_load_alert_thresholds)
     websocket_api.async_register_command(hass, handle_clear_storage)
+    websocket_api.async_register_command(hass, handle_stop_operation)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -245,6 +249,15 @@ async def handle_load_overrides(hass: HomeAssistant, connection: websocket_api.A
 async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to scan entities and send results back in real-time."""
     try:
+        # Register this operation as active
+        hass_id = id(hass)
+        _active_operations[hass_id] = {
+            "type": "entity_scan",
+            "cancelled": False,
+            "connection": connection,
+            "msg_id": msg["id"]
+        }
+        
         connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
 
         # Get language from message
@@ -307,6 +320,12 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
 
         # Send each result as it's processed
         for result in importance_results:
+            # Check if operation was cancelled
+            hass_id = id(hass)
+            if hass_id in _active_operations and _active_operations[hass_id].get("cancelled"):
+                _LOGGER.info("Entity scan was cancelled by user")
+                break
+                
             connection.send_message(websocket_api.event_message(msg["id"], {"type": "entity_result", "result": result}))
         
         # Save AI analysis results automatically
@@ -315,9 +334,17 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_complete"}))
         _LOGGER.info(f"{scan_type.capitalize()} scan completed successfully for {len(importance_results)} entities")
         
+    except asyncio.CancelledError:
+        _LOGGER.info("Entity scan was cancelled")
+        connection.send_message(websocket_api.event_message(msg["id"], {"type": "scan_cancelled"}))
     except Exception as e:
         _LOGGER.error(f"Error during entity scan: {e}")
         connection.send_message(websocket_api.error_message(msg["id"], "scan_failed", str(e)))
+    finally:
+        # Clean up active operation
+        hass_id = id(hass)
+        if hass_id in _active_operations:
+            del _active_operations[hass_id]
 
 
 @websocket_api.websocket_command({
@@ -454,6 +481,15 @@ async def handle_evaluate_single_entity(hass: HomeAssistant, connection: websock
 async def handle_find_correlations(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Handle the command to find correlations between entities using AI with progress tracking."""
     try:
+        # Register this operation as active
+        hass_id = id(hass)
+        _active_operations[hass_id] = {
+            "type": "correlation_analysis",
+            "cancelled": False,
+            "connection": connection,
+            "msg_id": msg["id"]
+        }
+        
         entities = msg["entities"]
         language = msg.get("language", "en")
         
@@ -482,6 +518,12 @@ async def handle_find_correlations(hass: HomeAssistant, connection: websocket_ap
         
         # Process entities one by one to find correlations
         for index, entity in enumerate(entities, 1):
+            # Check if operation was cancelled
+            hass_id = id(hass)
+            if hass_id in _active_operations and _active_operations[hass_id].get("cancelled"):
+                _LOGGER.info("Correlation analysis was cancelled by user")
+                break
+                
             entity_id = entity["entity_id"]
             
             try:
@@ -561,11 +603,19 @@ async def handle_find_correlations(hass: HomeAssistant, connection: websocket_ap
         
         _LOGGER.info("Correlation analysis completed")
         
+    except asyncio.CancelledError:
+        _LOGGER.info("Correlation analysis was cancelled")
+        connection.send_message(websocket_api.event_message(msg["id"], {"type": "correlation_cancelled"}))
     except Exception as e:
         _LOGGER.error(f"Error in correlation analysis: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "correlation_error", str(e)
         ))
+    finally:
+        # Clean up active operation
+        hass_id = id(hass)
+        if hass_id in _active_operations:
+            del _active_operations[hass_id]
 
 
 @websocket_api.websocket_command({
@@ -674,9 +724,9 @@ async def handle_clear_storage(hass: HomeAssistant, connection: websocket_api.Ac
         
         # Clear all stored data in hass.data
         keys_to_clear = [
-            "hass_ai_results",
-            "hass_ai_overrides", 
-            "hass_ai_correlations",
+            AI_RESULTS_KEY,
+            INTELLIGENCE_DATA_KEY,
+            CORRELATIONS_KEY,
             "hass_ai_alert_thresholds"
         ]
         
@@ -684,18 +734,28 @@ async def handle_clear_storage(hass: HomeAssistant, connection: websocket_api.Ac
             if key in hass.data:
                 hass.data[key] = {}
                 
-        # Also clear the store if it exists
-        store = hass.helpers.storage.Store(1, "hass_ai_results")
-        await store.async_save({})
+        # Clear the correct storage stores using the same keys as saving functions
+        ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
+        await ai_results_store.async_save({})
         
-        store = hass.helpers.storage.Store(1, "hass_ai_overrides")
-        await store.async_save({})
+        intelligence_store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
+        await intelligence_store.async_save({})
         
-        store = hass.helpers.storage.Store(1, "hass_ai_correlations")
-        await store.async_save({})
+        correlations_store = storage.Store(hass, STORAGE_VERSION, CORRELATIONS_KEY)
+        await correlations_store.async_save({})
         
-        store = hass.helpers.storage.Store(1, "hass_ai_alert_thresholds")
-        await store.async_save({})
+        # Alert thresholds store (uses different naming convention)
+        alert_thresholds_store = storage.Store(hass, STORAGE_VERSION, "hass_ai_alert_thresholds")
+        await alert_thresholds_store.async_save({})
+        
+        # Clear overrides store (uses INTELLIGENCE_DATA_KEY from config entry)
+        try:
+            entry_id = next(iter(hass.data[DOMAIN]))
+            entry_store = hass.data[DOMAIN][entry_id]["store"]
+            await entry_store.async_save({})
+            _LOGGER.info("Cleared overrides store from config entry")
+        except Exception as e:
+            _LOGGER.warning(f"Could not clear entry store: {e}")
         
         _LOGGER.info("Successfully cleared all HASS AI data")
         connection.send_message(websocket_api.result_message(msg["id"], {
@@ -707,4 +767,44 @@ async def handle_clear_storage(hass: HomeAssistant, connection: websocket_api.Ac
         _LOGGER.error(f"Error clearing storage: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "clear_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/stop_operation"
+})
+@websocket_api.async_response
+async def handle_stop_operation(hass: HomeAssistant, connection, msg):
+    """Handle stop operation command."""
+    try:
+        hass_id = id(hass)
+        
+        if hass_id in _active_operations:
+            # Cancel the active operation
+            operation_info = _active_operations[hass_id]
+            operation_info["cancelled"] = True
+            
+            # If there's a task handle, cancel it
+            if "task" in operation_info:
+                operation_info["task"].cancel()
+            
+            # Clean up the operation
+            del _active_operations[hass_id]
+            
+            _LOGGER.info(f"Stopped active operation: {operation_info.get('type', 'unknown')}")
+            
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "success": True,
+                "message": "Operation stopped successfully"
+            }))
+        else:
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "success": False,
+                "message": "No active operation to stop"
+            }))
+            
+    except Exception as e:
+        _LOGGER.error(f"Error stopping operation: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "stop_error", str(e)
         ))
