@@ -64,13 +64,13 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
         if is_italian:
             return (
                 f"Analizza {len(batch_states)} entità HA. Punteggio 0-5. "
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/HEALTH\",\"management_type\":\"USER/SERVICE\"}}]. "
                 f"REASON IN INGLESE. Entità: " + ", ".join(entity_summary[:30])
             )
         else:
             return (
                 f"Analyze {len(batch_states)} HA entities. Score 0-5. "
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/HEALTH\",\"management_type\":\"USER/SERVICE\"}}]. "
                 f"REASON IN ENGLISH. Entities: " + ", ".join(entity_summary[:30])
             )
     
@@ -84,9 +84,10 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"3 = Media (comunemente utile, buon potenziale per automazioni)\n"
             f"4 = Alta (frequentemente importante, valore significativo per automazioni)\n"
             f"5 = Critica (essenziale per automazioni, sicurezza o protezione)\n\n"
-            f"IMPORTANTE - Classifica anche il tipo di entità:\n"
+            f"IMPORTANTE - Classifica il tipo di entità:\n"
             f"- DATA: Entità che forniscono informazioni (sensori, meteo, stato sistemi)\n"
-            f"- CONTROL: Entità controllabili dall'utente (interruttori, luci, termostati)\n\n"
+            f"- CONTROL: Entità controllabili dall'utente (interruttori, luci, termostati)\n"
+            f"- HEALTH: Stati/attributi che indicano problemi, avvisi, anomalie o condizioni critiche del dispositivo\n\n"
             f"INOLTRE - Determina il tipo di gestione:\n"
             f"- USER: Entità che un utente normale può e dovrebbe gestire (luci, interruttori, termostati)\n"
             f"- SERVICE: Entità gestite automaticamente da servizi/integrazioni (sensori di sistema, diagnostiche)\n\n"
@@ -97,10 +98,11 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"- Importanza per sicurezza e protezione\n"
             f"- Cambiamenti di stato che attivano automazioni utili\n"
             f"- Complessità dell'integrazione vs valore per automazioni\n"
-            f"- Distingui tra fonti di dati e dispositivi controllabili\n\n"
+            f"- Distingui tra fonti di dati e dispositivi controllabili\n"
+            f"- Per HEALTH: cerca stati 'unavailable', 'unknown', valori di batteria bassi (<20%), temperature anomale, errori di connessione, dispositivi offline, segnali deboli\n\n"
             f"Analizza sia lo stato dell'entità CHE i suoi attributi per una valutazione completa.\n"
             f"RISPONDI SEMPRE IN ITALIANO. La tua motivazione (reason) DEVE essere scritta in italiano.\n"
-            f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating', 'reason', 'category' (DATA o CONTROL) e 'management_type' (USER o SERVICE).\n\n"
+            f"Rispondi in formato JSON rigoroso come array di oggetti con 'entity_id', 'rating', 'reason', 'category' (DATA, CONTROL o HEALTH) e 'management_type' (USER o SERVICE).\n\n"
             f"Entità da analizzare:\n" + "\n".join(entity_details)
         )
     else:
@@ -113,9 +115,10 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"3 = Medium (commonly useful, good automation potential)\n"
             f"4 = High (frequently important, significant automation value)\n"
             f"5 = Critical (essential for automations, security, or safety)\n\n"
-            f"IMPORTANT - Also classify the entity type:\n"
+            f"IMPORTANT - Classify the entity type:\n"
             f"- DATA: Entities that provide information (sensors, weather, system status)\n"
-            f"- CONTROL: Entities controllable by user (switches, lights, thermostats)\n\n"
+            f"- CONTROL: Entities controllable by user (switches, lights, thermostats)\n"
+            f"- HEALTH: States/attributes indicating problems, alerts, anomalies or critical device conditions\n\n"
             f"ALSO - Determine the management type:\n"
             f"- USER: Entities that a normal user can and should manage (lights, switches, thermostats)\n"
             f"- SERVICE: Entities managed automatically by services/integrations (system sensors, diagnostics)\n\n"
@@ -126,10 +129,11 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"- Security and safety importance\n"
             f"- State changes that trigger useful automations\n"
             f"- Integration complexity vs. automation value\n"
-            f"- Distinguish between data sources and controllable devices\n\n"
+            f"- Distinguish between data sources and controllable devices\n"
+            f"- For HEALTH: look for 'unavailable', 'unknown' states, low battery (<20%), anomalous temperatures, connection errors, offline devices, weak signals\n\n"
             f"Analyze both the entity state AND its attributes for comprehensive scoring.\n"
             f"ALWAYS RESPOND IN ENGLISH. Your reason field MUST be in English.\n"
-            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', 'reason', 'category' (DATA or CONTROL), and 'management_type' (USER or SERVICE).\n\n"
+            f"Respond in strict JSON format as an array of objects with 'entity_id', 'rating', 'reason', 'category' (DATA, CONTROL, or HEALTH), and 'management_type' (USER or SERVICE).\n\n"
             f"Entities to analyze:\n" + "\n".join(entity_details)
         )
 

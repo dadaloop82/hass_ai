@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.11 - Updated 2025-08-12T20:00:00Z - CACHE BUSTER
-// Features: Auto-save correlations + Load correlations on startup + Progress tracking
-// Force reload timestamp: 1723490400000
+// HASS AI Panel v1.9.12 - Updated 2025-08-13T15:00:00Z - CACHE BUSTER
+// Features: Auto-save correlations + Load correlations on startup + Progress tracking + HEALTH Category
+// Force reload timestamp: 1723564800000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -18,6 +18,7 @@ class HassAiPanel extends LitElement {
       agentInfo: { state: true },
       minWeight: { state: true },
       searchTerm: { state: true },
+      categoryFilter: { state: true },
     };
   }
 
@@ -30,6 +31,7 @@ class HassAiPanel extends LitElement {
     this.language = 'en'; // Default language
     this.minWeight = 3; // Filter: minimum weight to show entities (default 3)
     this.searchTerm = ''; // Search filter
+    this.categoryFilter = 'ALL'; // Category filter: ALL, DATA, CONTROL, HEALTH
     this.correlations = {}; // Store correlations for each entity
     this.scanProgress = {
       show: false,
@@ -49,9 +51,10 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.10 loaded - Enhanced correlations + auto-save!');
+    console.log('🚀 HASS AI Panel v1.9.12 loaded - Enhanced correlations + auto-save + HEALTH monitoring!');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
+    this._loadCategoryFilter();
     this._loadOverrides();
     this._loadAiResults();
     this._loadCorrelations();
@@ -145,6 +148,12 @@ class HassAiPanel extends LitElement {
     this.minWeight = saved ? parseInt(saved) : 3; // Default to 3
   }
 
+  async _loadCategoryFilter() {
+    // Load category filter from localStorage
+    const saved = localStorage.getItem('hass_ai_category_filter');
+    this.categoryFilter = saved || 'ALL'; // Default to ALL
+  }
+
   async _saveMinWeightFilter(value) {
     // Save minimum weight filter to localStorage
     this.minWeight = parseInt(value);
@@ -152,8 +161,15 @@ class HassAiPanel extends LitElement {
     this.requestUpdate();
   }
 
+  async _saveCategoryFilter(value) {
+    // Save category filter to localStorage
+    this.categoryFilter = value;
+    localStorage.setItem('hass_ai_category_filter', this.categoryFilter);
+    this.requestUpdate();
+  }
+
   _getFilteredEntities() {
-    // Filter entities by minimum weight and search term
+    // Filter entities by minimum weight, search term, and category
     return Object.entries(this.entities).filter(([entityId, entity]) => {
       const weight = this.overrides[entityId]?.overall_weight ?? entity.overall_weight;
       const matchesWeight = weight >= this.minWeight;
@@ -163,7 +179,10 @@ class HassAiPanel extends LitElement {
         entityId.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         (entity.name && entity.name.toLowerCase().includes(this.searchTerm.toLowerCase()));
       
-      return matchesWeight && matchesSearch;
+      // Category filter
+      const matchesCategory = this.categoryFilter === 'ALL' || entity.category === this.categoryFilter;
+      
+      return matchesWeight && matchesSearch && matchesCategory;
     }).map(([entityId, entity]) => entity); // Return just the entity objects, not tuples
   }
 
@@ -779,6 +798,12 @@ class HassAiPanel extends LitElement {
             color: '#4CAF50', 
             label: isItalian ? 'Controllo' : 'Control' 
           };
+        case 'HEALTH':
+          return { 
+            icon: 'mdi:heart-pulse', 
+            color: '#FF9800', 
+            label: isItalian ? 'Salute' : 'Health' 
+          };
         default:
           return { 
             icon: 'mdi:help-circle', 
@@ -912,6 +937,22 @@ class HassAiPanel extends LitElement {
                   class="weight-slider"
                 />
                 <span class="weight-value">${this.minWeight}</span>
+              </div>
+              
+              <!-- Category filter -->
+              <div class="filter-row">
+                <label for="category-filter">${isItalian ? 'Categoria:' : 'Category:'}</label>
+                <select 
+                  id="category-filter" 
+                  .value=${this.categoryFilter}
+                  @change=${(e) => this._saveCategoryFilter(e.target.value)}
+                  class="category-select"
+                >
+                  <option value="ALL">${isItalian ? 'Tutte' : 'All'}</option>
+                  <option value="DATA">${isItalian ? 'Dati' : 'Data'}</option>
+                  <option value="CONTROL">${isItalian ? 'Controllo' : 'Control'}</option>
+                  <option value="HEALTH">${isItalian ? 'Salute' : 'Health'}</option>
+                </select>
               </div>
               
               <div class="filter-stats">
@@ -1484,6 +1525,24 @@ class HassAiPanel extends LitElement {
         border-radius: 50%;
         font-weight: 600;
         font-size: 14px;
+      }
+      
+      .category-select {
+        padding: 8px 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        background: var(--card-background-color);
+        color: var(--primary-text-color);
+        font-family: inherit;
+        font-size: 14px;
+        min-width: 120px;
+        cursor: pointer;
+      }
+      
+      .category-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(var(--rgb-primary-color), 0.2);
       }
       
       .filter-stats {
