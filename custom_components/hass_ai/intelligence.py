@@ -113,7 +113,7 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
     
     # Log token estimation
     token_count = _estimate_tokens(prompt)
-            _LOGGER.info(f"💬 Sending conversation via service")
+    _LOGGER.info(f"Prompt tokens estimated: {token_count}, type: {analysis_type}")
     
     return prompt
 
