@@ -89,24 +89,20 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"• GESTIONE DELLA CASA: Controllo luci, climatizzazione, sicurezza, presenza\n"
             f"• OTTIMIZZAZIONE AUTOMAZIONI: Efficienza, logiche, trigger, condizioni\n"
             f"• RISPARMIO ENERGETICO: Monitoraggio consumi, ottimizzazione, controllo dispositivi\n"
-            f"\nCATEGORIE (UN'ENTITÀ PUÒ AVERE PIÙ CATEGORIE):\n"
-            f"- DATA: Informazioni e misurazioni utili\n"
-            f"- CONTROL: Controlli azionabili\n" 
-            f"- ALERTS: Monitoraggio critico e allarmi\n"
+            f"\nCATEGORIE (UN'ENTITÀ PUÒ AVERE PIÙ CATEGORIE, scegli TUTTE quelle che si applicano):\n"
+            f"- DATA: Fornisce dati o misurazioni utili\n"
+            f"- CONTROL: Permette il controllo diretto di dispositivi o servizi\n"
+            f"- ALERTS: Può generare allarmi o monitoraggio critico\n"
+            f"- SERVICE: Può essere gestita tramite servizi, automazioni o API\n"
             f"\nESEMPI CATEGORIE MULTIPLE:\n"
-            f"• Sensore batteria smartphone: ['DATA', 'ALERTS'] (informazione + allarme basso)\n"
-            f"• Sensore temperatura: ['DATA', 'ALERTS'] (dato + allarme temperature estreme)\n"
-            f"• Update sensor: ['DATA', 'ALERTS'] (informazione + allarme manutenzione)\n"
-            f"• Interruttore luci: ['CONTROL'] (solo controllo)\n"
-            f"• Sensore presenza: ['DATA'] (solo informazione)\n"
-            f"\nALERTS: Assegna SEMPRE se l'entità può generare allarmi o monitoraggio critico:\n"
-            f"• Batterie (basse), temperature (estreme), vento (forte), aggiornamenti disponibili\n"
-            f"• Parametri salute fuori norma, dispositivi offline, errori sistema\n"
-            f"\nTIPO GESTIONE:\n"
-            f"- USER: Utente controlla direttamente\n"
-            f"- SERVICE: Richiede automazioni/servizi (conversation, telecamere, cloud)\n"
-            f"\nREASON: Spiega COSA FA e PERCHÉ è importante per almeno UNO dei 4 criteri sopra!\n"
-            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"DESCRIZIONE SPECIFICA del valore\",\"category\":[\"DATA\",\"ALERTS\"] o [\"CONTROL\"] ecc,\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"• Sensore batteria smartphone: ['DATA', 'ALERTS']\n"
+            f"• Sensore temperatura: ['DATA', 'ALERTS']\n"
+            f"• Update sensor: ['DATA', 'ALERTS', 'SERVICE']\n"
+            f"• Interruttore luci: ['CONTROL', 'SERVICE']\n"
+            f"• Sensore presenza: ['DATA']\n"
+            f"• Conversation agent: ['CONTROL', 'SERVICE']\n"
+            f"\nAssegna tutte le categorie che si applicano.\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"DESCRIZIONE SPECIFICA del valore\",\"category\":[\"DATA\",\"ALERTS\",\"CONTROL\",\"SERVICE\"],\"management_type\":\"USER/SERVICE\"}}]\n"
             f"- ALERTS: Monitoraggio critico (batterie, salute fuori norma, emergenze, manutenzione)\n"
             f"\nVALUTAZIONE ALERTS:\n"
             f"• Sensori batteria → SEMPRE ALERTS\n"
@@ -247,6 +243,10 @@ def _auto_categorize_entity(state: State) -> tuple[list[str], str]:
     else:
         # Enhanced pattern matching for unknown domains
         entity_lower = entity_id.lower()
+        
+        # Weather patterns - for custom weather sensors
+        if any(keyword in entity_lower for keyword in ['meteo', 'weather', 'forecast', 'temperatura', 'temperature', 'humidity', 'pressure', 'wind', 'rain', 'snow', 'precipitation']):
+            return ['DATA'], 'USER'
         
         # Health and wellness patterns - data + alerts
         if any(keyword in entity_lower for keyword in ['health', 'heart', 'calories', 'steps', 'fitness', 'sleep', 'weight', 'oxygen', 'saturation', 'pulse', 'blood', 'pressure', 'glucose', 'bmi', 'hydration', 'stress', 'recovery']):
@@ -1252,30 +1252,21 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         categories, management_type = _auto_categorize_entity(state)
         category = categories[0] if categories else "DATA"  # Use first category for compatibility
     else:
-        # Fallback domain-based categorization
-        data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker", "camera", "update"}
-        control_domains = {"light", "switch", "climate", "cover", "fan", "lock", "input_boolean", "input_number", "input_select", "input_text", "media_player"}
-        
+        # Fallback domain-based categorization: GENERIC, sempre almeno DATA
         entity_lower = entity_id.lower()
-        if ("battery" in entity_lower or 
-            "unavailable" in entity_lower or 
-            "offline" in entity_lower or
-            "signal" in entity_lower or
-            "error" in entity_lower or
-            "connection" in entity_lower or
-            "alarm" in entity_lower or
-            "alert" in entity_lower):
-            category = ["ALERTS"]
-            management_type = "SERVICE"
-        elif domain in data_domains:
-            category = ["DATA"]
-            management_type = "USER"
-        elif domain in control_domains:
-            category = ["CONTROL"]
-            management_type = "USER"
-        else:
-            category = ["DATA"]  # Default to DATA
-            management_type = "USER"
+        category = ["DATA"]
+        management_type = "USER"
+        # Se ha pattern di controllo
+        if any(keyword in entity_lower for keyword in ["switch", "control", "toggle", "button", "command", "conversation"]):
+            category.append("CONTROL")
+        # Se ha pattern di alert
+        if any(keyword in entity_lower for keyword in ["battery", "unavailable", "offline", "signal", "error", "connection", "alarm", "alert", "update", "problem", "warning"]):
+            category.append("ALERTS")
+        # Se ha pattern di servizio o è conversation/update/camera
+        if any(keyword in entity_lower for keyword in ["service", "api", "conversation", "update", "camera"]):
+            category.append("SERVICE")
+        # Rimuovi duplicati
+        category = list(dict.fromkeys(category))
     
     reason_map = {
         0: "Entity marked as ignore - likely diagnostic or unnecessary",
@@ -1301,11 +1292,17 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
             fallback_reason = f"{reason_map[importance]} - domain-based evaluation due to token limit"
         analysis_method = "domain_fallback_token_limit"
     else:
-        # Create more descriptive reasons for auto-categorization
+        # Create more descriptive reasons for auto-categorization with enhanced patterns
         domain = entity_id.split('.')[0] if '.' in entity_id else ''
-        if domain == 'weather':
+        entity_lower = entity_id.lower()
+        
+        if domain == 'conversation':
+            fallback_reason = f"Voice assistant control interface with {reason_map[importance].lower()} for smart home voice automation and interaction"
+        elif any(keyword in entity_lower for keyword in ['meteo', 'weather', 'forecast']):
+            fallback_reason = f"Weather information sensor providing {reason_map[importance].lower()} meteorological data for climate-based automations"
+        elif domain == 'weather':
             fallback_reason = f"Weather sensor providing {reason_map[importance].lower()} environmental data for automation decisions"
-        elif domain == 'sensor' and 'battery' in entity_id.lower():
+        elif domain == 'sensor' and 'battery' in entity_lower:
             fallback_reason = f"Battery monitoring sensor with {reason_map[importance].lower()} for preventive maintenance alerts"
         elif domain == 'sensor':
             fallback_reason = f"Data sensor with {reason_map[importance].lower()} utility for home automation and monitoring"

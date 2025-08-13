@@ -957,7 +957,7 @@ class HassAiPanel extends LitElement {
     // Translations based on browser language or HA language
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     const t = isItalian ? {
-      title: "Pannello di Controllo HASS AI v1.9.33",
+      title: "Pannello di Controllo HASS AI v1.9.34",
       description: "Analizza le tue entità, insegna all'IA e personalizza i pesi per ottimizzare la tua domotica. L'AI provider è configurato nelle impostazioni dell'integrazione.",
       scan_button: "Avvia Nuova Scansione",
       scanning_button: "Scansione in corso...",
