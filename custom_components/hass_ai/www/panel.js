@@ -518,12 +518,14 @@ class HassAiPanel extends LitElement {
           currentBatchTokens: (this.tokenStats.currentBatchTokens || 0) + Math.ceil(message.data.response_size / 4),
         };
         
-        // Update total tokens
-        this.tokenStats.totalTokens = Math.ceil((this.tokenStats.promptChars + this.tokenStats.responseChars) / 4);
+        // Update total tokens - ensure we have valid numbers
+        const promptTokens = this.tokenStats.promptChars || 0;
+        const responseTokens = this.tokenStats.responseChars || 0;
+        this.tokenStats.totalTokens = Math.ceil((promptTokens + responseTokens) / 4);
         
         // Update average if we have processed entities
-        const processedEntities = this.scanProgress.entitiesProcessed || 1;
-        this.tokenStats.averageTokensPerEntity = Math.round(this.tokenStats.totalTokens / processedEntities * 10) / 10;
+        const processedEntities = Math.max(this.scanProgress.entitiesProcessed || 1, 1);
+        this.tokenStats.averageTokensPerEntity = Math.round((this.tokenStats.totalTokens / processedEntities) * 10) / 10;
         
         // Rough cost estimation (assuming GPT-4 pricing: $0.03/1K tokens)
         this.tokenStats.estimatedCost = Math.round(this.tokenStats.totalTokens * 0.00003 * 1000) / 1000;
@@ -601,6 +603,13 @@ class HassAiPanel extends LitElement {
           estimatedCost: Math.round((message.data.token_stats.total_tokens || 0) * 0.00003 * 1000) / 1000,
           currentBatchTokens: 0 // Reset current batch
         };
+      }
+      
+      // Auto-start correlations if requested
+      if (message.data.auto_start_correlations) {
+        setTimeout(() => {
+          this._findCorrelations();
+        }, 1000); // Wait 1 second after scan completion
       }
       
       // Update last scan info

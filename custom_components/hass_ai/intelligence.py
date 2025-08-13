@@ -97,7 +97,7 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             f"- switch.luce → category=CONTROL, management_type=USER\n"
             f"- sensor.batteria_scarica → category=ALERTS, management_type=SERVICE\n"
             f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"descrizione\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
+            f"DESCRIZIONE IN ITALIANO.\n\n" + "\n".join(entity_details)
         )
     else:
         prompt = (
@@ -166,10 +166,15 @@ def _auto_categorize_entity(state: State) -> tuple[str, str]:
     if domain == 'camera':
         # Cameras can benefit from AI vision services
         return 'DATA', 'SERVICE'
+    elif domain == 'update':
+        # Update entities are informational and may trigger service actions
+        return 'DATA', 'SERVICE'
     elif domain in ['sensor', 'binary_sensor']:
         # Sensors provide data, some may need diagnostic services
-        if any(keyword in entity_id.lower() for keyword in ['battery', 'signal', 'rssi', 'linkquality', 'voltage']):
+        if any(keyword in entity_id.lower() for keyword in ['battery', 'signal', 'rssi', 'linkquality', 'voltage', 'uptime', 'memory', 'cpu', 'disk']):
             return 'DATA', 'SERVICE'  # Diagnostic sensors
+        elif any(keyword in entity_id.lower() for keyword in ['low_battery', 'offline', 'error', 'problem', 'fault']):
+            return 'ALERTS', 'SERVICE'  # Alert sensors
         else:
             return 'DATA', 'USER'  # Regular data sensors
     elif domain in ['device_tracker', 'weather']:
@@ -184,6 +189,10 @@ def _auto_categorize_entity(state: State) -> tuple[str, str]:
         return 'CONTROL', 'USER'
     elif domain in ['alert', 'automation']:
         return 'ALERTS', 'SERVICE'
+    elif domain in ['person', 'zone']:
+        return 'DATA', 'USER'
+    elif domain in ['media_player']:
+        return 'CONTROL', 'USER'
     elif 'alarm' in entity_id or 'alert' in entity_id or 'problem' in entity_id:
         return 'ALERTS', 'SERVICE'
     else:
@@ -634,7 +643,8 @@ async def get_entities_importance_batched(
                     "prompt_chars": total_prompt_chars,
                     "response_chars": total_response_chars,
                     "average_tokens_per_entity": round(total_tokens_used / len(all_results), 1) if all_results else 0
-                }
+                },
+                "auto_start_correlations": True  # Signal frontend to auto-start correlations
             }
         }))
 
