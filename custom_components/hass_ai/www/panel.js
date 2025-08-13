@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.12 - Updated 2025-08-13T15:00:00Z - CACHE BUSTER
-// Features: Auto-save correlations + Load correlations on startup + Progress tracking + HEALTH Category
-// Force reload timestamp: 1723564800000
+// HASS AI Panel v1.9.15 - Updated 2025-08-13T17:00:00Z - CACHE BUSTER
+// Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds
+// Force reload timestamp: 1723572000000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -19,6 +19,9 @@ class HassAiPanel extends LitElement {
       minWeight: { state: true },
       searchTerm: { state: true },
       categoryFilter: { state: true },
+      tokenStats: { state: true },
+      alertThresholds: { state: true },
+      analysisType: { state: true },
     };
   }
 
@@ -31,7 +34,8 @@ class HassAiPanel extends LitElement {
     this.language = 'en'; // Default language
     this.minWeight = 3; // Filter: minimum weight to show entities (default 3)
     this.searchTerm = ''; // Search filter
-    this.categoryFilter = 'ALL'; // Category filter: ALL, DATA, CONTROL, HEALTH
+    this.categoryFilter = 'ALL'; // Category filter: ALL, DATA, CONTROL, ALERTS, ENHANCED, ENHANCED
+    this.analysisType = 'importance'; // Analysis type: importance, alerts, enhanced
     this.correlations = {}; // Store correlations for each entity
     this.scanProgress = {
       show: false,
@@ -43,21 +47,31 @@ class HassAiPanel extends LitElement {
       isComplete: false,
       status: 'idle' // 'idle', 'requesting', 'processing', 'complete'
     };
+    this.tokenStats = {
+      totalTokens: 0,
+      promptChars: 0,
+      responseChars: 0,
+      currentBatchTokens: 0,
+      averageTokensPerEntity: 0,
+      estimatedCost: 0 // Rough cost estimation
+    };
     this.lastScanInfo = {
       timestamp: null,
       entityCount: 0
     };
+    this.alertThresholds = {}; // User-customizable alert thresholds
   }
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.12 loaded - Enhanced correlations + auto-save + HEALTH monitoring!');
+    console.log('🚀 HASS AI Panel v1.9.15 loaded - Enhanced correlations + auto-save + ALERTS monitoring + Real-time Token Tracking + Enhanced Analysis!');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
     this._loadCategoryFilter();
     this._loadOverrides();
     this._loadAiResults();
     this._loadCorrelations();
+    this._loadAlertThresholds();
   }
 
   async _saveAiResults() {
@@ -90,6 +104,65 @@ class HassAiPanel extends LitElement {
 
   async _loadOverrides() {
     this.overrides = await this.hass.callWS({ type: "hass_ai/load_overrides" });
+  }
+
+  async _loadAlertThresholds() {
+    try {
+      const response = await this.hass.callWS({ type: "hass_ai/load_alert_thresholds" });
+      this.alertThresholds = response.thresholds || {};
+    } catch (error) {
+      console.error('Failed to load alert thresholds:', error);
+      this.alertThresholds = {};
+    }
+  }
+
+  async _saveAlertThreshold(entityId, threshold) {
+    try {
+      await this.hass.callWS({ 
+        type: "hass_ai/save_alert_threshold",
+        entity_id: entityId,
+        threshold: threshold
+      });
+      
+      // Update local cache
+      this.alertThresholds[entityId] = {
+        level: threshold,
+        customized: true,
+        updated_at: new Date().toISOString()
+      };
+      
+      this.requestUpdate();
+    } catch (error) {
+      console.error('Failed to save alert threshold:', error);
+    }
+  }
+
+  _getAlertThreshold(entityId) {
+    return this.alertThresholds[entityId] || {
+      level: 'MEDIUM',
+      customized: false
+    };
+  }
+
+  _getAlertThresholdConfig(level) {
+    const configs = {
+      'MEDIUM': {
+        color: '#FFA500',
+        icon: 'mdi:alert-circle-outline',
+        description: 'Medium priority alert'
+      },
+      'SEVERE': {
+        color: '#FF6B6B',
+        icon: 'mdi:alert',
+        description: 'Severe alert - requires attention'
+      },
+      'CRITICAL': {
+        color: '#DC143C',
+        icon: 'mdi:alert-octagon',
+        description: 'Critical alert - immediate action required'
+      }
+    };
+    return configs[level] || configs['MEDIUM'];
   }
 
   async _loadCorrelations() {
@@ -219,13 +292,41 @@ class HassAiPanel extends LitElement {
       return isItalian ? "Scansione in corso..." : "Scanning...";
     }
     
+    const analysisNames = {
+      'importance': isItalian ? 'Importanza' : 'Importance',
+      'alerts': isItalian ? 'Allerte' : 'Alerts', 
+      'enhanced': isItalian ? 'Miglioramenti' : 'Enhanced'
+    };
+    
+    const analysisName = analysisNames[this.analysisType] || analysisNames.importance;
+    
     if (unevaluatedCount > 0 && Object.keys(this.entities).length > 0) {
       return isItalian ? 
-        `Scansiona ed esamina le ${unevaluatedCount} entità nuove` :
-        `Scan and examine ${unevaluatedCount} new entities`;
+        `${analysisName}: Scansiona ${unevaluatedCount} entità nuove` :
+        `${analysisName}: Scan ${unevaluatedCount} new entities`;
     }
     
-    return isItalian ? "Avvia Nuova Scansione" : "Start New Scan";
+    return isItalian ? 
+      `🚀 Avvia Analisi ${analysisName}` : 
+      `🚀 Start ${analysisName} Analysis`;
+  }
+  
+  _getAnalysisTypeDescription() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    const descriptions = {
+      'importance': isItalian ? 
+        '📊 Analizza l\'importanza delle entità per automazioni e controllo' :
+        '📊 Analyze entity importance for automation and control',
+      'alerts': isItalian ?
+        '🚨 Rileva problemi: dispositivi offline, batteria scarica, errori' :
+        '🚨 Detect problems: offline devices, low battery, errors',
+      'enhanced': isItalian ?
+        '⚡ Trova entità che possono beneficiare di servizi AI aggiuntivi' :
+        '⚡ Find entities that can benefit from additional AI services'
+    };
+    
+    return descriptions[this.analysisType] || descriptions.importance;
   }
 
   async _runScan() {
@@ -245,8 +346,8 @@ class HassAiPanel extends LitElement {
     this.scanProgress = {
       show: true,
       message: shouldScanOnlyNew ? 
-        (isItalian ? '🔍 Scansione entità nuove...' : '� Scanning new entities...') :
-        (isItalian ? '�🚀 Avvio scansione completa...' : '🚀 Starting full scan...'),
+        (isItalian ? '🔍 Scansione entità nuove...' : '🔍 Scanning new entities...') :
+        (isItalian ? '🚀 Avvio scansione completa...' : '🚀 Starting full scan...'),
       currentBatch: 0,
       totalBatches: 0,
       entitiesProcessed: 0,
@@ -254,6 +355,17 @@ class HassAiPanel extends LitElement {
       isComplete: false,
       status: 'idle'
     };
+    
+    // Reset token statistics for new scan
+    this.tokenStats = {
+      totalTokens: 0,
+      promptChars: 0,
+      responseChars: 0,
+      currentBatchTokens: 0,
+      averageTokensPerEntity: 0,
+      estimatedCost: 0
+    };
+    
     this.requestUpdate();
 
     await this.hass.connection.subscribeMessage(
@@ -262,7 +374,8 @@ class HassAiPanel extends LitElement {
         type: "hass_ai/scan_entities",
         language: this.hass.language || navigator.language || 'en',
         new_entities_only: shouldScanOnlyNew,
-        existing_entities: shouldScanOnlyNew ? Object.keys(this.entities) : []
+        existing_entities: shouldScanOnlyNew ? Object.keys(this.entities) : [],
+        analysis_type: this.analysisType || 'importance'
       }
     );
   }
@@ -423,6 +536,33 @@ class HassAiPanel extends LitElement {
         responseSize: message.data.response_size || 0,
         status: message.data.message.includes('📤') ? 'requesting' : 'processing'
       };
+      
+      // Update token statistics if available
+      if (message.data.prompt_size) {
+        this.tokenStats = {
+          ...this.tokenStats,
+          promptChars: (this.tokenStats.promptChars || 0) + message.data.prompt_size,
+          currentBatchTokens: Math.ceil(message.data.prompt_size / 4), // Estimate tokens
+        };
+      }
+      if (message.data.response_size) {
+        this.tokenStats = {
+          ...this.tokenStats,
+          responseChars: (this.tokenStats.responseChars || 0) + message.data.response_size,
+          currentBatchTokens: (this.tokenStats.currentBatchTokens || 0) + Math.ceil(message.data.response_size / 4),
+        };
+        
+        // Update total tokens
+        this.tokenStats.totalTokens = Math.ceil((this.tokenStats.promptChars + this.tokenStats.responseChars) / 4);
+        
+        // Update average if we have processed entities
+        const processedEntities = this.scanProgress.entitiesProcessed || 1;
+        this.tokenStats.averageTokensPerEntity = Math.round(this.tokenStats.totalTokens / processedEntities * 10) / 10;
+        
+        // Rough cost estimation (assuming GPT-4 pricing: $0.03/1K tokens)
+        this.tokenStats.estimatedCost = Math.round(this.tokenStats.totalTokens * 0.00003 * 1000) / 1000;
+      }
+      
       this.requestUpdate();
     }
     if (message.type === "batch_info") {
@@ -486,6 +626,18 @@ class HassAiPanel extends LitElement {
           `🎉 Scansione completata! Analizzate ${Object.keys(this.entities).length} entità` :
           `🎉 Scan completed! Analyzed ${Object.keys(this.entities).length} entities`
       };
+      
+      // Update final token statistics if available
+      if (message.data.token_stats) {
+        this.tokenStats = {
+          totalTokens: message.data.token_stats.total_tokens || this.tokenStats.totalTokens,
+          promptChars: message.data.token_stats.prompt_chars || this.tokenStats.promptChars,
+          responseChars: message.data.token_stats.response_chars || this.tokenStats.responseChars,
+          averageTokensPerEntity: message.data.token_stats.average_tokens_per_entity || this.tokenStats.averageTokensPerEntity,
+          estimatedCost: Math.round((message.data.token_stats.total_tokens || 0) * 0.00003 * 1000) / 1000,
+          currentBatchTokens: 0 // Reset current batch
+        };
+      }
       
       // Update last scan info
       this.lastScanInfo = {
@@ -798,11 +950,11 @@ class HassAiPanel extends LitElement {
             color: '#4CAF50', 
             label: isItalian ? 'Controllo' : 'Control' 
           };
-        case 'HEALTH':
+        case 'ALERTS':
           return { 
-            icon: 'mdi:heart-pulse', 
+            icon: 'mdi:alert-circle', 
             color: '#FF9800', 
-            label: isItalian ? 'Salute' : 'Health' 
+            label: isItalian ? 'Allerte' : 'Alerts' 
           };
         default:
           return { 
@@ -853,11 +1005,72 @@ class HassAiPanel extends LitElement {
                     <div class="debug-info">${isItalian ? `Prompt: ${this.scanProgress.promptSize} caratteri` : `Prompt: ${this.scanProgress.promptSize} chars`}</div>
                   ` : ''}
                 </div>
+                
+                <!-- Token Statistics -->
+                ${this.tokenStats.totalTokens > 0 ? html`
+                  <div class="token-stats">
+                    <div class="token-header">${isItalian ? '📊 Statistiche Token' : '📊 Token Statistics'}</div>
+                    <div class="token-grid">
+                      <div class="token-item">
+                        <span class="token-label">${isItalian ? 'Token Totali' : 'Total Tokens'}</span>
+                        <span class="token-value">${this.tokenStats.totalTokens.toLocaleString()}</span>
+                      </div>
+                      <div class="token-item">
+                        <span class="token-label">${isItalian ? 'Media/Entità' : 'Avg/Entity'}</span>
+                        <span class="token-value">${this.tokenStats.averageTokensPerEntity}</span>
+                      </div>
+                      <div class="token-item">
+                        <span class="token-label">${isItalian ? 'Costo Stimato' : 'Est. Cost'}</span>
+                        <span class="token-value">$${this.tokenStats.estimatedCost.toFixed(3)}</span>
+                      </div>
+                      <div class="token-item">
+                        <span class="token-label">${isItalian ? 'Batch Corrente' : 'Current Batch'}</span>
+                        <span class="token-value token-live">${this.tokenStats.currentBatchTokens || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                ` : ''}
               </div>
             </div>
           ` : ''}
           
           <div class="analysis-steps">
+            <!-- Analysis Type Selection -->
+            <div class="analysis-type-selection">
+              <div class="analysis-type-header">
+                <span>${isItalian ? '🔬 Tipo di Analisi:' : '🔬 Analysis Type:'}</span>
+              </div>
+              <div class="analysis-type-buttons">
+                <ha-button 
+                  .outlined=${this.analysisType !== 'importance'}
+                  .raised=${this.analysisType === 'importance'}
+                  @click=${() => { this.analysisType = 'importance'; this.requestUpdate(); }}
+                  class="analysis-type-btn"
+                >
+                  📊 ${isItalian ? 'Importanza' : 'Importance'}
+                </ha-button>
+                <ha-button 
+                  .outlined=${this.analysisType !== 'alerts'}
+                  .raised=${this.analysisType === 'alerts'}
+                  @click=${() => { this.analysisType = 'alerts'; this.requestUpdate(); }}
+                  class="analysis-type-btn"
+                >
+                  🚨 ${isItalian ? 'Allerte' : 'Alerts'}
+                </ha-button>
+                <ha-button 
+                  .outlined=${this.analysisType !== 'enhanced'}
+                  .raised=${this.analysisType === 'enhanced'}
+                  @click=${() => { this.analysisType = 'enhanced'; this.requestUpdate(); }}
+                  class="analysis-type-btn"
+                >
+                  ⚡ ${isItalian ? 'Miglioramenti' : 'Enhanced'}
+                </ha-button>
+              </div>
+              <div class="analysis-type-description">
+                ${this._getAnalysisTypeDescription()}
+              </div>
+            </div>
+            
             <div class="step-item ${Object.keys(this.entities).length === 0 ? 'active' : 'completed'}">
               <span class="step-number">1</span>
               <ha-button 
@@ -951,7 +1164,8 @@ class HassAiPanel extends LitElement {
                   <option value="ALL">${isItalian ? 'Tutte' : 'All'}</option>
                   <option value="DATA">${isItalian ? 'Dati' : 'Data'}</option>
                   <option value="CONTROL">${isItalian ? 'Controllo' : 'Control'}</option>
-                  <option value="HEALTH">${isItalian ? 'Salute' : 'Health'}</option>
+                  <option value="ALERTS">${isItalian ? 'Allerte' : 'Alerts'}</option>
+                  <option value="ENHANCED">${isItalian ? 'Miglioramenti' : 'Enhanced'}</option>
                 </select>
               </div>
               
@@ -1057,6 +1271,45 @@ class HassAiPanel extends LitElement {
                                     }
                                   </span>
                                 </div>
+                                
+                                ${entity.category === 'ALERTS' ? html`
+                                  <div class="alert-threshold-section">
+                                    <strong>${isItalian ? '🚨 Soglia Allerta:' : '🚨 Alert Threshold:'}</strong>
+                                    <div class="alert-threshold-controls">
+                                      <ha-select
+                                        .value=${this._getAlertThreshold(entity.entity_id).level}
+                                        @selectionChanged=${(e) => this._saveAlertThreshold(entity.entity_id, e.target.value)}
+                                        class="alert-threshold-select"
+                                      >
+                                        <ha-list-item value="MEDIUM">
+                                          <div class="alert-threshold-option">
+                                            <ha-icon icon="mdi:alert-circle-outline" style="color: #FFA500;"></ha-icon>
+                                            <span>${isItalian ? 'Media' : 'Medium'}</span>
+                                          </div>
+                                        </ha-list-item>
+                                        <ha-list-item value="SEVERE">
+                                          <div class="alert-threshold-option">
+                                            <ha-icon icon="mdi:alert" style="color: #FF6B6B;"></ha-icon>
+                                            <span>${isItalian ? 'Grave' : 'Severe'}</span>
+                                          </div>
+                                        </ha-list-item>
+                                        <ha-list-item value="CRITICAL">
+                                          <div class="alert-threshold-option">
+                                            <ha-icon icon="mdi:alert-octagon" style="color: #DC143C;"></ha-icon>
+                                            <span>${isItalian ? 'Critica' : 'Critical'}</span>
+                                          </div>
+                                        </ha-list-item>
+                                      </ha-select>
+                                      <small class="alert-threshold-description">
+                                        ${this._getAlertThresholdConfig(this._getAlertThreshold(entity.entity_id).level).description}
+                                        ${this._getAlertThreshold(entity.entity_id).customized ? 
+                                          html`<span class="customized-badge">${isItalian ? '(personalizzata)' : '(customized)'}</span>` : ''
+                                        }
+                                      </small>
+                                    </div>
+                                  </div>
+                                ` : ''}
+                                
                                 <div><strong>${isItalian ? 'Attributi con Peso:' : 'Weighted Attributes:'}</strong></div>
                                 <ul class="attributes-list">
                                   ${Object.entries(entity.analysis_details.attributes || {}).map(([key, value]) => {
@@ -1660,6 +1913,79 @@ class HassAiPanel extends LitElement {
         margin: 0;
       }
       
+      /* Analysis Type Selection Styles */
+      .analysis-type-selection {
+        margin-bottom: 16px;
+        padding: 16px;
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+      }
+      
+      .analysis-type-header {
+        margin-bottom: 12px;
+        font-weight: 600;
+        color: var(--primary-text-color);
+      }
+      
+      .analysis-type-buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      
+      .analysis-type-btn {
+        --mdc-theme-primary: var(--primary-color);
+        --mdc-theme-on-primary: var(--text-primary-color);
+        flex: 1;
+        min-width: 120px;
+      }
+      
+      .analysis-type-description {
+        padding: 8px 12px;
+        background: rgba(var(--rgb-primary-color), 0.1);
+        border-radius: 4px;
+        font-size: 0.9em;
+        color: var(--primary-text-color);
+        line-height: 1.4;
+      }
+      
+      /* Alert Threshold Styles */
+      .alert-threshold-section {
+        margin: 16px 0;
+        padding: 12px;
+        background: rgba(255, 152, 0, 0.1);
+        border-left: 3px solid var(--warning-color);
+        border-radius: 4px;
+      }
+      
+      .alert-threshold-controls {
+        margin-top: 8px;
+      }
+      
+      .alert-threshold-select {
+        width: 100%;
+        margin-bottom: 8px;
+      }
+      
+      .alert-threshold-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .alert-threshold-description {
+        display: block;
+        color: var(--secondary-text-color);
+        font-style: italic;
+      }
+      
+      .customized-badge {
+        color: var(--primary-color);
+        font-weight: 600;
+      }
+      
       /* Ultra compact unevaluated entities - single line */
       .unevaluated-compact {
         display: flex;
@@ -1848,6 +2174,60 @@ class HassAiPanel extends LitElement {
         color: #666;
         padding: 2px 6px;
         border-radius: 4px;
+      }
+      
+      /* Token Statistics Styles */
+      .token-stats {
+        margin-top: 12px;
+        padding: 12px;
+        background: var(--primary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+      }
+      
+      .token-header {
+        font-weight: 600;
+        color: var(--primary-text-color);
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      
+      .token-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      
+      .token-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 8px;
+        background: var(--card-background-color);
+        border-radius: 4px;
+        border: 1px solid var(--divider-color);
+      }
+      
+      .token-label {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        font-weight: 500;
+      }
+      
+      .token-value {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--primary-text-color);
+      }
+      
+      .token-live {
+        color: var(--info-color, #2196f3);
+        animation: tokenPulse 2s infinite;
+      }
+      
+      @keyframes tokenPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
       }
     `;
   }

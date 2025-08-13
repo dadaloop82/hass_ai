@@ -12,7 +12,7 @@ AI_PROVIDERS = [AI_PROVIDER_LOCAL]
 
 # Default values
 DEFAULT_SCAN_INTERVAL = 7  # days
-DEFAULT_BATCH_SIZE = 3     # entities per batch - Reduced for token management
+DEFAULT_BATCH_SIZE = 2     # entities per batch - Ultra-small for token safety
 DEFAULT_AI_PROVIDER = AI_PROVIDER_LOCAL
 
 # Entity importance levels

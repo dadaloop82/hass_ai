@@ -1,110 +1,276 @@
-# HASS AI Features
+# HASS AI Features - Complete Overview
 
-## V1.9.12: Health Monitoring & Advanced Entity Categorization
+**Version 1.9.15** | *Advanced AI-Powered Entity Management*
 
-This version introduces an intelligent health monitoring system that proactively identifies device problems and anomalies alongside enhanced entity categorization.
+## 🔍 Analysis Types
 
-### 🏥 **Health Monitoring System**
-- **🚨 Automatic Problem Detection**: AI identifies device issues, low batteries, offline devices, and anomalies
-- **📊 Three Entity Categories**: Smart classification into DATA, CONTROL, and HEALTH types
-- **🎯 Proactive Monitoring**: Focus on device health with dedicated HEALTH category filtering
-- **⚠️ Anomaly Detection**: Identifies unusual states, connection problems, and sensor anomalies
+### 📊 Importance Analysis
+Comprehensive evaluation of entity relevance for home automation:
 
-### 🎛️ **Advanced Filtering & Organization**
-- **🔍 Category Filtering**: Filter entities by ALL, DATA, CONTROL, or HEALTH categories
-- **🏥 Health Dashboard**: Dedicated view for monitoring device problems and alerts
-- **📈 Weight-Based Prioritization**: Combine category filtering with importance weights
-- **🔎 Enhanced Search**: Multi-criteria filtering with persistent user preferences
+**Purpose**: Determine which entities are most valuable for automations and daily control
 
-### 🎨 **Enhanced User Interface**
-- **🎨 Category Badges**: Color-coded badges with intuitive icons for each category type
-- **🏥 Health Indicators**: Orange HEALTH badges with heart-pulse icons for immediate problem identification
-- **📊 DATA Badges**: Blue chart-line icons for information-providing entities
-- **🎛️ CONTROL Badges**: Green tune icons for user-controllable devices
+**Scoring System**: 0-5 scale
+- **0**: Ignore - Diagnostic/unnecessary entities
+- **1**: Very Low - Rarely useful 
+- **2**: Low - Occasionally useful
+- **3**: Medium - Commonly useful  
+- **4**: High - Frequently important
+- **5**: Critical - Essential for automations
 
-### 🧠 **Intelligent AI Prompts**
-- **🔍 Health Pattern Recognition**: AI specifically looks for unavailable states, low batteries, and anomalies
-- **📊 Automatic Categorization**: Intelligent classification of entities into appropriate categories
-- **⚡ Optimized Analysis**: Enhanced prompts for better accuracy and faster processing
-- **🌐 Multilingual Support**: Health monitoring works in both Italian and English
+**AI Evaluation Factors**:
+- Entity domain and type classification
+- Attribute richness and automation potential
+- Historical usage patterns and accessibility
+- Integration complexity and reliability
+
+### 🚨 Alert Detection
+Proactive identification of problems and issues requiring attention:
+
+**Purpose**: Find devices and entities that need immediate attention or maintenance
+
+**Severity Levels**:
+- **Medium** (🟡): Standard monitoring, routine notifications
+- **Severe** (🟠): Important issues requiring attention  
+- **Critical** (🔴): Urgent problems needing immediate action
+
+**Detection Criteria**:
+- **Offline Devices**: Unreachable or disconnected entities
+- **Low Battery**: Devices with < 20% battery charge
+- **Error States**: Entities reporting malfunctions or errors
+- **Connectivity Issues**: Network or communication problems
+- **Unusual Behavior**: Abnormal readings or patterns
+
+**User Customization**:
+- Per-entity alert threshold configuration
+- Custom severity level assignment
+- Notification integration with Home Assistant
+- Visual indicators with color-coded severity
+
+### ⚡ Enhancement Opportunities
+AI-powered discovery of entities that can benefit from additional services:
+
+**Purpose**: Identify entities suitable for AI-powered enhancements and integrations
+
+**No Token Usage**: Pure pattern matching analysis - no AI API calls required
+
+**Enhancement Categories**:
+
+#### 🎥 Vision Analysis
+**Target Entities**: Cameras, image sensors
+**Capabilities**:
+- Snapshot analysis and scene description
+- Object detection and identification
+- Motion analysis and behavior tracking
+- Security event classification
+
+**Services**: OpenAI Vision, Google Vision, Frigate, Custom models
+
+#### 🎵 Audio Processing  
+**Target Entities**: Media players, audio devices
+**Capabilities**:
+- Content recognition and classification
+- Mood and genre detection
+- Audio fingerprinting and matching
+- Sound event analysis
+
+**Services**: Shazam, Whisper, Spotify, Audio analysis APIs
+
+#### 📈 Advanced Analytics
+**Target Entities**: Sensors (power, energy, consumption)
+**Capabilities**:
+- Trend analysis and forecasting
+- Anomaly detection and alerting
+- Predictive maintenance scheduling
+- Cost optimization recommendations
+
+**Services**: Time series analysis, ML forecasting, Statistical models
+
+#### 🌤️ Weather Intelligence
+**Target Entities**: Weather stations, climate sensors
+**Capabilities**:
+- Extended forecast analysis
+- Condition impact assessment
+- Agricultural and gardening insights
+- Energy usage optimization
+
+**Services**: Advanced weather APIs, Climate models, Agricultural services
+
+## 🎯 Entity Categories
+
+### 📈 DATA Entities
+**Information Providers** - Entities that supply data to your system
+
+**Examples**:
+- Temperature and humidity sensors
+- Energy meters and power monitors
+- Motion detectors and occupancy sensors
+- Air quality and environmental monitors
+- Weather stations and outdoor sensors
+
+### 🎛️ CONTROL Entities  
+**Interactive Devices** - Entities you actively control and manage
+
+**Examples**:
+- Lights, switches, and dimmers
+- Climate control and thermostats
+- Media players and entertainment systems
+- Locks, doors, and access control
+- Covers, blinds, and motorized devices
+
+### 🚨 ALERTS Entities
+**Problem Indicators** - Entities requiring immediate attention
+
+**Examples**:
+- Offline or unreachable devices
+- Low battery devices and sensors
+- Security alerts and alarms
+- System errors and malfunctions
+- Connectivity and network issues
+
+### ⚡ ENHANCED Entities
+**AI Enhancement Candidates** - Entities that can benefit from AI services
+
+**Examples**:
+- Cameras → Vision analysis and object detection
+- Media players → Audio content recognition
+- Sensors → Predictive analytics and forecasting
+- Weather → Enhanced insights and recommendations
+
+## 🔗 Correlation System
+
+### Relationship Discovery
+AI-powered analysis to identify connections between entities:
+
+#### Functional Correlations
+**Definition**: Entities that work together in automation sequences
+**Examples**: Motion sensor + hallway lights, Door sensor + entry lighting
+
+#### Spatial Correlations  
+**Definition**: Entities located in the same physical area
+**Examples**: All bedroom devices, Kitchen appliances and sensors
+
+#### Temporal Correlations
+**Definition**: Entities with synchronized timing patterns
+**Examples**: Morning routine devices, Security system activation sequences
+
+#### Logical Correlations
+**Definition**: Cause-and-effect relationships between entities
+**Examples**: HVAC operation → energy consumption, Weather conditions → heating needs
+
+### Correlation Strength Indicators
+- **★☆☆☆☆** (1): Weak correlation, occasional relationship
+- **★★☆☆☆** (2): Minor correlation, some shared patterns  
+- **★★★☆☆** (3): Moderate correlation, regular interaction
+- **★★★★☆** (4): Strong correlation, frequent collaboration
+- **★★★★★** (5): Very strong correlation, essential partnership
+
+## 📊 Real-Time Monitoring
+
+### Token Tracking
+Live monitoring of AI usage and costs:
+
+**Metrics Displayed**:
+- Total tokens consumed in current session
+- Prompt characters vs response characters
+- Current batch token usage
+- Average tokens per entity
+- Estimated cost (rough calculation)
+
+**Optimization Features**:
+- Automatic prompt compression for rate limits
+- Dynamic batch size adjustment
+- Token limit detection and recovery
+- Usage history and trend analysis
+
+### Progress Indicators
+Visual feedback during analysis operations:
+
+**Progress Elements**:
+- Current batch number and total batches
+- Entities processed vs total entities
+- Real-time status messages (Italian/English)
+- Completion percentage and time estimates
+- Error handling and retry notifications
+
+## 🎨 User Interface Features
+
+### Smart Filtering System
+Advanced filtering with real-time updates:
+
+**Filter Types**:
+- **Category**: DATA, CONTROL, ALERTS, ENHANCED, ALL
+- **Minimum Weight**: Show entities above threshold (0-5)
+- **Search**: Real-time text search across entity names and IDs
+- **Availability**: Hide unavailable or offline entities
+
+### Analysis Type Selector
+Choose between three distinct analysis modes:
+
+**Selector Interface**:
+- **📊 Importance**: Rate entities by automation value
+- **🚨 Alerts**: Find problems and issues  
+- **⚡ Enhanced**: Discover AI enhancement opportunities
+
+### Entity Management Controls
+Comprehensive entity control and customization:
+
+**Individual Controls**:
+- **Enable/Disable Toggle**: Control entity inclusion
+- **Weight Override**: Custom importance scoring (0-5)
+- **Alert Threshold**: Severity level customization (Medium/Severe/Critical)
+- **Analysis Details**: Expandable attribute and correlation view
+
+## 🔧 Advanced Configuration
+
+### AI Provider Management
+Flexible AI backend configuration:
+
+**Supported Providers**:
+- **OpenAI**: GPT-3.5-turbo, GPT-4, GPT-4-turbo
+- **Google AI**: Gemini-pro, Gemini-pro-vision
+- **Local Models**: Ollama, LM Studio, custom endpoints
+- **Auto-Detection**: Automatic provider discovery
+
+### Storage and Persistence
+Robust data management and persistence:
+
+**Persistent Data**:
+- Entity analysis results and user overrides
+- Correlation discoveries and relationship maps
+- Alert threshold customizations
+- Filter preferences and UI state
+
+### Performance Tuning
+Optimization settings for different environments:
+
+**Batch Processing**:
+- Configurable batch sizes (1-50 entities)
+- Dynamic size adjustment for rate limits
+- Parallel processing capabilities
+- Memory usage optimization
+
+**Token Optimization**:
+- Ultra-compact prompt mode for efficiency
+- Intelligent attribute selection
+- Response size limiting
+- Cost management features
+
+## 🌐 Localization Support
+
+### Multi-Language Interface
+Complete localization for international users:
+
+**Supported Languages**:
+- **English**: Complete feature set and documentation
+- **Italian**: Native interface with cultural adaptations
+- **Extensible**: Framework ready for additional languages
+
+**Localized Elements**:
+- UI labels, buttons, and navigation
+- Analysis descriptions and explanations
+- Error messages and help text
+- Progress indicators and status updates
 
 ---
 
-## V1.9.11: Correlation Auto-Save & Enhanced Persistence
-
-### 🔄 **Auto-Save Correlations**
-- **💾 Automatic Persistence**: Correlations saved incrementally during analysis
-- **🚀 Startup Loading**: Auto-load saved correlations on panel startup
-- **📈 Progress Tracking**: Real-time progress indicators with detailed feedback
-- **🛡️ Error Recovery**: Robust error handling with fallback mechanisms
-
----
-
-## V1.7.0: Universal Conversation Agent Support & Local Agent Architecture
-
-This version introduces a completely redesigned agent selection system that works with **any** conversation agent provider, eliminating dependencies and assumptions about specific AI services.
-
-### 🌟 **Universal AI Provider Support**
-- **🤖 Any Conversation Agent**: Works with Google AI, OpenAI, Ollama, ChatGPT, Anthropic, and any other conversation integration
-- **🎯 Auto-Detection**: Automatically finds and selects your configured conversation agent
-- **⚙️ Manual Selection**: Choose from all available agents with friendly names and clear identification
-- **🔧 Two-Step Configuration**: Streamlined setup wizard for agent selection and scan parameters
-
-### 🏗️ **Local Agent Architecture** 
-- **📦 Zero External Dependencies**: No protobuf or other external library requirements
-- **🏠 Home Assistant Native**: Uses only built-in conversation.process service
-- **🔒 Privacy-First**: Works perfectly with local LLMs through Ollama
-- **⚡ Lightweight Installation**: Clean installation without dependency conflicts
-
-### 🚀 **Enhanced Intelligence System**
-- **🧠 Configurable AI Backend**: Each analysis uses your selected conversation agent
-- **📊 Consistent Analysis Quality**: Same high-quality results regardless of AI provider  
-- **🔍 Enhanced Logging**: See exactly which agent is being used for each analysis
-- **⚙️ Dynamic Agent Switching**: Change agents anytime through reconfiguration
-
-### 🎛️ **Improved Configuration Flow**
-- **Step 1: Agent Selection** - Choose your preferred conversation agent with auto-detection
-- **Step 2: Scan Settings** - Configure analysis parameters and intervals
-- **💡 Smart Defaults**: Auto-detection finds the best available agent automatically
-- **🔄 Easy Reconfiguration**: Update agent selection anytime without losing data
-
-## V1.4.0: Complete Architecture Refactor and Enhanced Intelligence
-
-This version represents a major overhaul of the entire system with significant improvements to AI analysis, user experience, and developer tooling.
-
-### 🚀 New Features
-- **Comprehensive Services API**: Full Home Assistant services integration with `scan_entities`, `get_entity_importance`, and `reset_overrides`
-- **Enhanced AI Analysis Engine**: Complete rewrite with domain-based fallback system and improved batch processing
-- **Robust Error Handling**: Comprehensive error management with graceful fallbacks and detailed logging
-- **Advanced Configuration Flow**: Support for multiple AI providers and enhanced options management
-- **Developer Documentation**: Complete technical guide with architecture details and troubleshooting
-
-### 🔧 Improvements
-- **Intelligent Domain Mapping**: Automatic importance classification based on entity domains when AI analysis fails
-- **Optimized Batch Processing**: Configurable batch sizes (1-50) for improved performance with large entity sets
-- **Enhanced Frontend**: Colored weight badges, improved multilingual support, and better user experience
-- **Persistent Storage**: Improved data persistence with version management and error recovery
-- **Real-time Feedback**: Enhanced WebSocket communication with detailed progress reporting
-
-### 🐛 Fixes
-- **Manifest Dependencies**: Added proper requirements and dependencies for seamless installation
-- **Translation Consistency**: Corrected and completed translation files for Italian and English
-- **Storage Reliability**: Fixed data persistence issues and improved override management
-- **Frontend Stability**: Resolved panel loading issues and improved error handling
-
-### 🏗️ Architecture
-- **Modular Design**: Clean separation of concerns with dedicated modules for services, intelligence, and configuration
-- **Future-Ready**: Extensible architecture prepared for multiple AI providers and advanced features
-- **Best Practices**: Full compliance with Home Assistant development guidelines and patterns
-
-## V0.5.9: The Interactive Control Panel & Enhanced Intelligence
-
-This version introduced the core user experience: a dedicated frontend panel for managing your home's AI model, alongside significant enhancements to the intelligence gathering and presentation.
-
-- **Dedicated Frontend Panel**: The integration now has its own comprehensive page in the Home Assistant sidebar, built with modern web components for a seamless user experience.
-- **Websocket API**: A robust backend API using websockets allows for real-time, efficient communication between the panel and Home Assistant, ensuring a responsive interface.
-- **Live Entity Scanning with Detailed Insights**: Users can initiate a scan from the frontend and see the results populate a dynamic table in real-time. This includes not only the entity ID and name but also its calculated importance (weight) and a clear, concise reason for that importance.
-- **Interactive Controls for Fine-Tuning**: The panel provides intuitive switches and dropdowns to enable/disable entities and their specific properties, and to override their AI-assigned weights. This gives users granular control over the intelligence model.
-- **Persistent Storage for User Overrides**: All user overrides and custom configurations are saved automatically to a single JSON file in the `.storage` directory, ensuring settings are kept across Home Assistant restarts and updates.
-- **Simplified and Robust Backend**: The core Python code has been refactored for clarity and stability, focusing on providing a reliable API and an extensible framework for initial entity analysis.
-- **Future-Ready Architecture**: Designed to support future enhancements, including scheduled scans, advanced property-level analysis, and integration with other Home Assistant automations and AI models.
+*This comprehensive feature set makes HASS AI a powerful tool for intelligent entity management, proactive monitoring, and AI-powered home automation optimization.*

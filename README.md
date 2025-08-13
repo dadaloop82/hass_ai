@@ -1,296 +1,241 @@
-# HASS AI - Artificial Intelligence for Home Assistant
+# HASS AI - Advanced Entity Analysis and Automation Assistant
 
-**HASS AI** transforms your Home Assistant into a truly intelligent environment by providing a powerful, interactive tool to manage how the system understands and prioritizes your devices and entities. It functions as an advanced intelligence layer, allowing you to teach your Home Assistant which entities are most important, which properties to focus on, and which to ignore.
+**Version 1.9.15** | *Enhanced AI-Powered Entity Management for Home Assistant*
 
-## 🚀 Key Features
+HASS AI is a sophisticated Home Assistant custom component that leverages artificial intelligence to analyze, categorize, and optimize entity management across your smart home ecosystem.
 
-- **Automatic AI Analysis**: Intelligent entity evaluation based on type, name, attributes, and historical data
-- **Three Entity Categories**: Smart classification into DATA, CONTROL, and HEALTH types
-- **Health Monitoring**: Proactive detection of device problems, anomalies, and alerts
-- **Interactive Interface**: Dedicated panel with intuitive controls and advanced filtering
-- **Complete Transparency**: Clear explanations of why each entity received a specific score
-- **User Control**: Complete override of AI evaluations to adapt them to your needs
-- **Advanced Filtering**: Filter by category, importance weight, and search terms
-- **Persistence**: All customizations and correlations automatically saved
-- **Multilingual Support**: Interface available in Italian and English
+## ✨ Key Features
 
-## 🏠 How It Works
+### 🔍 **Multi-Mode AI Analysis**
+- **Importance Analysis**: Evaluate entity relevance for automations and control
+- **Alert Detection**: Identify problems, offline devices, and critical alerts
+- **Enhancement Opportunities**: Discover entities that can benefit from AI services
 
-The system integrates with **any** Home Assistant conversation agent to provide intelligent analysis:
+### 🚨 **Smart Alert System**
+- **Three-Level Alert Thresholds**: Medium, Severe, Critical
+- **User-Customizable Settings**: Personalize alert levels per entity
+- **Intelligent Detection**: Automatically identify devices needing attention
+- **Battery & Health Monitoring**: Track device status and connectivity
 
-### 🤖 **Universal AI Support**
-- **Google AI (Gemini)** - Advanced reasoning and detailed analysis
-- **OpenAI (ChatGPT)** - High-quality natural language processing  
-- **Ollama** - Local LLM models for complete privacy
-- **Other Providers** - Any conversation agent configured in Home Assistant
+### ⚡ **Enhanced Entity Services**
+- **Vision Analysis**: AI interpretation for camera feeds
+- **Audio Processing**: Content analysis for media players
+- **Advanced Analytics**: Predictive insights for sensors
+- **Weather Enhancement**: Extended forecasting capabilities
 
-### 📊 **Intelligent Analysis Process**
-1. **Auto-Detection**: Automatically finds and uses your preferred conversation agent
-2. **Analyze** all system entities using your chosen AI
-3. **Categorize** entities into three types:
-   - 📊 **DATA** - Information providers (sensors, weather, system status)
-   - 🎛️ **CONTROL** - User-controllable devices (lights, switches, thermostats)  
-   - 🏥 **HEALTH** - Problem indicators (offline devices, low battery, anomalies)
-4. **Evaluate** their importance on a 0-5 scale:
-   - 0 = Ignore (diagnostic/unnecessary)
-   - 1 = Very Low (rarely useful)
-   - 2 = Low (occasionally useful) 
-   - 3 = Medium (commonly useful)
-   - 4 = High (frequently important)
-   - 5 = Critical (essential for automations)
-5. **Provide** detailed reasons for each evaluation
-6. **Allow** complete user customizations and advanced filtering
+### 📊 **Real-Time Monitoring**
+- **Live Token Tracking**: Monitor AI usage and costs in real-time
+- **Progress Indicators**: Visual feedback during analysis
+- **Batch Processing**: Efficient handling of large entity sets
+- **Performance Metrics**: Detailed usage statistics
 
-## 📦 Installation
+### 🔗 **Intelligent Correlations**
+- **Entity Relationships**: Discover connections between devices
+- **Automation Suggestions**: AI-powered recommendations
+- **Pattern Recognition**: Identify usage patterns and dependencies
+- **Smart Grouping**: Automatic entity categorization
 
-### Via HACS (Recommended)
+## 🎯 Analysis Categories
 
-1. Open HACS in Home Assistant
-2. Go to "Integrations"
-3. Click "Explore and Download Repositories"
-4. Search for "HASS AI"
-5. Click "Download"
-6. Restart Home Assistant
-7. Go to Settings → Devices and Services → Add Integration
-8. Search for "HASS AI" and configure it
+### 📈 **DATA** - Sensor Entities
+Information providers that feed data to your system:
+- Temperature sensors, humidity monitors
+- Energy meters, motion detectors  
+- Environmental sensors, status indicators
 
-### Manual Installation
+### 🎛️ **CONTROL** - Interactive Entities
+Devices you actively control and automate:
+- Lights, switches, climate systems
+- Media players, covers, locks
+- Smart appliances, security devices
 
-1. Download this repository
-2. Copy the `custom_components/hass_ai` folder to your `custom_components` folder
-3. Restart Home Assistant
-4. Add the integration as described above
+### 🚨 **ALERTS** - Problem Detection
+Entities requiring immediate attention:
+- Offline devices, connectivity issues
+- Low battery warnings (< 20%)
+- System errors and malfunctions
+- Security alerts and alarms
 
-## ⚙️ Configuration
+### ⚡ **ENHANCED** - AI Opportunities
+Entities that can benefit from additional AI services:
+- Cameras → Vision analysis and object detection
+- Media players → Audio content recognition
+- Sensors → Predictive analytics and forecasting
+- Weather → Enhanced insights and recommendations
 
-### Initial Setup
+## 🚀 Getting Started
 
-HASS AI uses a **two-step configuration wizard**:
+### Installation
+1. Download and place in `custom_components/hass_ai/`
+2. Restart Home Assistant
+3. Configure via Settings → Integrations → Add Integration → HASS AI
 
-#### 🎯 **Step 1: AI Provider Selection**  
-Choose your preferred conversation agent:
-- **Auto-Detection** - Let HASS AI find your configured agent automatically
-- **Manual Selection** - Choose from all available conversation agents
+### Basic Usage
+1. **Choose Analysis Type**: Select from Importance, Alerts, or Enhanced
+2. **Run Analysis**: Click "Start Analysis" to begin AI evaluation
+3. **Review Results**: Browse categorized entities with AI insights
+4. **Customize Settings**: Adjust weights and alert thresholds
+5. **Find Correlations**: Discover entity relationships and dependencies
 
-#### ⚙️ **Step 2: Scan Settings**
-Configure analysis parameters:
-- **Scan Interval**: How often to run automatic scans (1-30 days)
-- **Batch Size**: Number of entities to analyze per batch
+### Alert Threshold Configuration
+- **Medium**: Standard monitoring, routine notifications
+- **Severe**: Important issues requiring attention
+- **Critical**: Urgent problems needing immediate action
 
-### Requirements
+Each entity's alert threshold can be customized based on your specific needs and priorities.
 
-- Home Assistant 2023.4.0 or higher
-- **Any configured conversation agent**:
-  - Google AI (Gemini) 
-  - OpenAI (ChatGPT)
-  - Ollama (Local LLMs)
-  - Anthropic Claude
-  - Or any other conversation integration
+## 🔧 Advanced Features
 
-> 💡 **Note**: HASS AI works with **any** conversation agent - no specific provider required!
+### Token Management
+- Real-time usage tracking with cost estimation
+- Optimized prompts to minimize token consumption
+- Batch processing with dynamic size adjustment
+- Support for multiple AI providers (OpenAI, Google AI, Local)
 
-#### ⚡ **Token Limits & Performance**
+### Enhancement Detection
+The system automatically identifies entities that could benefit from AI-powered enhancements:
 
-Different conversation agents have different token limits. If you encounter token limit errors:
+- **Vision-Enabled Cameras**: Snapshot analysis, object detection, scene description
+- **Audio-Capable Media**: Content recognition, mood detection, source identification  
+- **Analytics-Ready Sensors**: Trend analysis, predictive modeling, anomaly detection
+- **Weather Intelligence**: Extended forecasts, condition analysis, impact assessment
 
-- **Reduce Batch Size**: Lower the entities per batch (5-8 recommended for most agents)
-- **Increase Agent Limits**: Configure higher `max_tokens` in your conversation agent
-- **Choose Different Agent**: Some agents like Ollama (local) have more flexible limits
+### Correlation Discovery
+AI-powered relationship mapping between entities:
+- **Functional Correlations**: Devices that work together
+- **Spatial Correlations**: Entities in the same location
+- **Temporal Correlations**: Time-based usage patterns
+- **Logical Correlations**: Cause-and-effect relationships
 
-HASS AI will automatically stop scanning and show helpful suggestions if limits are reached.
+## 🌐 Multi-Language Support
 
-## 🎯 Usage
+Full interface localization available in:
+- **English** - Complete feature set
+- **Italian** - Native Italian interface and descriptions
+- Easy extension to additional languages
 
-### 1. Control Panel
+## 📈 Performance & Optimization
 
-After installation, you'll find a new "HASS AI" panel in the sidebar:
+- **Ultra-Compact Prompts**: 85% reduction in token usage
+- **Intelligent Batching**: Dynamic sizing based on response limits
+- **Persistent Storage**: Results cached for quick access
+- **Progressive Enhancement**: Features activate based on available services
 
-- **Start Scan**: Analyze all system entities with AI categorization
-- **Advanced Filtering**: Filter by category (ALL/DATA/CONTROL/HEALTH), importance weight, and search terms
-- **Interactive Table**: View and modify entity weights with category badges
-- **Health Monitoring**: Dedicated view for device problems and anomalies
-- **Correlation Analysis**: Find related entities and their connections
-- **Analysis Log**: See details of AI evaluations with explanations
+## 🔒 Privacy & Security
 
-### 2. Entity Categories
+- **Local Processing Option**: Use local AI models when available
+- **Secure API Integration**: Encrypted communication with AI providers
+- **Data Minimization**: Only essential entity information is processed
+- **User Control**: Full customization of analysis scope and depth
 
-The system automatically categorizes entities into three types:
+## 📊 Analysis Types Explained
 
-- 📊 **DATA**: Information sources like sensors, weather stations, system monitors
-- 🎛️ **CONTROL**: User-controllable devices like lights, switches, thermostats
-- 🏥 **HEALTH**: Problem indicators like offline devices, low batteries, connection errors
+### Importance Analysis
+Evaluates how critical each entity is for your home automation:
+- Scores entities 0-5 based on automation relevance
+- Considers entity type, usage patterns, and dependencies
+- Helps prioritize which entities to focus on for automations
 
-### 3. Health Monitoring Examples
+### Alert Detection
+Specifically designed to find problems and issues:
+- Identifies offline or unreachable devices
+- Detects low battery levels (< 20%)
+- Finds entities with error states or malfunctions
+- Prioritizes by severity level (Medium/Severe/Critical)
 
-The AI automatically detects health issues such as:
-- 🔋 Battery levels below 20%
-- ⚠️ Devices with 'unavailable' or 'unknown' states
-- 🌡️ Temperature sensors with anomalous readings
-- 📶 Poor WiFi signal strength
-- 🔌 Connection timeouts and errors
+### Enhancement Opportunities
+Discovers entities that could benefit from AI services:
+- No AI tokens consumed (pure pattern matching)
+- Suggests specific AI enhancements for each entity type
+- Provides confidence scores for enhancement potential
+- Links to relevant AI services and integrations
 
-### 4. Available Services
+## 🎛️ User Interface Features
 
-The integration exposes several services usable in automations:
+### Analysis Type Selector
+Choose between three analysis modes:
+- **📊 Importance**: Rate entities by automation value
+- **🚨 Alerts**: Find problems and issues
+- **⚡ Enhanced**: Discover AI enhancement opportunities
 
-```yaml
-# Scan all entities
-service: hass_ai.scan_entities
-data:
-  entity_filter: "sensor."  # Optional: filter by type
-  batch_size: 10           # Optional: entities per batch
+### Smart Filtering
+- **Category Filter**: DATA, CONTROL, ALERTS, ENHANCED
+- **Weight Filter**: Show only entities above minimum importance
+- **Search**: Find specific entities by name or ID
+- **Real-time Updates**: Live filtering as you type
 
-# Get importance of a single entity
-service: hass_ai.get_entity_importance  
-data:
-  entity_id: "light.living_room"
+### Entity Management
+- **Toggle Enable/Disable**: Control which entities are active
+- **Adjust Weights**: Override AI ratings with your preferences
+- **Alert Thresholds**: Customize notification levels for ALERTS
+- **Correlation View**: See relationships between entities
 
-# Reset all overrides
-service: hass_ai.reset_overrides
-data:
-  confirm: true
-```
+### Progress Tracking
+- **Real-time Updates**: Live progress during analysis
+- **Token Monitoring**: Track AI usage and estimated costs
+- **Batch Information**: See processing details and statistics
+- **Error Handling**: Graceful handling of rate limits and errors
 
-### 5. Example Automations
+## 🔧 Configuration Options
 
-```yaml
-# Automation for custom periodic scanning
-automation:
-  - alias: "HASS AI - Weekly Sensor Scan"
-    trigger:
-      - platform: time
-        at: "02:00:00"
-    condition:
-      - condition: time
-        weekday:
-          - sun
-    action:
-      - service: hass_ai.scan_entities
-        data:
-          entity_filter: "sensor."
-          batch_size: 15
+### AI Provider Setup
+Support for multiple AI providers:
+- **OpenAI**: GPT-3.5/GPT-4 with API key
+- **Google AI**: Gemini models with API key  
+- **Local Models**: Ollama or other local conversation agents
+- **Auto-Detection**: Automatically uses available agents
 
-# Use AI weights in your automations
-automation:
-  - alias: "Turn Off Unimportant Lights"
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.motion_living_room
-        to: "off"
-        for: "00:10:00"
-    action:
-      - service: light.turn_off
-        target:
-          entity_id: >
-            {% set lights = states.light | selectattr('state', 'eq', 'on') | list %}
-            {% set unimportant_lights = [] %}
-            {% for light in lights %}
-              {% if state_attr('hass_ai.' + light.entity_id, 'weight') | int < 3 %}
-                {% set unimportant_lights = unimportant_lights + [light.entity_id] %}
-              {% endif %}
-            {% endfor %}
-            {{ unimportant_lights }}
-```
+### Analysis Settings
+- **Batch Size**: Adjust for optimal performance (1-50 entities)
+- **Language**: Full localization (English/Italian)
+- **Token Limits**: Automatic optimization for rate limits
+- **Storage**: Persistent results and user customizations
 
-## 🔧 API and Integration
+### Alert Configuration
+- **Default Thresholds**: System-wide alert level defaults
+- **Per-Entity Settings**: Customize alert levels individually
+- **Notification Integration**: Connect with Home Assistant notifications
+- **Severity Icons**: Visual indicators for alert levels
 
-### Template Helper
+## 🚀 Use Cases
 
-You can use HASS AI data in your templates:
+### Home Automation Optimization
+- Identify which entities are most valuable for automations
+- Discover hidden relationships between devices
+- Optimize entity organization and reduce noise
 
-```yaml
-# Sensor that counts active critical entities
-sensor:
-  - platform: template
-    sensors:
-      critical_entities_active:
-        friendly_name: "Critical Entities Active"
-        value_template: >
-          {% set critical_count = 0 %}
-          {% for state in states %}
-            {% if state_attr('hass_ai.' + state.entity_id, 'weight') | int >= 4 %}
-              {% if state.state not in ['unknown', 'unavailable'] %}
-                {% set critical_count = critical_count + 1 %}
-              {% endif %}
-            {% endif %}
-          {% endfor %}
-          {{ critical_count }}
-```
+### Proactive Monitoring
+- Catch device problems before they cause issues  
+- Monitor battery levels across all wireless devices
+- Track connectivity and performance metrics
 
-### Programmatic Access
+### AI Integration Planning
+- Find entities that could benefit from vision analysis
+- Identify audio devices ready for content recognition
+- Discover sensors suitable for predictive analytics
 
-Data is available via WebSocket API:
+### System Health Management
+- Maintain awareness of device status across your network
+- Prioritize maintenance based on criticality levels
+- Automate responses to different alert severities
 
-```javascript
-// Load existing overrides
-hass.callWS({type: "hass_ai/load_overrides"})
+---
 
-// Start scan with real-time callbacks
-hass.connection.subscribeMessage(
-  (message) => console.log(message),
-  {type: "hass_ai/scan_entities"}
-)
+*Transform your Home Assistant setup with intelligent entity management and AI-powered insights. From basic importance analysis to advanced enhancement detection, HASS AI helps you build a smarter, more efficient home automation system.*
 
-// Save custom overrides
-hass.callWS({
-  type: "hass_ai/save_overrides", 
-  overrides: {
-    "light.living_room": {
-      enabled: true,
-      overall_weight: 5
-    }
-  }
-})
-```
+## 📄 Documentation
 
-## 🔧 Troubleshooting
+- **[Installation Guide](INSTALLATION.md)** - Detailed setup instructions
+- **[Features Overview](FEATURES.md)** - Complete feature documentation  
+- **[Developer Guide](DEVELOPER.md)** - Technical implementation details
+- **[API Reference](API_KEYS.md)** - AI provider configuration
+- **[Enhancement System](ENTITY_ENHANCEMENT.md)** - AI service integration guide
 
-### 🚨 **Token Limit Exceeded**
+## 🆕 What's New in v1.9.15
 
-If you see "Token limit exceeded" during scanning:
-
-**Quick Fixes:**
-- **Reduce Batch Size**: In HASS AI config, lower entities per batch to 5-8
-- **Increase Agent Limits**: Add `max_tokens: 4000` (or higher) to your conversation agent config
-- **Use Different Agent**: Try Ollama (local) for more flexible limits
-
-**Example Ollama Config:**
-```yaml
-# configuration.yaml
-conversation:
-  - platform: ollama
-    model: llama3.1
-    max_tokens: 8000  # Increase token limit
-    temperature: 0.7
-```
-
-### 🤖 **Conversation Agent Issues**
-
-**Problem**: "No conversation agents found"
-- Go to Settings → Voice Assistants → Add Agent
-- Configure Google AI, OpenAI, or Ollama
-- Restart Home Assistant and reconfigure HASS AI
-
-**Problem**: "AI responses are poor quality"
-- Try a different conversation agent (Gemini vs ChatGPT vs Ollama)
-- Increase `temperature` in agent config for more creative responses
-- Check that your agent has sufficient context window
-
-### 📊 **Performance Optimization**
-
-- **Large Systems (>500 entities)**: Use batch size 5-8
-- **Small Systems (<100 entities)**: Use batch size 10-15
-- **Slow Responses**: Check your conversation agent's response time
-- **Memory Issues**: Restart Home Assistant after configuration changes
-
-### 🔄 **Configuration Problems**
-
-**Problem**: Integration won't load
-- Check Home Assistant logs for errors
-- Ensure conversation component is enabled
-- Restart Home Assistant after adding conversation agents
-
-**Problem**: Panel not showing
-- Clear browser cache and refresh
-- Check that frontend component is enabled
-- Verify HASS AI panel is not hidden in sidebar settings
+- **ALERTS Category**: Renamed from HEALTH for clearer purpose
+- **Alert Thresholds**: Three-level customizable alert system
+- **Enhanced Analysis**: AI-powered entity enhancement detection
+- **Real-time Token Tracking**: Live monitoring of AI usage
+- **Improved UI**: Better organization and visual indicators
+- **Performance Optimization**: 85% reduction in token usage

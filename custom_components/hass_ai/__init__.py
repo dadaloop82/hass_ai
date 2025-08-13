@@ -155,6 +155,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_find_correlations)
     websocket_api.async_register_command(hass, handle_save_correlations)
     websocket_api.async_register_command(hass, handle_load_correlations)
+    websocket_api.async_register_command(hass, handle_save_alert_threshold)
+    websocket_api.async_register_command(hass, handle_load_alert_thresholds)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -236,6 +238,7 @@ async def handle_load_overrides(hass: HomeAssistant, connection: websocket_api.A
     vol.Optional("language", default="en"): str,
     vol.Optional("new_entities_only", default=False): bool,
     vol.Optional("existing_entities", default=[]): list,
+    vol.Optional("analysis_type", default="importance"): str,
 })
 @websocket_api.async_response
 async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
@@ -247,6 +250,7 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         language = msg.get("language", "en")
         new_entities_only = msg.get("new_entities_only", False)
         existing_entities = set(msg.get("existing_entities", []))
+        analysis_type = msg.get("analysis_type", "importance")
         
         # Get the first config entry for this integration
         config_entry = None
@@ -297,7 +301,7 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         
         # Get importance for all entities in batches
         importance_results = await get_entities_importance_batched(
-            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"], conversation_agent, language
+            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"], conversation_agent, language, analysis_type
         )
 
         # Send each result as it's processed
@@ -599,6 +603,60 @@ async def handle_load_correlations(hass: HomeAssistant, connection: websocket_ap
         
     except Exception as e:
         _LOGGER.error(f"Error loading correlations: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "load_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/save_alert_threshold",
+    vol.Required("entity_id"): str,
+    vol.Required("threshold"): str,
+})
+@websocket_api.async_response
+async def handle_save_alert_threshold(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to save an alert threshold for an entity."""
+    try:
+        entity_id = msg["entity_id"]
+        threshold = msg["threshold"]
+        
+        # Validate threshold level
+        if threshold not in ["MEDIUM", "SEVERE", "CRITICAL"]:
+            raise ValueError(f"Invalid threshold level: {threshold}")
+        
+        # Save to storage
+        from .intelligence import _save_entity_alert_threshold
+        success = _save_entity_alert_threshold(entity_id, threshold, hass)
+        
+        if success:
+            connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
+        else:
+            connection.send_message(websocket_api.error_message(
+                msg["id"], "save_error", "Failed to save alert threshold"
+            ))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error saving alert threshold: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "save_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/load_alert_thresholds",
+})
+@websocket_api.async_response
+async def handle_load_alert_thresholds(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to load alert thresholds."""
+    try:
+        thresholds = hass.data.get("hass_ai_alert_thresholds", {})
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {
+            "thresholds": thresholds
+        }))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error loading alert thresholds: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "load_error", str(e)
         ))

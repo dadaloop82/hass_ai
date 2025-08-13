@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 import json
 import asyncio
+from datetime import datetime
 from typing import Optional
 
 from .const import (
@@ -51,7 +52,7 @@ def _get_localized_message(message_key: str, language: str, **kwargs) -> str:
     
     return messages.get(message_key, {}).get('it' if is_italian else 'en', f"Message key '{message_key}' not found")
 
-def _create_localized_prompt(batch_states: list[State], entity_details: list[str], language: str, compact_mode: bool = False) -> str:
+def _create_localized_prompt(batch_states: list[State], entity_details: list[str], language: str, compact_mode: bool = False, analysis_type: str = "importance") -> str:
     """Create a localized prompt for entity analysis with optional compact mode for token limit recovery."""
     
     is_italian = language.startswith('it')
@@ -65,39 +66,73 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             summary = f"{state.entity_id}({state.domain},{state.state},{name[:20]})"
             entity_summary.append(summary)
         
+        if analysis_type == "alerts":
+            if is_italian:
+                return (
+                    f"Trova allerte in {len(batch_states)} entità HA. "
+                    f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"problema\",\"category\":\"ALERTS\",\"management_type\":\"SERVICE\"}}]. "
+                    f"REASON IN INGLESE. Solo problemi: offline, batteria<20%, errori. Entità: " + ", ".join(entity_summary[:30])
+                )
+            else:
+                return (
+                    f"Find alerts in {len(batch_states)} HA entities. "
+                    f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"issue\",\"category\":\"ALERTS\",\"management_type\":\"SERVICE\"}}]. "
+                    f"REASON IN ENGLISH. Only problems: offline, battery<20%, errors. Entities: " + ", ".join(entity_summary[:30])
+                )
+        else:
+            if is_italian:
+                return (
+                    f"Analizza {len(batch_states)} entità HA. Punteggio 0-5. "
+                    f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
+                    f"REASON IN INGLESE. Entità: " + ", ".join(entity_summary[:30])
+                )
+            else:
+                return (
+                    f"Analyze {len(batch_states)} HA entities. Score 0-5. "
+                    f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
+                    f"REASON IN ENGLISH. Entities: " + ", ".join(entity_summary[:30])
+                )
+    
+    if analysis_type == "alerts":
         if is_italian:
-            return (
-                f"Analizza {len(batch_states)} entità HA. Punteggio 0-5. "
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/HEALTH\",\"management_type\":\"USER/SERVICE\"}}]. "
-                f"REASON IN INGLESE. Entità: " + ", ".join(entity_summary[:30])
+            prompt = (
+                f"Trova allerte e allarmi in {len(batch_states)} entità HA. Gravità 0-5:\n"
+                f"0=Nessun problema, 1=Minimo, 2=Leggero, 3=Moderato, 4=Grave, 5=Critico\n"
+                f"SOLO problemi: dispositivi offline, batteria<20%, errori, malfunzionamenti, allarmi\n"
+                f"Categoria: sempre ALERTS per problemi rilevati\n"
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"problema\",\"category\":\"ALERTS\",\"management_type\":\"SERVICE\"}}]\n"
+                f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
             )
         else:
-            return (
-                f"Analyze {len(batch_states)} HA entities. Score 0-5. "
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/HEALTH\",\"management_type\":\"USER/SERVICE\"}}]. "
-                f"REASON IN ENGLISH. Entities: " + ", ".join(entity_summary[:30])
+            prompt = (
+                f"Find alerts and alarms in {len(batch_states)} HA entities. Severity 0-5:\n"
+                f"0=No problem, 1=Minimal, 2=Minor, 3=Moderate, 4=Severe, 5=Critical\n"
+                f"ONLY problems: offline devices, battery<20%, errors, malfunctions, alarms\n"
+                f"Category: always ALERTS for detected problems\n"
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"issue\",\"category\":\"ALERTS\",\"management_type\":\"SERVICE\"}}]\n"
+                f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
             )
-    
-    if is_italian:
-        prompt = (
-            f"Analizza {len(batch_states)} entità HA. Importanza 0-5:\n"
-            f"0=Ignora, 1=Molto bassa, 2=Bassa, 3=Media, 4=Alta, 5=Critica\n"
-            f"Categorie: DATA (sensori), CONTROL (controlli), HEALTH (problemi/offline/batteria<20%)\n"
-            f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/HEALTH\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
-        )
     else:
-        prompt = (
-            f"Analyze {len(batch_states)} HA entities. Importance 0-5:\n"
-            f"0=Ignore, 1=Very low, 2=Low, 3=Medium, 4=High, 5=Critical\n"
-            f"Categories: DATA (sensors), CONTROL (controls), HEALTH (problems/offline/battery<20%)\n"
-            f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/HEALTH\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
-        )
+        if is_italian:
+            prompt = (
+                f"Analizza {len(batch_states)} entità HA. Importanza 0-5:\n"
+                f"0=Ignora, 1=Molto bassa, 2=Bassa, 3=Media, 4=Alta, 5=Critica\n"
+                f"Categorie: DATA (sensori), CONTROL (controlli), ALERTS (problemi/offline/batteria<20%)\n"
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+                f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
+            )
+        else:
+            prompt = (
+                f"Analyze {len(batch_states)} HA entities. Importance 0-5:\n"
+                f"0=Ignore, 1=Very low, 2=Low, 3=Medium, 4=High, 5=Critical\n"
+                f"Categories: DATA (sensors), CONTROL (controls), ALERTS (problems/offline/battery<20%)\n"
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+                f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
+            )
     
     # Log token estimation
     token_count = _estimate_tokens(prompt)
-    _LOGGER.info(f"Prompt tokens estimated: {token_count} (chars: {len(prompt)})")
+    _LOGGER.info(f"Prompt tokens estimated: {token_count} (chars: {len(prompt)}, type: {analysis_type})")
     
     return prompt
 
@@ -111,14 +146,253 @@ ENTITY_IMPORTANCE_MAP = {
     "device_tracker": 3,  # Location tracking is important
     "alarm_control_panel": 5,  # Security is critical
     "lock": 5,     # Security related
-    "camera": 4,   # Security/monitoring
+    "camera": 4,   # Security/monitoring - can be enhanced
     "cover": 3,    # Blinds, garage doors etc
     "fan": 3,
-    "media_player": 2,
+    "media_player": 2,  # Can be enhanced with audio analysis
     "weather": 2,
     "sun": 1,      # Less critical for most automations
     "person": 4,   # Person tracking is important
 }
+
+# Alert Severity Levels for user notification thresholds
+ALERT_SEVERITY_LEVELS = {
+    "MEDIUM": {
+        "value": 1,
+        "description": "Medium priority alert - normal monitoring",
+        "color": "#FFA500",  # Orange
+        "icon": "mdi:alert-circle-outline"
+    },
+    "SEVERE": {
+        "value": 2, 
+        "description": "Severe alert - requires attention",
+        "color": "#FF6B6B",  # Red
+        "icon": "mdi:alert"
+    },
+    "CRITICAL": {
+        "value": 3,
+        "description": "Critical alert - immediate action required", 
+        "color": "#DC143C",  # Dark Red
+        "icon": "mdi:alert-octagon"
+    }
+}
+
+# Default alert thresholds for different entity domains
+DEFAULT_ALERT_THRESHOLDS = {
+    "binary_sensor": {"default": "MEDIUM", "smoke": "CRITICAL", "gas": "CRITICAL", "motion": "MEDIUM"},
+    "sensor": {"default": "MEDIUM", "battery": "SEVERE", "temperature": "MEDIUM", "humidity": "MEDIUM"},
+    "alarm_control_panel": {"default": "CRITICAL"},
+    "device_tracker": {"default": "MEDIUM"},
+    "camera": {"default": "SEVERE"},
+    "lock": {"default": "CRITICAL"},
+    "climate": {"default": "SEVERE"},
+    "switch": {"default": "MEDIUM"},
+    "light": {"default": "MEDIUM"},
+    "cover": {"default": "MEDIUM"}
+}
+
+# Entity Enhancement Detection Patterns
+ENHANCEMENT_PATTERNS = {
+    "vision": {
+        "domains": ["camera"],
+        "attributes": ["entity_picture", "stream_source", "snapshot_url"],
+        "services": ["openai_conversation", "google_generative_ai_conversation", "frigate"],
+        "description": "AI vision analysis for camera feeds",
+        "output_type": "description_sensor"
+    },
+    "audio": {
+        "domains": ["media_player"],
+        "attributes": ["media_title", "media_artist", "source", "sound_mode"],
+        "services": ["shazam", "whisper", "spotify"],
+        "description": "Audio content analysis and recognition",
+        "output_type": "audio_analysis_sensor"
+    },
+    "analytics": {
+        "domains": ["sensor"],
+        "name_patterns": ["power_", "energy_", "consumption_", "usage_", "cost_"],
+        "services": ["forecast", "statistics", "trend_analysis"],
+        "description": "Advanced analytics and predictions",
+        "output_type": "analytics_sensor"
+    },
+    "weather": {
+        "domains": ["weather"],
+        "attributes": ["forecast", "temperature", "humidity"],
+        "services": ["openweathermap", "met", "weather_analysis"],
+        "description": "Enhanced weather insights and forecasting",
+        "output_type": "weather_enhanced"
+    }
+}
+
+def _get_entity_alert_threshold(entity_id: str, domain: str, hass: HomeAssistant = None) -> dict:
+    """Get the alert threshold for an entity (user customizable)."""
+    
+    # Try to load user-customized threshold from storage
+    if hass:
+        try:
+            storage_data = hass.data.get("hass_ai_alert_thresholds", {})
+            if entity_id in storage_data:
+                return storage_data[entity_id]
+        except Exception:
+            pass
+    
+    # Use default threshold based on domain and entity type
+    domain_thresholds = DEFAULT_ALERT_THRESHOLDS.get(domain, {"default": "MEDIUM"})
+    
+    # Check for specific entity types
+    entity_name = entity_id.lower()
+    for entity_type, threshold in domain_thresholds.items():
+        if entity_type != "default" and entity_type in entity_name:
+            return {
+                "level": threshold,
+                "customized": False,
+                "description": ALERT_SEVERITY_LEVELS[threshold]["description"],
+                "color": ALERT_SEVERITY_LEVELS[threshold]["color"],
+                "icon": ALERT_SEVERITY_LEVELS[threshold]["icon"]
+            }
+    
+    # Use default for domain
+    default_threshold = domain_thresholds.get("default", "MEDIUM")
+    return {
+        "level": default_threshold,
+        "customized": False,
+        "description": ALERT_SEVERITY_LEVELS[default_threshold]["description"],
+        "color": ALERT_SEVERITY_LEVELS[default_threshold]["color"],
+        "icon": ALERT_SEVERITY_LEVELS[default_threshold]["icon"]
+    }
+
+def _save_entity_alert_threshold(entity_id: str, threshold_level: str, hass: HomeAssistant) -> bool:
+    """Save user-customized alert threshold for an entity."""
+    
+    if threshold_level not in ALERT_SEVERITY_LEVELS:
+        return False
+    
+    try:
+        # Initialize storage if not exists
+        if "hass_ai_alert_thresholds" not in hass.data:
+            hass.data["hass_ai_alert_thresholds"] = {}
+        
+        hass.data["hass_ai_alert_thresholds"][entity_id] = {
+            "level": threshold_level,
+            "customized": True,
+            "description": ALERT_SEVERITY_LEVELS[threshold_level]["description"],
+            "color": ALERT_SEVERITY_LEVELS[threshold_level]["color"],
+            "icon": ALERT_SEVERITY_LEVELS[threshold_level]["icon"],
+            "updated_at": datetime.now().isoformat()
+        }
+        
+        return True
+    except Exception as e:
+        _LOGGER.error(f"Failed to save alert threshold for {entity_id}: {e}")
+        return False
+
+def _analyze_entities_for_enhancement(states: list[State], language: str) -> list[dict]:
+    """Analyze entities for enhancement opportunities without using AI tokens."""
+    
+    results = []
+    is_italian = language.startswith('it')
+    
+    for state in states:
+        entity_id = state.entity_id
+        domain = entity_id.split('.')[0]
+        
+        # Check each enhancement pattern
+        opportunities = []
+        for enhancement_type, pattern in ENHANCEMENT_PATTERNS.items():
+            if _entity_matches_enhancement_pattern(state, pattern):
+                confidence = _calculate_enhancement_confidence(state, pattern)
+                
+                description = pattern["description"]
+                if is_italian:
+                    description = _translate_enhancement_description(description)
+                
+                opportunity = {
+                    "enhancement_type": enhancement_type,
+                    "description": description,
+                    "confidence": confidence,
+                    "services": pattern.get("services", []),
+                    "output_type": pattern["output_type"]
+                }
+                opportunities.append(opportunity)
+        
+        # Create result for this entity
+        if opportunities:
+            # Use the opportunity with highest confidence
+            best_opportunity = max(opportunities, key=lambda x: x['confidence'])
+            
+            result = {
+                "entity_id": entity_id,
+                "rating": min(5, int(best_opportunity['confidence'] * 5)),  # Convert to 0-5 scale
+                "reason": f"Enhancement opportunity: {best_opportunity['description']}",
+                "category": "ENHANCED",
+                "management_type": "SERVICE",
+                "enhancement_type": best_opportunity['enhancement_type'],
+                "confidence": best_opportunity['confidence'],
+                "services": best_opportunity['services'],
+                "output_type": best_opportunity['output_type']
+            }
+        else:
+            # No enhancement opportunities found
+            result = {
+                "entity_id": entity_id,
+                "rating": 0,
+                "reason": "No enhancement opportunities detected",
+                "category": "DATA",
+                "management_type": "USER"
+            }
+        
+        results.append(result)
+    
+    _LOGGER.info(f"Enhancement analysis complete: {len([r for r in results if r['rating'] > 0])} opportunities found from {len(states)} entities")
+    return results
+
+def _entity_matches_enhancement_pattern(state: State, pattern: dict) -> bool:
+    """Check if an entity matches an enhancement pattern."""
+    entity_id = state.entity_id
+    domain = entity_id.split('.')[0]
+    
+    # Check domain match
+    if "domains" in pattern and domain not in pattern["domains"]:
+        return False
+    
+    # Check name patterns
+    if "name_patterns" in pattern:
+        entity_name = entity_id.lower()
+        if not any(pattern_name in entity_name for pattern_name in pattern["name_patterns"]):
+            return False
+    
+    # Check required attributes
+    if "attributes" in pattern:
+        entity_attrs = state.attributes
+        if not any(attr in entity_attrs for attr in pattern["attributes"]):
+            return False
+    
+    return True
+
+def _calculate_enhancement_confidence(state: State, pattern: dict) -> float:
+    """Calculate confidence score for enhancement opportunity."""
+    confidence = 0.5  # Base confidence
+    
+    # Increase confidence based on available attributes
+    if "attributes" in pattern:
+        entity_attrs = state.attributes
+        matching_attrs = sum(1 for attr in pattern["attributes"] if attr in entity_attrs)
+        confidence += (matching_attrs / len(pattern["attributes"])) * 0.3
+    
+    # Factor in entity state availability
+    if state.state not in [None, "unavailable", "unknown"]:
+        confidence += 0.2
+    
+    return min(confidence, 1.0)
+
+def _translate_enhancement_description(description: str) -> str:
+    """Translate enhancement descriptions to Italian."""
+    translations = {
+        "AI vision analysis for camera feeds": "Analisi visiva AI per flussi telecamera",
+        "Audio content analysis and recognition": "Analisi e riconoscimento contenuto audio",
+        "Advanced analytics and predictions": "Analisi avanzate e previsioni",
+        "Enhanced weather insights and forecasting": "Approfondimenti meteo avanzati e previsioni"
+    }
+    return translations.get(description, description)
 
 async def get_entities_importance_batched(
     hass: HomeAssistant, 
@@ -129,18 +403,26 @@ async def get_entities_importance_batched(
     connection = None,
     msg_id: str = None,
     conversation_agent: str = None,
-    language: str = "en"  # Add language parameter
+    language: str = "en",  # Add language parameter
+    analysis_type: str = "importance"  # Add analysis type parameter
 ) -> list[dict]:
-    """Calculate the importance of multiple entities using external AI providers in batches with dynamic size reduction."""
+    """Calculate the importance of multiple entities using external AI providers in batches with dynamic size reduction.
+    
+    analysis_type can be: 'importance', 'health', 'enhanced'
+    """
     
     if not states:
         _LOGGER.warning("No entities provided for analysis")
         return []
     
-    _LOGGER.info(f"Starting AI analysis with provider: {ai_provider}, API key present: {bool(api_key)}")
+    _LOGGER.info(f"Starting AI analysis with provider: {ai_provider}, analysis type: {analysis_type}, API key present: {bool(api_key)}")
     
-    # Local agent doesn't need API key
-    if ai_provider != AI_PROVIDER_LOCAL and not api_key:
+    # Enhanced analysis doesn't require AI API
+    if analysis_type == "enhanced":
+        return _analyze_entities_for_enhancement(states, language)
+    
+    # Local agent doesn't need API key for other analysis types
+    if ai_provider != AI_PROVIDER_LOCAL and not api_key and analysis_type in ["importance", "alerts"]:
         _LOGGER.error(f"No API key provided for {ai_provider}! Using fallback classification.")
         # Send debug info about missing API key
         if connection and msg_id:
@@ -168,6 +450,11 @@ async def get_entities_importance_batched(
     max_retries = 3
     use_compact_mode = False  # Start with full mode
     
+    # Token usage tracking
+    total_tokens_used = 0
+    total_prompt_chars = 0
+    total_response_chars = 0
+    
     _LOGGER.info(f"🚀 Starting batch processing with initial batch size: {current_batch_size}")
     
     while remaining_states:
@@ -194,10 +481,15 @@ async def get_entities_importance_batched(
                 }
             }))
         
-        success = await _process_single_batch(
+        success, batch_stats = await _process_single_batch(
             hass, batch_states, overall_batch_num, ai_provider, 
-            connection, msg_id, conversation_agent, all_results, language, use_compact_mode
+            connection, msg_id, conversation_agent, all_results, language, use_compact_mode, analysis_type
         )
+        
+        # Accumulate token statistics
+        total_tokens_used += batch_stats.get("total_tokens", 0)
+        total_prompt_chars += batch_stats.get("prompt_chars", 0)
+        total_response_chars += batch_stats.get("response_chars", 0)
         
         if success:
             # Batch successful - remove processed entities and reset retry counter
@@ -288,17 +580,25 @@ async def get_entities_importance_batched(
         if state.entity_id not in processed_entity_ids:
             all_results.append(_create_fallback_result(state.entity_id, 0))
 
-    # Send scan completion message to frontend
+    # Send scan completion message to frontend with token statistics
     if connection and msg_id:
         connection.send_message(websocket_api.event_message(msg_id, {
             "type": "scan_complete",
             "data": {
                 "total_entities": len(all_results),
-                "message": f"Scansione completata! Analizzate {len(all_results)} entità"
+                "message": f"Scansione completata! Analizzate {len(all_results)} entità",
+                "token_stats": {
+                    "total_tokens": total_tokens_used,
+                    "prompt_chars": total_prompt_chars,
+                    "response_chars": total_response_chars,
+                    "average_tokens_per_entity": round(total_tokens_used / len(all_results), 1) if all_results else 0
+                }
             }
         }))
 
     _LOGGER.info(f"🏁 Completed analysis of {len(states)} entities, got {len(all_results)} results")
+    _LOGGER.info(f"📊 Token usage: {total_tokens_used} total tokens ({total_prompt_chars} prompt chars, {total_response_chars} response chars)")
+    _LOGGER.info(f"📈 Average: {round(total_tokens_used / len(all_results), 1) if all_results else 0} tokens per entity")
     return all_results
         
 async def _process_single_batch(
@@ -311,63 +611,26 @@ async def _process_single_batch(
     conversation_agent: str,
     all_results: list,
     language: str = "en",  # Add language parameter
-    use_compact_prompt: bool = False  # Add compact mode flag
-) -> bool:
-    """Process a single batch and return True if successful, False if token limit exceeded."""
+    use_compact_prompt: bool = False,  # Add compact mode flag
+    analysis_type: str = "importance"  # Add analysis type parameter
+) -> tuple[bool, dict]:
+    """Process a single batch and return success status and token statistics."""
     
     # Create detailed entity information for AI analysis
     entity_details = []
     
-    if not use_compact_prompt:
-        # Full detailed analysis
-        for state in batch_states:
-            # Get comprehensive entity info including key attributes
-            attributes = dict(state.attributes)
-            
-            # Extract important attributes for analysis
-            important_attrs = {}
-            
-            # Common important attributes
-            attr_keys = [
-                'device_class', 'unit_of_measurement', 'friendly_name', 
-                'supported_features', 'entity_category', 'icon',
-                'room', 'area', 'location', 'zone', 'floor',
-                # Climate specific
-                'temperature', 'target_temperature', 'hvac_mode', 'hvac_modes',
-                # Light specific  
-                'brightness', 'color_mode', 'supported_color_modes',
-                # Sensor specific
-                'state_class', 'last_changed', 'last_updated',
-                # Security specific
-                'device_type', 'tamper', 'battery_level',
-                # Media specific
-                'source', 'volume_level', 'media_title',
-                # Cover specific
-                'current_position', 'position',
-                # Switch/Binary sensor specific
-                'device_class',
-            ]
-            
-            for key in attr_keys:
-                if key in attributes and attributes[key] is not None:
-                    important_attrs[key] = attributes[key]
-            
-            # Create detailed description
-            entity_description = (
-                f"- Entity: {state.entity_id}\n"
-                f"  Domain: {state.domain}\n" 
-                f"  Name: {state.attributes.get('friendly_name', state.entity_id.split('.')[-1])}\n"
-                f"  Current State: {state.state}\n"
-                f"  Attributes: {json.dumps(important_attrs, default=str)}\n"
-            )
-            
-            entity_details.append(entity_description)
+    # Create minimal entity information for AI analysis
+    for state in batch_states:
+        # Just the basics: entity_id, domain, state, name
+        name = state.attributes.get('friendly_name', state.entity_id.split('.')[-1])
+        entity_description = f"{state.entity_id} ({state.domain}, {state.state}, {name[:20]})"
+        entity_details.append(entity_description)
     
     # Add delay to make AI analysis visible
     await asyncio.sleep(1.5 if use_compact_prompt else 2.5)
     
     # Create localized prompt based on user's language and mode
-    prompt = _create_localized_prompt(batch_states, entity_details, language, compact_mode=use_compact_prompt)
+    prompt = _create_localized_prompt(batch_states, entity_details, language, compact_mode=use_compact_prompt, analysis_type=analysis_type)
     
     # Log prompt size for debugging
     prompt_size = len(prompt)
@@ -421,7 +684,17 @@ async def _process_single_batch(
                         }
                     }))
                 
-                return False  # Signal token limit exceeded
+                # Return minimal stats even on token limit
+                prompt_tokens = _estimate_tokens(prompt)
+                batch_stats = {
+                    "prompt_chars": len(prompt),
+                    "prompt_tokens": prompt_tokens,
+                    "response_chars": len(response_text),
+                    "response_tokens": _estimate_tokens(response_text),
+                    "total_tokens": prompt_tokens + _estimate_tokens(response_text)
+                }
+                
+                return False, batch_stats  # Signal token limit exceeded
                 
         else:
             _LOGGER.error(f"AI provider {ai_provider} not supported. Only Local Agent is available.")
@@ -520,6 +793,18 @@ async def _process_single_batch(
                         "type": "entity_result",
                         "result": fallback_result
                     }))
+        
+        # Return minimal stats for fallback cases
+        prompt_tokens = _estimate_tokens(prompt)
+        batch_stats = {
+            "prompt_chars": len(prompt),
+            "prompt_tokens": prompt_tokens,
+            "response_chars": len(response_text) if 'response_text' in locals() else 0,
+            "response_tokens": _estimate_tokens(response_text) if 'response_text' in locals() else 0,
+            "total_tokens": prompt_tokens + (_estimate_tokens(response_text) if 'response_text' in locals() else 0)
+        }
+        
+        return True, batch_stats  # Fallback success with stats
 
     except json.JSONDecodeError as e:
         _LOGGER.warning(f"AI response is not valid JSON for batch {batch_num} - Raw response: {response_text} - Error: {e}")
@@ -535,6 +820,18 @@ async def _process_single_batch(
                     "type": "entity_result",
                     "result": fallback_result
                 }))
+        
+        # Return minimal stats for JSON decode error
+        prompt_tokens = _estimate_tokens(prompt)
+        batch_stats = {
+            "prompt_chars": len(prompt),
+            "prompt_tokens": prompt_tokens,
+            "response_chars": len(response_text) if 'response_text' in locals() else 0,
+            "response_tokens": _estimate_tokens(response_text) if 'response_text' in locals() else 0,
+            "total_tokens": prompt_tokens + (_estimate_tokens(response_text) if 'response_text' in locals() else 0)
+        }
+        
+        return True, batch_stats  # Fallback success with stats
     except Exception as e:
         _LOGGER.error(f"Error querying AI for batch {batch_num}: {e}")
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
@@ -550,7 +847,19 @@ async def _process_single_batch(
                     "result": fallback_result
                 }))
 
-    return True  # Success
+    # Calculate token statistics for this batch
+    prompt_tokens = _estimate_tokens(prompt)
+    response_tokens = _estimate_tokens(response_text) if 'response_text' in locals() else 0
+    
+    batch_stats = {
+        "prompt_chars": len(prompt),
+        "prompt_tokens": prompt_tokens,
+        "response_chars": len(response_text) if 'response_text' in locals() else 0,
+        "response_tokens": response_tokens,
+        "total_tokens": prompt_tokens + response_tokens
+    }
+    
+    return True, batch_stats  # Success with statistics
 
 
 def _check_token_limit_exceeded(response_text: str) -> bool:
