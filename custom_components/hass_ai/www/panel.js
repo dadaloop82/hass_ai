@@ -1110,14 +1110,14 @@ class HassAiPanel extends LitElement {
               <!-- Reset Button -->
               ${Object.keys(this.entities).length > 0 ? html`
                 <div class="filter-row reset-section">
-                  <ha-button 
+                  <mwc-button 
                     outlined
                     @click=${this._confirmResetAll}
                     class="reset-button"
-                    .disabled=${this.loading}
+                    ?disabled=${this.loading}
                   >
                     🗑️ ${isItalian ? 'Cancella Tutto e Riavvia' : 'Clear All & Restart'}
-                  </ha-button>
+                  </mwc-button>
                 </div>
               ` : ''}
             </div>
@@ -2318,23 +2318,9 @@ class HassAiPanel extends LitElement {
   }
 
   async _showConfirmDialog(title, message, confirmText, cancelText) {
-    return new Promise((resolve) => {
-      const dialog = document.createElement('ha-dialog');
-      dialog.heading = title;
-      dialog.innerHTML = `
-        <div style="padding: 16px; white-space: pre-line; line-height: 1.5;">
-          ${message}
-        </div>
-        <mwc-button slot="secondaryAction" @click="${() => { dialog.close(); resolve(false); }}">
-          ${cancelText}
-        </mwc-button>
-        <mwc-button slot="primaryAction" @click="${() => { dialog.close(); resolve(true); }}" style="--mdc-theme-primary: var(--error-color);">
-          ${confirmText}
-        </mwc-button>
-      `;
-      document.body.appendChild(dialog);
-      dialog.show();
-    });
+    // Use browser's native confirm dialog for simplicity and reliability
+    const fullMessage = `${title}\n\n${message}`;
+    return confirm(fullMessage);
   }
 }
 
