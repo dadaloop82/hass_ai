@@ -82,43 +82,72 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
     # Comprehensive analysis prompt that covers all aspects
     if is_italian:
         prompt = (
-            f"Analizza {len(batch_states)} entità HA per UTILITÀ DOMOTICA. Valuta quanto sono utili per automazioni, controllo casa, benessere e ottimizzazione. Punteggio 0-5:\n"
-            f"0=Inutile per domotica, 1=Molto poco utile, 2=Poco utile, 3=Mediamente utile, 4=Molto utile, 5=Essenziale per automazioni\n"
-            f"\nVALUTA INTELLIGENTEMENTE:\n"
-            f"• Utilità per automazioni e controllo casa\n"
-            f"• Importanza per comfort, sicurezza, risparmio energetico\n"
-            f"• Valore per monitoraggio e manutenzione\n"
-            f"• Rilevanza per presenza, benessere, ottimizzazione\n"
-            f"\nCATEGORIE (scegli in base alla funzione principale):\n"
-            f"- DATA: informazioni utili (sensori ambientali, stato dispositivi, misurazioni)\n"
-            f"- CONTROL: controlli azionabili (interruttori, regolazioni, comandi)\n" 
-            f"- ALERTS: monitoraggio critico (batterie scariche, guasti, manutenzione, sicurezza, problemi)\n"
-            f"\nIMPORTANTE per ALERTS: Sensori di batteria, vento forte, temperature estreme, umidità critica possono essere ALERTS!\n"
+            f"Analizza {len(batch_states)} entità Home Assistant per CASA INTELLIGENTE. Valuta l'utilità considerando TUTTI questi aspetti con pari importanza. Punteggio 0-5:\n"
+            f"0=Inutile, 1=Molto poco utile, 2=Poco utile, 3=Mediamente utile, 4=Molto utile, 5=Essenziale\n"
+            f"\nCRITERI DI VALUTAZIONE EQUILIBRATA (tutti importanti):\n"
+            f"• BENESSERE DELLE PERSONE: Parametri vitali, fitness, qualità dell'aria, comfort\n"
+            f"• GESTIONE DELLA CASA: Controllo luci, climatizzazione, sicurezza, presenza\n"
+            f"• OTTIMIZZAZIONE AUTOMAZIONI: Efficienza, logiche, trigger, condizioni\n"
+            f"• RISPARMIO ENERGETICO: Monitoraggio consumi, ottimizzazione, controllo dispositivi\n"
+            f"\nCATEGORIE (UN'ENTITÀ PUÒ AVERE PIÙ CATEGORIE):\n"
+            f"- DATA: Informazioni e misurazioni utili\n"
+            f"- CONTROL: Controlli azionabili\n" 
+            f"- ALERTS: Monitoraggio critico e allarmi\n"
+            f"\nESEMPI CATEGORIE MULTIPLE:\n"
+            f"• Sensore batteria smartphone: ['DATA', 'ALERTS'] (informazione + allarme basso)\n"
+            f"• Sensore temperatura: ['DATA', 'ALERTS'] (dato + allarme temperature estreme)\n"
+            f"• Update sensor: ['DATA', 'ALERTS'] (informazione + allarme manutenzione)\n"
+            f"• Interruttore luci: ['CONTROL'] (solo controllo)\n"
+            f"• Sensore presenza: ['DATA'] (solo informazione)\n"
+            f"\nALERTS: Assegna SEMPRE se l'entità può generare allarmi o monitoraggio critico:\n"
+            f"• Batterie (basse), temperature (estreme), vento (forte), aggiornamenti disponibili\n"
+            f"• Parametri salute fuori norma, dispositivi offline, errori sistema\n"
             f"\nTIPO GESTIONE:\n"
-            f"- USER: l'utente può controllare/configurare direttamente\n"
-            f"- SERVICE: richiede servizi tecnici o automazioni di sistema\n"
-            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"DESCRIZIONE DETTAGLIATA: cosa fa questo sensore e PERCHÉ è utile per la domotica. Spiega il valore specifico per automazioni/controllo casa\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"REASON OBBLIGATORIO: Descrivi COSA FA l'entità e PERCHÉ è importante per la domotica. NON dire solo 'utilità automazioni' ma spiega il valore specifico!\n\n" + "\n".join(entity_details)
+            f"- USER: Utente controlla direttamente\n"
+            f"- SERVICE: Richiede automazioni/servizi (conversation, telecamere, cloud)\n"
+            f"\nREASON: Spiega COSA FA e PERCHÉ è importante per almeno UNO dei 4 criteri sopra!\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"DESCRIZIONE SPECIFICA del valore\",\"category\":[\"DATA\",\"ALERTS\"] o [\"CONTROL\"] ecc,\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"- ALERTS: Monitoraggio critico (batterie, salute fuori norma, emergenze, manutenzione)\n"
+            f"\nVALUTAZIONE ALERTS:\n"
+            f"• Sensori batteria → SEMPRE ALERTS\n"
+            f"• Parametri salute critici (ossigeno <95%, battito anomalo) → ALERTS\n"
+            f"• Update e manutenzione → ALERTS\n"
+            f"• Condizioni ambientali estreme → ALERTS\n"
+            f"\nTIPO GESTIONE:\n"
+            f"- USER: Utente controlla direttamente\n"
+            f"- SERVICE: Richiede automazioni/servizi (conversation, telecamere, cloud)\n"
+            f"\nREASON: Spiega COSA FA e PERCHÉ è importante per casa intelligente O benessere personale!\n"
+            f"ESEMPI BUONI: 'Monitora saturazione ossigeno per salute cardiovascolare', 'Controlla illuminazione per comfort', 'Rileva presenza per sicurezza'\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"DESCRIZIONE SPECIFICA del valore per domotica/salute/benessere\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON OBBLIGATORIO: NON sottovalutare mai i parametri di salute! Saturazione ossigeno, battito cardiaco, pressione sono VITALI. Descrivi COSA FA l'entità e PERCHÉ è importante per domotica/salute/benessere!\n\n" + "\n".join(entity_details)
         )
     else:
         prompt = (
-            f"Analyze {len(batch_states)} HA entities for HOME AUTOMATION UTILITY. Evaluate how useful they are for automations, house control, wellness and optimization. Score 0-5:\n"
-            f"0=Useless for automation, 1=Very low utility, 2=Low utility, 3=Medium utility, 4=High utility, 5=Essential for automations\n"
-            f"\nEVALUATE INTELLIGENTLY:\n"
-            f"• Utility for automations and house control\n"
-            f"• Importance for comfort, security, energy saving\n"
-            f"• Value for monitoring and maintenance\n"
-            f"• Relevance for presence, wellness, optimization\n"
-            f"\nCATEGORIES (choose based on primary function):\n"
-            f"- DATA: useful information (environmental sensors, device status, measurements)\n"
-            f"- CONTROL: actionable controls (switches, adjustments, commands)\n"
-            f"- ALERTS: critical monitoring (low batteries, failures, maintenance, security, issues)\n"
-            f"\nIMPORTANT for ALERTS: Battery sensors, strong wind, extreme temperatures, critical humidity can be ALERTS!\n"
+            f"Analyze {len(batch_states)} Home Assistant entities for SMART HOME. Evaluate usefulness considering ALL these aspects with equal importance. Rating 0-5:\n"
+            f"0=Useless, 1=Very low utility, 2=Low utility, 3=Medium utility, 4=Very useful, 5=Essential\n"
+            f"\nBALANCED EVALUATION CRITERIA (all equally important):\n"
+            f"• PERSONAL WELLNESS: Vital parameters, fitness, air quality, comfort\n"
+            f"• HOME MANAGEMENT: Light control, climate, security, presence\n"
+            f"• AUTOMATION OPTIMIZATION: Efficiency, logic, triggers, conditions\n"
+            f"• ENERGY SAVING: Consumption monitoring, optimization, device control\n"
+            f"\nCATEGORIES (ENTITY CAN HAVE MULTIPLE CATEGORIES):\n"
+            f"- DATA: Useful information and measurements\n"
+            f"- CONTROL: Actionable controls\n"
+            f"- ALERTS: Critical monitoring and alarms\n"
+            f"\nMULTI-CATEGORY EXAMPLES:\n"
+            f"• Phone battery sensor: ['DATA', 'ALERTS'] (information + low battery alert)\n"
+            f"• Temperature sensor: ['DATA', 'ALERTS'] (data + extreme temperature alert)\n"
+            f"• Update sensor: ['DATA', 'ALERTS'] (information + maintenance alert)\n"
+            f"• Light switch: ['CONTROL'] (control only)\n"
+            f"• Presence sensor: ['DATA'] (information only)\n"
+            f"\nALERTS: ALWAYS assign if entity can generate alarms or critical monitoring:\n"
+            f"• Batteries (low), temperatures (extreme), wind (strong), available updates\n"
+            f"• Health parameters out of range, offline devices, system errors\n"
             f"\nMANAGEMENT TYPE:\n"
-            f"- USER: user can directly control/configure\n"
-            f"- SERVICE: requires technical services or system automations\n"
-            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"DETAILED DESCRIPTION: what this sensor does and WHY it's useful for home automation. Explain specific value for automations/house control\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"REASON MANDATORY: Describe WHAT the entity does and WHY it's important for home automation. DON'T just say 'automation utility' but explain the specific value!\n\n" + "\n".join(entity_details)
+            f"- USER: User controls directly\n"
+            f"- SERVICE: Requires automations/services (conversation, cameras, cloud)\n"
+            f"\nREASON: Explain WHAT IT DOES and WHY it's important for at least ONE of the 4 criteria above!\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"SPECIFIC description of value\",\"category\":[\"DATA\",\"ALERTS\"] or [\"CONTROL\"] etc,\"management_type\":\"USER/SERVICE\"}}]\n" + "\n".join(entity_details)
         )
     
     # Log token estimation
@@ -147,60 +176,92 @@ ENTITY_IMPORTANCE_MAP = {
 }
 
 # Auto-categorization based on domain and entity characteristics
-def _auto_categorize_entity(state: State) -> tuple[str, str]:
+def _auto_categorize_entity(state: State) -> tuple[list[str], str]:
     """Automatically categorize entity based on domain and characteristics.
-    Returns (category, management_type)."""
+    Returns (categories_list, management_type)."""
     domain = state.domain
     entity_id = state.entity_id
     attributes = state.attributes
     entity_state = state.state
     
+    categories = []
+    
     # Check for alerts/problems first
     if entity_state in ['unavailable', 'unknown', 'error']:
-        return 'ALERTS', 'SERVICE'
+        return ['ALERTS'], 'SERVICE'
     
-    # Only keep critical state-based checks, let AI decide the rest
-    battery_level = attributes.get('battery_level')
-    if battery_level is not None and battery_level < 15:  # Only very critical levels
-        return 'ALERTS', 'SERVICE'
+    # Battery sensors should be both DATA and ALERTS
+    if 'battery' in entity_id.lower() or attributes.get('battery_level') is not None:
+        return ['DATA', 'ALERTS'], 'USER'  # Data for monitoring + alerts for low battery
     
-    # Domain-based categorization with management type - basic guidelines only
-    if domain == 'camera':
-        # Cameras typically provide data and can benefit from AI vision services
-        return 'DATA', 'SERVICE'
-    elif domain == 'update':
-        # Update entities are informational and may trigger service actions
-        return 'DATA', 'SERVICE'
+    # Update entities are both DATA and ALERTS
+    if domain == 'update' or 'update' in entity_id.lower():
+        return ['DATA', 'ALERTS'], 'SERVICE'  # Information + maintenance alerts
+    
+    # Domain-based categorization with multi-category support
+    if domain == 'sun':
+        # Sun provides important data for automation timing
+        return ['DATA'], 'USER'
+    elif domain == 'conversation':
+        # Conversation agents require service integration
+        return ['CONTROL'], 'SERVICE'  # Service because needs API/automation
+    elif domain == 'camera':
+        # Cameras provide data but require services to operate
+        return ['DATA'], 'SERVICE'
     elif domain in ['sensor', 'binary_sensor']:
-        # Let AI decide if sensors are DATA or ALERTS based on their purpose
-        # Only obvious diagnostic sensors get SERVICE type
-        if any(keyword in entity_id.lower() for keyword in ['rssi', 'linkquality', 'uptime', 'memory', 'cpu', 'disk', 'connection']):
-            return 'DATA', 'SERVICE'  # Clear diagnostic sensors
-        else:
-            return 'DATA', 'USER'  # Let AI decide DATA vs ALERTS in analysis
+        # Improved sensor categorization with multi-category support
+        entity_lower = entity_id.lower()
+        
+        # Health and fitness sensors - can have alerts for out-of-range values
+        if any(keyword in entity_lower for keyword in ['heart_rate', 'calories', 'steps', 'distance', 'sleep', 'weight', 'blood', 'fitness', 'oxygen', 'saturation', 'pulse', 'bp', 'pressure', 'glucose', 'cholesterol', 'bmi', 'body_mass', 'hydration', 'stress', 'recovery']):
+            # Health sensors provide data but can also alert if values are abnormal
+            return ['DATA', 'ALERTS'], 'USER'
+        
+        # Environmental sensors that can trigger alerts
+        if any(keyword in entity_lower for keyword in ['wind', 'storm', 'flood', 'earthquake', 'emergency']):
+            return ['DATA', 'ALERTS'], 'USER'
+        
+        # Temperature sensors - data + alerts for extreme values
+        if 'temperature' in entity_lower:
+            return ['DATA', 'ALERTS'], 'USER'
+            
+        # System diagnostic sensors
+        if any(keyword in entity_lower for keyword in ['rssi', 'linkquality', 'uptime', 'memory', 'cpu', 'disk', 'connection']):
+            return ['DATA'], 'SERVICE'
+        
+        # Default sensors are DATA only
+        return ['DATA'], 'USER'
+        
     elif domain in ['weather']:
-        # Weather entities provide important environmental data
-        return 'DATA', 'USER'
+        return ['DATA'], 'USER'
     elif domain in ['device_tracker', 'person', 'zone']:
-        return 'DATA', 'USER'
+        return ['DATA'], 'USER'
     elif domain in ['switch', 'light', 'climate', 'cover', 'fan', 'media_player']:
-        return 'CONTROL', 'USER'
+        return ['CONTROL'], 'USER'
     elif domain in ['lock', 'alarm_control_panel']:
-        return 'CONTROL', 'SERVICE'
+        return ['CONTROL'], 'SERVICE'
     elif domain in ['input_boolean', 'input_select', 'input_number', 'input_text']:
-        return 'CONTROL', 'USER'
+        return ['CONTROL'], 'USER'
     elif domain in ['alert', 'automation']:
-        return 'ALERTS', 'SERVICE'
+        return ['ALERTS'], 'SERVICE'
     else:
-        # Default based on entity name patterns
-        if any(keyword in entity_id for keyword in ['temperature', 'humidity', 'pressure']):
-            return 'DATA', 'USER'
-        elif any(keyword in entity_id for keyword in ['battery', 'signal', 'rssi', 'linkquality']):
-            return 'DATA', 'SERVICE'
-        elif any(keyword in entity_id for keyword in ['switch', 'light', 'fan', 'heater']):
-            return 'CONTROL', 'USER'
-        else:
-            return 'DATA', 'USER'  # Default to DATA/USER for unknown entities
+        # Enhanced pattern matching for unknown domains
+        entity_lower = entity_id.lower()
+        
+        # Health and wellness patterns - data + alerts
+        if any(keyword in entity_lower for keyword in ['health', 'heart', 'calories', 'steps', 'fitness', 'sleep', 'weight', 'oxygen', 'saturation', 'pulse', 'blood', 'pressure', 'glucose', 'bmi', 'hydration', 'stress', 'recovery']):
+            return ['DATA', 'ALERTS'], 'USER'
+        
+        # Alert patterns - only alerts
+        if any(keyword in entity_lower for keyword in ['error', 'warning', 'alert', 'alarm']):
+            return ['ALERTS'], 'USER'
+        
+        # Control patterns  
+        if any(keyword in entity_lower for keyword in ['switch', 'control', 'toggle', 'button', 'command']):
+            return ['CONTROL'], 'USER'
+            
+        # Default to DATA for informational entities
+        return ['DATA'], 'USER'
 
 # Alert Severity Levels for user notification thresholds
 ALERT_SEVERITY_LEVELS = {
@@ -232,41 +293,52 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
             unit = attributes.get('unit_of_measurement', '')
             device_class = attributes.get('device_class', '')
             
-            # Check if this entity warrants alert thresholds
+            # Check if this entity warrants alert thresholds - be more inclusive
             needs_thresholds = False
+            entity_lower = entity_id.lower()
             
             if domain == 'binary_sensor':
                 device_class = attributes.get('device_class', '')
-                if device_class in ['battery', 'problem', 'safety', 'smoke', 'gas', 'moisture']:
+                if (device_class in ['battery', 'problem', 'safety', 'smoke', 'gas', 'moisture', 'update'] or
+                    any(keyword in entity_lower for keyword in ['battery', 'update', 'problem', 'error', 'warning', 'alert'])):
                     needs_thresholds = True
                     
             elif domain == 'sensor':
                 try:
                     num_value = float(current_value)
-                    # Only generate for obvious alert-worthy sensors
-                    if (device_class == 'battery' or 'battery' in entity_id.lower() or 
-                        'temperature' in entity_id.lower() or 'humidity' in entity_id.lower() or
-                        'wind' in entity_id.lower() or any(keyword in entity_id.lower() for keyword in ['cpu', 'memory', 'disk'])):
+                    # Much more inclusive criteria for sensors that need thresholds
+                    if (any(keyword in entity_lower for keyword in ['battery', 'temperature', 'humidity', 'wind', 'cpu', 'memory', 'disk', 'signal', 'rssi', 'heart_rate', 'blood', 'weight', 'calories', 'steps']) or
+                        device_class in ['battery', 'temperature', 'humidity', 'signal_strength', 'power'] or
+                        'update' in entity_lower or 'health' in entity_lower):
                         needs_thresholds = True
                 except (ValueError, TypeError):
-                    pass
+                    # Even non-numeric sensors might need thresholds if they're alert-related
+                    if any(keyword in entity_lower for keyword in ['battery', 'update', 'status', 'state', 'error', 'warning']):
+                        needs_thresholds = True
+            
+            elif domain == 'update':
+                # Update entities should always have thresholds
+                needs_thresholds = True
             
             if needs_thresholds:
                 # AI-generated thresholds prompt
                 threshold_prompt = (
-                    f"Proponi soglie di allerta per l'entità: {entity_id}\n"
+                    f"Proponi soglie di allerta intelligenti per l'entità: {entity_id}\n"
                     f"Valore attuale: {current_value} {unit}\n"
                     f"Tipo dispositivo: {device_class}\n"
-                    f"Domini: {domain}\n\n"
-                    f"Genera 3 soglie di allerta (LOW, MEDIUM, HIGH) con valori specifici appropriati.\n"
-                    f"Considera:\n"
-                    f"- Batterie: soglie per basso/critico\n"
-                    f"- Temperature: soglie per comfort/sicurezza\n"
-                    f"- Umidità: soglie per comfort/muffa\n"
-                    f"- Vento: soglie per condizioni meteo\n"
-                    f"- Sistema: soglie per performance\n\n"
-                    f"JSON: {{\"LOW\":{{\"value\":numero,\"condition\":\"condizione\",\"description\":\"descrizione\"}},\"MEDIUM\":{{\"value\":numero,\"condition\":\"condizione\",\"description\":\"descrizione\"}},\"HIGH\":{{\"value\":numero,\"condition\":\"condizione\",\"description\":\"descrizione\"}}}}\n"
-                    f"Esempio batteria: {{\"LOW\":{{\"value\":30,\"condition\":\"< 30%\",\"description\":\"Batteria in esaurimento\"}},\"MEDIUM\":{{\"value\":20,\"condition\":\"< 20%\",\"description\":\"Batteria bassa\"}},\"HIGH\":{{\"value\":10,\"condition\":\"< 10%\",\"description\":\"Batteria critica\"}}}}"
+                    f"Dominio: {domain}\n\n"
+                    f"Genera 3 soglie di allerta (LOW, MEDIUM, HIGH) con valori specifici e appropriati.\n"
+                    f"Considera l'utilizzo pratico nella domotica e benessere:\n\n"
+                    f"ESEMPI PER TIPO:\n"
+                    f"• Batterie: LOW=30%, MEDIUM=20%, HIGH=10% (critico)\n"
+                    f"• Temperature casa: LOW=15°C, MEDIUM=10°C, HIGH=5°C (freddo) o LOW=28°C, MEDIUM=32°C, HIGH=35°C (caldo)\n"
+                    f"• Umidità: LOW=30%, MEDIUM=25%, HIGH=20% (secco) o LOW=70%, MEDIUM=80%, HIGH=90% (umido)\n"
+                    f"• Vento: LOW=20km/h, MEDIUM=40km/h, HIGH=60km/h (pericoloso)\n"
+                    f"• CPU/Sistema: LOW=70%, MEDIUM=85%, HIGH=95% (sovraccarico)\n"
+                    f"• Salute (battiti): LOW=50bpm, MEDIUM=40bpm, HIGH=35bpm (basso) o LOW=100bpm, MEDIUM=120bpm, HIGH=140bpm (alto)\n"
+                    f"• Update: Presenza aggiornamenti disponibili\n\n"
+                    f"SCEGLI VALORI REALISTICI per la domotica e considera il contesto dell'entità.\n\n"
+                    f"JSON: {{\"LOW\":{{\"value\":numero,\"condition\":\"condizione leggibile\",\"description\":\"descrizione del problema\"}},\"MEDIUM\":{{\"value\":numero,\"condition\":\"condizione leggibile\",\"description\":\"descrizione del problema\"}},\"HIGH\":{{\"value\":numero,\"condition\":\"condizione leggibile\",\"description\":\"descrizione del problema\"}}}}"
                 )
                 
                 try:
@@ -294,26 +366,53 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
         # Fallback to basic thresholds for obvious cases
         if domain == 'binary_sensor':
             device_class = attributes.get('device_class', '')
-            if device_class in ['battery', 'problem', 'safety', 'smoke', 'gas', 'moisture']:
+            entity_lower = entity_id.lower()
+            
+            # Identify what should trigger alerts for binary sensors
+            if (device_class in ['battery', 'problem', 'safety', 'smoke', 'gas', 'moisture', 'motion', 'door', 'window', 'connectivity', 'update'] or
+                any(keyword in entity_lower for keyword in ['battery', 'problem', 'error', 'offline', 'disconnected', 'fault', 'alarm', 'warning', 'update', 'maintenance'])):
+                
+                # Determine what state is "alerting" based on device class and name patterns
+                alert_state = 'on'  # Default
+                alert_description = "Sensor activated"
+                
+                if device_class == 'battery' or 'battery' in entity_lower:
+                    alert_state = 'on'  # Battery low = on
+                    alert_description = "Battery is low"
+                elif device_class in ['problem', 'safety', 'smoke', 'gas'] or any(word in entity_lower for word in ['problem', 'error', 'fault', 'smoke', 'gas']):
+                    alert_state = 'on'  # Problem detected = on
+                    alert_description = "Problem detected"
+                elif device_class == 'connectivity' or any(word in entity_lower for word in ['offline', 'disconnected', 'connection']):
+                    alert_state = 'off'  # Disconnected = off
+                    alert_description = "Device disconnected"
+                elif device_class == 'update' or 'update' in entity_lower:
+                    alert_state = 'on'  # Update available = on
+                    alert_description = "Update available"
+                elif device_class in ['door', 'window'] or any(word in entity_lower for word in ['door', 'window']):
+                    alert_state = 'on'  # Open = on (may be alerting depending on context)
+                    alert_description = "Opening detected"
+                
                 result.update({
                     "entity_type": "binary_alert",
+                    "alert_state": alert_state,
                     "thresholds": {
-                        "LOW": {"condition": "state == 'on'", "description": "Sensor activated"},
-                        "MEDIUM": {"condition": "state == 'on' for > 5 minutes", "description": "Persistent activation"},
-                        "HIGH": {"condition": "state == 'on' for > 30 minutes", "description": "Long-term issue"}
+                        "LOW": {"condition": f"state == '{alert_state}'", "description": f"{alert_description}"},
+                        "MEDIUM": {"condition": f"state == '{alert_state}' for > 5 minutes", "description": f"Persistent: {alert_description.lower()}"},
+                        "HIGH": {"condition": f"state == '{alert_state}' for > 30 minutes", "description": f"Long-term: {alert_description.lower()}"}
                     }
                 })
             return result
             
-        # Numeric sensors - basic fallback thresholds
+        # Numeric sensors - enhanced fallback thresholds
         elif domain == 'sensor':
             try:
                 num_value = float(current_value)
                 unit = attributes.get('unit_of_measurement', '')
                 device_class = attributes.get('device_class', '')
+                entity_lower = entity_id.lower()
                 
                 # Battery percentage - only generate if clearly a battery sensor
-                if (device_class == 'battery' or 'battery_level' in entity_id.lower()) and 0 <= num_value <= 100:
+                if (device_class == 'battery' or 'battery_level' in entity_lower) and 0 <= num_value <= 100:
                     result.update({
                         "entity_type": "battery_percent",
                         "thresholds": {
@@ -322,10 +421,75 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                             "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical"}
                         }
                     })
-                    
+                
+                # Temperature sensors (°C)
+                elif (device_class == 'temperature' or 'temperature' in entity_lower) and unit in ['°C', 'C']:
+                    if 5 <= num_value <= 40:  # Reasonable indoor range
+                        result.update({
+                            "entity_type": "temperature_indoor",
+                            "thresholds": {
+                                "LOW": {"value": 15, "condition": "< 15°C", "description": "Temperature too cold"},
+                                "MEDIUM": {"value": 10, "condition": "< 10°C", "description": "Temperature very cold"},
+                                "HIGH": {"value": 5, "condition": "< 5°C", "description": "Temperature critically cold"}
+                            }
+                        })
+                
+                # Heart rate sensors (BPM)
+                elif any(keyword in entity_lower for keyword in ['heart_rate', 'pulse', 'bpm']) and 30 <= num_value <= 200:
+                    result.update({
+                        "entity_type": "heart_rate",
+                        "thresholds": {
+                            "LOW": {"value": 50, "condition": "< 50 BPM", "description": "Heart rate low"},
+                            "MEDIUM": {"value": 40, "condition": "< 40 BPM", "description": "Heart rate very low"},
+                            "HIGH": {"value": 35, "condition": "< 35 BPM", "description": "Heart rate critically low"}
+                        }
+                    })
+                
+                # CPU/Memory usage (percentage)
+                elif any(keyword in entity_lower for keyword in ['cpu', 'memory', 'disk']) and 0 <= num_value <= 100:
+                    result.update({
+                        "entity_type": "system_usage",
+                        "thresholds": {
+                            "LOW": {"value": 70, "condition": "> 70%", "description": "High system usage"},
+                            "MEDIUM": {"value": 85, "condition": "> 85%", "description": "Very high system usage"},
+                            "HIGH": {"value": 95, "condition": "> 95%", "description": "Critical system usage"}
+                        }
+                    })
+                
+                # Signal strength (negative dBm or positive %)
+                elif any(keyword in entity_lower for keyword in ['rssi', 'signal', 'linkquality']):
+                    if unit == 'dBm' and -100 <= num_value <= 0:
+                        result.update({
+                            "entity_type": "signal_dbm",
+                            "thresholds": {
+                                "LOW": {"value": -70, "condition": "< -70 dBm", "description": "Weak signal"},
+                                "MEDIUM": {"value": -80, "condition": "< -80 dBm", "description": "Very weak signal"},
+                                "HIGH": {"value": -90, "condition": "< -90 dBm", "description": "Signal critical"}
+                            }
+                        })
+                        
             except (ValueError, TypeError):
-                # Non-numeric sensor
-                pass
+                # Non-numeric sensor - check for update sensors
+                if 'update' in entity_lower or device_class == 'update':
+                    result.update({
+                        "entity_type": "update_status",
+                        "thresholds": {
+                            "LOW": {"condition": "state != 'up-to-date'", "description": "Update available"},
+                            "MEDIUM": {"condition": "state == 'pending' for > 1 day", "description": "Update pending for a while"},
+                            "HIGH": {"condition": "state == 'pending' for > 7 days", "description": "Update overdue"}
+                        }
+                    })
+        
+        # Update domain entities
+        elif domain == 'update':
+            result.update({
+                "entity_type": "update_entity",
+                "thresholds": {
+                    "LOW": {"condition": "state == 'on'", "description": "Update available"},
+                    "MEDIUM": {"condition": "has_new_release for > 3 days", "description": "Update available for several days"},
+                    "HIGH": {"condition": "has_new_release for > 14 days", "description": "Update overdue - security risk"}
+                }
+            })
                 
     except Exception as e:
         _LOGGER.warning(f"Error generating auto-thresholds for {entity_id}: {e}")
@@ -913,10 +1077,19 @@ async def _process_single_batch(
                     # Validate rating is within bounds
                     rating = int(item["rating"])
                     if 0 <= rating <= 5:
-                        # Get category, default to UNKNOWN if not provided
-                        category = item.get("category", "UNKNOWN")
-                        if category not in ["DATA", "CONTROL", "HEALTH"]:
-                            category = "UNKNOWN"
+                        # Get category - can be string or array
+                        category = item.get("category", ["UNKNOWN"])
+                        if isinstance(category, str):
+                            # Convert single category to array
+                            category = [category]
+                        elif not isinstance(category, list):
+                            category = ["UNKNOWN"]
+                        
+                        # Validate all categories
+                        valid_categories = ["DATA", "CONTROL", "ALERTS"]
+                        category = [cat for cat in category if cat in valid_categories]
+                        if not category:
+                            category = ["UNKNOWN"]
                         
                         # Get management_type, default to 'user' if not provided
                         management_type = item.get("management_type", "user")
@@ -935,8 +1108,8 @@ async def _process_single_batch(
                             "batch_number": batch_num,
                         }
                         
-                        # Generate auto-thresholds only for very obvious cases
-                        if category == 'ALERTS' or 'battery' in item["entity_id"].lower():
+                        # Generate auto-thresholds for entities with ALERTS category
+                        if 'ALERTS' in category or 'battery' in item["entity_id"].lower():
                             state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
                             if state and hass:
                                 auto_thresholds = await _generate_auto_thresholds(hass, item["entity_id"], state)
@@ -1076,7 +1249,8 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
     
     # Use auto-categorization if state is available, otherwise fallback to domain-based
     if state:
-        category, management_type = _auto_categorize_entity(state)
+        categories, management_type = _auto_categorize_entity(state)
+        category = categories[0] if categories else "DATA"  # Use first category for compatibility
     else:
         # Fallback domain-based categorization
         data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker", "camera", "update"}
@@ -1091,16 +1265,16 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
             "connection" in entity_lower or
             "alarm" in entity_lower or
             "alert" in entity_lower):
-            category = "ALERTS"
+            category = ["ALERTS"]
             management_type = "SERVICE"
         elif domain in data_domains:
-            category = "DATA"
+            category = ["DATA"]
             management_type = "USER"
         elif domain in control_domains:
-            category = "CONTROL"
+            category = ["CONTROL"]
             management_type = "USER"
         else:
-            category = "DATA"  # Default to DATA
+            category = ["DATA"]  # Default to DATA
             management_type = "USER"
     
     reason_map = {
@@ -1151,20 +1325,46 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         "batch_number": batch_num,
     }
     
-    # Generate auto-thresholds only for obvious battery cases in fallback
-    if 'battery' in entity_id.lower() and category == 'ALERTS':
+    # Generate basic auto-thresholds for ALERTS entities in fallback
+    if ('ALERTS' in category if isinstance(category, list) else category == 'ALERTS'):
         try:
-            # Simple fallback threshold logic for obvious battery sensors
-            auto_thresholds = {
-                "auto_generated": True,
-                "entity_type": "fallback_battery",
-                "thresholds": {
+            # Create basic fallback thresholds without AI assistance
+            domain = entity_id.split('.')[0]
+            auto_thresholds = {"auto_generated": True, "entity_type": "fallback", "thresholds": {}}
+            
+            if 'battery' in entity_id.lower():
+                auto_thresholds["thresholds"] = {
                     "LOW": {"value": 30, "condition": "< 30%", "description": "Battery getting low"},
                     "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low"},
                     "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical"}
                 }
-            }
-            result["auto_thresholds"] = auto_thresholds
+            elif domain == 'update' or 'update' in entity_id.lower():
+                auto_thresholds["thresholds"] = {
+                    "LOW": {"condition": "state == 'on'", "description": "Update available"},
+                    "MEDIUM": {"condition": "update available > 3 days", "description": "Update pending"},
+                    "HIGH": {"condition": "update available > 14 days", "description": "Update overdue"}
+                }
+            elif domain == 'binary_sensor':
+                auto_thresholds["thresholds"] = {
+                    "LOW": {"condition": "state == 'on'", "description": "Alert condition detected"},
+                    "MEDIUM": {"condition": "state == 'on' for > 5 min", "description": "Persistent alert"},
+                    "HIGH": {"condition": "state == 'on' for > 30 min", "description": "Long-term issue"}
+                }
+            elif 'temperature' in entity_id.lower():
+                auto_thresholds["thresholds"] = {
+                    "LOW": {"value": 15, "condition": "< 15°C", "description": "Temperature too cold"},
+                    "MEDIUM": {"value": 10, "condition": "< 10°C", "description": "Temperature very cold"}, 
+                    "HIGH": {"value": 5, "condition": "< 5°C", "description": "Temperature critically cold"}
+                }
+            elif any(keyword in entity_id.lower() for keyword in ['heart_rate', 'pulse']):
+                auto_thresholds["thresholds"] = {
+                    "LOW": {"value": 50, "condition": "< 50 BPM", "description": "Heart rate low"},
+                    "MEDIUM": {"value": 40, "condition": "< 40 BPM", "description": "Heart rate very low"},
+                    "HIGH": {"value": 35, "condition": "< 35 BPM", "description": "Heart rate critically low"}
+                }
+            
+            if auto_thresholds.get("thresholds"):
+                result["auto_thresholds"] = auto_thresholds
         except Exception:
             pass  # Skip auto-thresholds if error
     
@@ -1242,36 +1442,163 @@ async def _query_local_agent(hass: HomeAssistant, prompt: str, conversation_agen
 ]"""
 
 
+def _extract_room_from_entity(entity_id: str) -> str:
+    """Extract room name from entity ID using common patterns."""
+    entity_lower = entity_id.lower()
+    
+    # Common room patterns in Italian and English
+    room_patterns = [
+        'soggiorno', 'living', 'salotto',
+        'cucina', 'kitchen', 
+        'camera', 'bedroom', 'letto',
+        'bagno', 'bathroom', 'toilet',
+        'ingresso', 'entrance', 'entrata',
+        'corridoio', 'hallway', 'corridor',
+        'studio', 'office', 'ufficio',
+        'lavanderia', 'laundry',
+        'garage', 'cantina', 'basement',
+        'terrazza', 'terrace', 'balcone', 'balcony',
+        'giardino', 'garden',
+        'taverna', 'mansarda', 'attic'
+    ]
+    
+    for room in room_patterns:
+        if room in entity_lower:
+            return room
+    
+    return None
+
+
 async def find_entity_correlations(hass: HomeAssistant, target_entity: dict, all_entities: list[dict], language: str) -> list[dict]:
-    """Find correlations between a target entity and other entities using simplified AI prompts."""
+    """Find correlations between a target entity and other entities using enhanced smart logic."""
     try:
         target_id = target_entity["entity_id"]
         target_weight = target_entity["ai_weight"]
         target_category = target_entity.get("category", "UNKNOWN")
+        target_domain = target_id.split('.')[0]
         
-        # Only consider entities with weight >= 2 for correlations (more selective)
-        candidate_entities = [e for e in all_entities if e["entity_id"] != target_id and e.get("ai_weight", 0) >= 2]
+        # Smart candidate filtering based on target entity type
+        candidate_entities = []
         
-        if not candidate_entities:
+        # Define smart correlation patterns
+        if target_domain == 'switch' or target_domain == 'light':
+            # For switches/lights, prioritize presence, motion, time-based entities
+            priority_patterns = ['person', 'device_tracker', 'presence', 'motion', 'occupancy', 'binary_sensor', 'sun', 'time']
+            room_name = _extract_room_from_entity(target_id)
+            
+        elif target_domain == 'climate':
+            # For climate, prioritize temperature, weather, presence
+            priority_patterns = ['temperature', 'weather', 'presence', 'person', 'window', 'door', 'humidity']
+            room_name = _extract_room_from_entity(target_id)
+            
+        elif target_domain == 'cover':
+            # For covers, prioritize sun, weather, temperature
+            priority_patterns = ['sun', 'weather', 'temperature', 'wind', 'rain', 'brightness', 'illuminance']
+            room_name = _extract_room_from_entity(target_id)
+            
+        elif target_domain == 'media_player':
+            # For media, prioritize presence, time
+            priority_patterns = ['person', 'presence', 'device_tracker', 'time', 'sun']
+            room_name = _extract_room_from_entity(target_id)
+            
+        elif target_domain == 'alarm_control_panel':
+            # For alarms, prioritize presence, doors, windows
+            priority_patterns = ['person', 'device_tracker', 'door', 'window', 'motion', 'presence']
+            room_name = None
+            
+        else:
+            # Default patterns for other entities
+            priority_patterns = ['person', 'presence', 'motion', 'time', 'sun']
+            room_name = _extract_room_from_entity(target_id)
+        
+        # Filter candidates intelligently
+        for entity in all_entities:
+            if entity["entity_id"] == target_id or entity.get("ai_weight", 0) < 2:
+                continue
+                
+            entity_id = entity["entity_id"]
+            entity_domain = entity_id.split('.')[0]
+            entity_lower = entity_id.lower()
+            
+            # Priority score calculation
+            score = 0
+            
+            # Check domain priority
+            if entity_domain in priority_patterns:
+                score += 10
+            
+            # Check name pattern matches
+            for pattern in priority_patterns:
+                if pattern in entity_lower:
+                    score += 5
+                    
+            # Room correlation boost
+            if room_name and room_name in entity_lower:
+                score += 15
+                
+            # Add entity with score
+            if score > 0:
+                candidate_entities.append((entity, score))
+        
+        # Sort by score and take top candidates
+        candidate_entities.sort(key=lambda x: x[1], reverse=True)
+        limited_candidates = [e[0] for e in candidate_entities[:12]]  # Increased to 12 best matches
+        
+        if not limited_candidates:
             return []
         
-        # Ultra-simplified prompt to avoid token limits
+        # Enhanced correlation prompt
         is_italian = language.startswith('it')
-        
-        # Limit candidates to first 8 to keep prompt small
-        limited_candidates = candidate_entities[:8]
         candidates_list = ", ".join([e["entity_id"] for e in limited_candidates])
         
         if is_italian:
-            prompt = f"""Secondo te l'entità {target_id} potrebbe essere correlata a quale tra queste: {candidates_list}?
+            prompt = f"""Analizza le correlazioni intelligenti per l'automazione domotica:
 
-Rispondi SOLO JSON: [{{"entity_id":"nome_entità","type":"functional","strength":3,"reason":"breve motivo"}}]
-Se nessuna correlazione: []"""
+ENTITÀ PRINCIPALE: {target_id} (tipo: {target_domain})
+CANDIDATI: {candidates_list}
+
+CERCA CORRELAZIONI LOGICHE per automazioni casa intelligente:
+• LUCI/INTERRUTTORI → presenza persone, sensori movimento, orario, sole
+• CLIMA/RISCALDAMENTO → temperatura, presenza, finestre, meteo  
+• TAPPARELLE/TENDE → sole, luminosità, temperatura, meteo, orario
+• ALLARMI/SICUREZZA → presenza, porte, finestre, movimento
+• MEDIA PLAYER → presenza, orario
+
+STESSO AMBIENTE: Se {target_id} è in una stanza, priorità agli oggetti della stessa stanza.
+
+Rispondi SOLO JSON con correlazioni UTILI per automazioni:
+[{{"entity_id":"nome_entità","type":"automation","strength":1-5,"reason":"perché utile per automazione"}}]
+
+Esempi validi:
+- switch.luce_soggiorno + person.mario = "Accende luce quando Mario è a casa"
+- climate.termostato + sensor.temp_esterno = "Regola in base temperatura esterna"
+- cover.tapparelle + sun.sun = "Chiude con sole forte per proteggere"
+
+Se nessuna correlazione utile: []"""
         else:
-            prompt = f"""Which of these entities could {target_id} be correlated with: {candidates_list}?
+            prompt = f"""Analyze smart correlations for home automation:
 
-Reply ONLY JSON: [{{"entity_id":"entity_name","type":"functional","strength":3,"reason":"brief reason"}}]
-If no correlation: []"""
+MAIN ENTITY: {target_id} (type: {target_domain})
+CANDIDATES: {candidates_list}
+
+LOOK FOR LOGICAL CORRELATIONS for smart home automation:
+• LIGHTS/SWITCHES → person presence, motion sensors, time, sun
+• CLIMATE/HEATING → temperature, presence, windows, weather
+• COVERS/BLINDS → sun, brightness, temperature, weather, time  
+• ALARMS/SECURITY → presence, doors, windows, motion
+• MEDIA PLAYER → presence, time
+
+SAME ROOM: If {target_id} is in a room, prioritize objects from same room.
+
+Reply ONLY JSON with USEFUL correlations for automations:
+[{{"entity_id":"entity_name","type":"automation","strength":1-5,"reason":"why useful for automation"}}]
+
+Valid examples:
+- switch.living_room_light + person.mario = "Turn on light when Mario is home"
+- climate.thermostat + sensor.outdoor_temp = "Adjust based on outdoor temperature"  
+- cover.blinds + sun.sun = "Close with strong sun for protection"
+
+If no useful correlation: []"""
         
         _LOGGER.debug(f"Correlation prompt for {target_id}")
         
