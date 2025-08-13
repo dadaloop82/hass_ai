@@ -1112,7 +1112,7 @@ class HassAiPanel extends LitElement {
                 <div class="filter-row reset-section">
                   <mwc-button 
                     outlined
-                    @click=${this._confirmResetAll}
+                    @click=${(e) => this._confirmResetAll(e)}
                     class="reset-button"
                     ?disabled=${this.loading}
                   >
@@ -2241,7 +2241,9 @@ class HassAiPanel extends LitElement {
     }
   }
 
-  async _confirmResetAll() {
+  async _confirmResetAll(e) {
+    if (e) e.preventDefault();
+    console.log('_confirmResetAll called'); // Debug log
     const isItalian = this.language.includes('it');
     
     const confirmed = await this._showConfirmDialog(
@@ -2253,6 +2255,7 @@ class HassAiPanel extends LitElement {
       isItalian ? 'Annulla' : 'Cancel'
     );
 
+    console.log('Confirmed:', confirmed); // Debug log
     if (confirmed) {
       await this._resetAll();
     }
