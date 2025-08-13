@@ -157,6 +157,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_load_correlations)
     websocket_api.async_register_command(hass, handle_save_alert_threshold)
     websocket_api.async_register_command(hass, handle_load_alert_thresholds)
+    websocket_api.async_register_command(hass, handle_clear_storage)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -659,4 +660,51 @@ async def handle_load_alert_thresholds(hass: HomeAssistant, connection: websocke
         _LOGGER.error(f"Error loading alert thresholds: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "load_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/clear_storage",
+})
+@websocket_api.async_response
+async def handle_clear_storage(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to clear all stored data."""
+    try:
+        _LOGGER.info("Clearing all HASS AI stored data")
+        
+        # Clear all stored data in hass.data
+        keys_to_clear = [
+            "hass_ai_results",
+            "hass_ai_overrides", 
+            "hass_ai_correlations",
+            "hass_ai_alert_thresholds"
+        ]
+        
+        for key in keys_to_clear:
+            if key in hass.data:
+                hass.data[key] = {}
+                
+        # Also clear the store if it exists
+        store = hass.helpers.storage.Store(1, "hass_ai_results")
+        await store.async_save({})
+        
+        store = hass.helpers.storage.Store(1, "hass_ai_overrides")
+        await store.async_save({})
+        
+        store = hass.helpers.storage.Store(1, "hass_ai_correlations")
+        await store.async_save({})
+        
+        store = hass.helpers.storage.Store(1, "hass_ai_alert_thresholds")
+        await store.async_save({})
+        
+        _LOGGER.info("Successfully cleared all HASS AI data")
+        connection.send_message(websocket_api.result_message(msg["id"], {
+            "success": True,
+            "message": "All data cleared successfully"
+        }))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error clearing storage: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "clear_error", str(e)
         ))

@@ -968,7 +968,7 @@ class HassAiPanel extends LitElement {
                 </div>
                 
                 <!-- Token Statistics -->
-                ${this.tokenStats.totalTokens > 0 ? html`
+                ${this.tokenStats.totalTokens > 0 || this.scanProgress.show ? html`
                   <div class="token-stats">
                     <div class="token-header">${isItalian ? '📊 Statistiche Token' : '📊 Token Statistics'}</div>
                     <div class="token-grid">
@@ -984,15 +984,11 @@ class HassAiPanel extends LitElement {
                       ` : ''}
                       <div class="token-item">
                         <span class="token-label">${isItalian ? 'Media/Entità' : 'Avg/Entity'}</span>
-                        <span class="token-value">${this.tokenStats.averageTokensPerEntity}</span>
+                        <span class="token-value">${this.tokenStats.averageTokensPerEntity || 0}</span>
                       </div>
                       <div class="token-item">
                         <span class="token-label">${isItalian ? 'Costo Stimato' : 'Est. Cost'}</span>
                         <span class="token-value">$${this.tokenStats.estimatedCost.toFixed(3)}</span>
-                      </div>
-                      <div class="token-item">
-                        <span class="token-label">${isItalian ? 'Batch Corrente' : 'Current Batch'}</span>
-                        <span class="token-value token-live">${this.tokenStats.currentBatchTokens || 0}</span>
                       </div>
                     </div>
                   </div>
@@ -1110,6 +1106,20 @@ class HassAiPanel extends LitElement {
                   `;
                 })()}
               </div>
+              
+              <!-- Reset Button -->
+              ${Object.keys(this.entities).length > 0 ? html`
+                <div class="filter-row reset-section">
+                  <ha-button 
+                    outlined
+                    @click=${this._confirmResetAll}
+                    class="reset-button"
+                    .disabled=${this.loading}
+                  >
+                    🗑️ ${isItalian ? 'Cancella Tutto e Riavvia' : 'Clear All & Restart'}
+                  </ha-button>
+                </div>
+              ` : ''}
             </div>
           </div>
         ` : ''}
@@ -1744,6 +1754,25 @@ class HassAiPanel extends LitElement {
         font-weight: 600;
       }
       
+      .reset-section {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--divider-color);
+        text-align: center;
+      }
+      
+      .reset-button {
+        --mdc-theme-primary: var(--error-color);
+        --mdc-theme-on-primary: white;
+        --ha-button-border-radius: 20px;
+        min-width: 200px;
+      }
+      
+      .reset-button:hover {
+        background-color: var(--error-color);
+        color: white;
+      }
+      
       /* Search Input Styles */
       .search-input {
         flex: 1;
@@ -2210,6 +2239,102 @@ class HassAiPanel extends LitElement {
     } else {
       return isItalian ? 'Preparazione scansione...' : 'Preparing scan...';
     }
+  }
+
+  async _confirmResetAll() {
+    const isItalian = this.language.includes('it');
+    
+    const confirmed = await this._showConfirmDialog(
+      isItalian ? 'Conferma Cancellazione' : 'Confirm Reset',
+      isItalian ? 
+        'Sei sicuro di voler cancellare tutti i dati e riavviare l\'analisi?\n\nQuesto cancellerà:\n• Tutti i risultati dell\'analisi\n• I pesi personalizzati\n• Le soglie di allarme\n• Le correlazioni\n\nQuesta azione non può essere annullata.' :
+        'Are you sure you want to clear all data and restart the analysis?\n\nThis will clear:\n• All analysis results\n• Custom weights\n• Alert thresholds\n• Correlations\n\nThis action cannot be undone.',
+      isItalian ? 'Cancella Tutto' : 'Clear All',
+      isItalian ? 'Annulla' : 'Cancel'
+    );
+
+    if (confirmed) {
+      await this._resetAll();
+    }
+  }
+
+  async _resetAll() {
+    const isItalian = this.language.includes('it');
+    
+    try {
+      this.loading = true;
+      
+      // Clear all data
+      this.entities = {};
+      this.overrides = {};
+      this.correlations = {};
+      this.alertThresholds = {};
+      this.tokenStats = {
+        totalTokens: 0,
+        averageTokensPerEntity: 0,
+        totalEntities: 0,
+        currentBatch: {
+          entities: 0,
+          tokens: 0
+        }
+      };
+      this.scanProgress = {
+        show: false,
+        message: '',
+        current: 0,
+        total: 0,
+        isComplete: false,
+        status: 'idle'
+      };
+
+      // Clear storage
+      await this.hass.connection.sendMessage({
+        type: "hass_ai/clear_storage"
+      });
+
+      // Reset filters to defaults
+      this.minWeight = 3;
+      this.categoryFilter = 'ALL';
+      this.searchTerm = '';
+      
+      this._showSimpleNotification(
+        isItalian ? '🗑️ Tutti i dati sono stati cancellati. Pronto per una nuova analisi!' : 
+                   '🗑️ All data cleared. Ready for a new analysis!',
+        'success'
+      );
+      
+      this.requestUpdate();
+      
+    } catch (error) {
+      console.error('Error resetting data:', error);
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore durante la cancellazione dei dati' : 
+                   '❌ Error clearing data',
+        'error'
+      );
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  async _showConfirmDialog(title, message, confirmText, cancelText) {
+    return new Promise((resolve) => {
+      const dialog = document.createElement('ha-dialog');
+      dialog.heading = title;
+      dialog.innerHTML = `
+        <div style="padding: 16px; white-space: pre-line; line-height: 1.5;">
+          ${message}
+        </div>
+        <mwc-button slot="secondaryAction" @click="${() => { dialog.close(); resolve(false); }}">
+          ${cancelText}
+        </mwc-button>
+        <mwc-button slot="primaryAction" @click="${() => { dialog.close(); resolve(true); }}" style="--mdc-theme-primary: var(--error-color);">
+          ${confirmText}
+        </mwc-button>
+      `;
+      document.body.appendChild(dialog);
+      dialog.show();
+    });
   }
 }
 
