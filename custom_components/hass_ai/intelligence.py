@@ -798,7 +798,14 @@ async def get_entities_importance_batched(
     
     _LOGGER.info(f"🚀 Starting batch processing with initial batch size: {current_batch_size}")
     
+    hass_id = id(hass)
     while remaining_states:
+        # STOP: controllo se l'operazione è stata cancellata
+        if hasattr(hass, 'data') and 'hass_ai' in hass.data:
+            active_ops = hass.data['hass_ai'].get('_active_operations')
+            if active_ops and hass_id in active_ops and active_ops[hass_id].get('cancelled'):
+                _LOGGER.info("Batch analysis STOPPED by user request (immediate)")
+                break
         overall_batch_num += 1
         
         # Take entities for current batch
@@ -1085,11 +1092,11 @@ async def _process_single_batch(
                         elif not isinstance(category, list):
                             category = ["UNKNOWN"]
                         
-                        # Validate all categories
-                        valid_categories = ["DATA", "CONTROL", "ALERTS"]
+                        # Validate all categories (now includes SERVICE)
+                        valid_categories = ["DATA", "CONTROL", "ALERTS", "SERVICE"]
                         category = [cat for cat in category if cat in valid_categories]
                         if not category:
-                            category = ["UNKNOWN"]
+                            category = ["DATA"]
                         
                         # Get management_type, default to 'user' if not provided
                         management_type = item.get("management_type", "user")
