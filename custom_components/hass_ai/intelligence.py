@@ -68,15 +68,15 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
         
         if is_italian:
             return (
-                f"Analizza {len(batch_states)} entità HA completa. Punteggio 0-5. "
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
-                f"REASON IN INGLESE. Entità: " + ", ".join(entity_summary[:30])
+                f"Valuta {len(batch_states)} entità HA per utilità domotica. Punteggio 0-5 (0=inutile, 5=essenziale). "
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"utilità automazioni\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"REASON: utilità domotica. Entità: " + ", ".join(entity_summary[:30])
             )
         else:
             return (
-                f"Comprehensive analysis of {len(batch_states)} HA entities. Score 0-5. "
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
-                f"REASON IN ENGLISH. Entities: " + ", ".join(entity_summary[:30])
+                f"Evaluate {len(batch_states)} HA entities for home automation utility. Score 0-5 (0=useless, 5=essential). "
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"automation utility\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"REASON: home automation value. Entities: " + ", ".join(entity_summary[:30])
             )
     
     # Comprehensive analysis prompt that covers all aspects
@@ -84,41 +84,39 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
         prompt = (
             f"Analizza {len(batch_states)} entità HA per UTILITÀ DOMOTICA. Valuta quanto sono utili per automazioni, controllo casa, benessere e ottimizzazione. Punteggio 0-5:\n"
             f"0=Inutile per domotica, 1=Molto poco utile, 2=Poco utile, 3=Mediamente utile, 4=Molto utile, 5=Essenziale per automazioni\n"
-            f"\nFOCUS SU: Utility per automazioni, controllo casa, comfort, sicurezza, risparmio energetico, benessere\n"
-            f"\nCATEGORIE (importante assegnare quella corretta):\n"
-            f"- DATA: sensori, misurazioni, informazioni (es. temperatura, umidità, batteria)\n"
-            f"- CONTROL: interruttori, controlli, automazioni che l'utente può azionare\n" 
-            f"- ALERTS: sensori critici per sicurezza/manutenzione (batteria scarica, offline, errori)\n"
+            f"\nVALUTA INTELLIGENTEMENTE:\n"
+            f"• Utilità per automazioni e controllo casa\n"
+            f"• Importanza per comfort, sicurezza, risparmio energetico\n"
+            f"• Valore per monitoraggio e manutenzione\n"
+            f"• Rilevanza per presenza, benessere, ottimizzazione\n"
+            f"\nCATEGORIE (scegli in base alla funzione principale):\n"
+            f"- DATA: informazioni utili (sensori ambientali, stato dispositivi, misurazioni)\n"
+            f"- CONTROL: controlli azionabili (interruttori, regolazioni, comandi)\n" 
+            f"- ALERTS: monitoraggio critico (guasti, manutenzione, sicurezza, problemi)\n"
             f"\nTIPO GESTIONE:\n"
-            f"- USER: entità controllabili dall'utente (luci, interruttori, climatizzatori)\n"
-            f"- SERVICE: entità che richiedono servizi tecnici (telecamere per visione AI, sensori per diagnostica)\n"
-            f"\nEsempi:\n"
-            f"- camera.xyz → category=DATA, management_type=SERVICE (può usare visione AI)\n"
-            f"- sensor.temperatura → category=DATA, management_type=USER (utile per automazioni clima)\n"
-            f"- switch.luce → category=CONTROL, management_type=USER (controllo illuminazione)\n"
-            f"- sensor.batteria → category=ALERTS, management_type=SERVICE (manutenzione dispositivi)\n"
-            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"utilità domotica specifica\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"REASON: Spiega PERCHÉ ha questo punteggio per l'uso domotico, NON il valore attuale.\n\n" + "\n".join(entity_details)
+            f"- USER: l'utente può controllare/configurare direttamente\n"
+            f"- SERVICE: richiede servizi tecnici o automazioni di sistema\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"spiegazione utilità domotica\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON: Spiega il VALORE domotico specifico, non il valore corrente dell'entità.\n\n" + "\n".join(entity_details)
         )
     else:
         prompt = (
             f"Analyze {len(batch_states)} HA entities for HOME AUTOMATION UTILITY. Evaluate how useful they are for automations, house control, wellness and optimization. Score 0-5:\n"
             f"0=Useless for automation, 1=Very low utility, 2=Low utility, 3=Medium utility, 4=High utility, 5=Essential for automations\n"
-            f"\nFOCUS ON: Utility for automations, house control, comfort, security, energy saving, wellness\n"
-            f"\nCATEGORIES (important to assign correctly):\n"
-            f"- DATA: sensors, measurements, information (e.g. temperature, humidity, battery level)\n"
-            f"- CONTROL: switches, controls, automations that user can operate\n"
-            f"- ALERTS: critical sensors for security/maintenance (low battery, offline, errors)\n"
+            f"\nEVALUATE INTELLIGENTLY:\n"
+            f"• Utility for automations and house control\n"
+            f"• Importance for comfort, security, energy saving\n"
+            f"• Value for monitoring and maintenance\n"
+            f"• Relevance for presence, wellness, optimization\n"
+            f"\nCATEGORIES (choose based on primary function):\n"
+            f"- DATA: useful information (environmental sensors, device status, measurements)\n"
+            f"- CONTROL: actionable controls (switches, adjustments, commands)\n"
+            f"- ALERTS: critical monitoring (failures, maintenance, security, issues)\n"
             f"\nMANAGEMENT TYPE:\n"
-            f"- USER: user-controllable entities (lights, switches, climate)\n"
-            f"- SERVICE: entities requiring technical services (cameras for AI vision, sensors for diagnostics)\n"
-            f"\nExamples:\n"
-            f"- camera.xyz → category=DATA, management_type=SERVICE (can use AI vision)\n"
-            f"- sensor.temperature → category=DATA, management_type=USER (useful for climate automations)\n"
-            f"- switch.light → category=CONTROL, management_type=USER (lighting control)\n"
-            f"- sensor.battery → category=ALERTS, management_type=SERVICE (device maintenance)\n"
-            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"specific automation utility\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-            f"REASON: Explain WHY it has this score for home automation use, NOT the current value.\n\n" + "\n".join(entity_details)
+            f"- USER: user can directly control/configure\n"
+            f"- SERVICE: requires technical services or system automations\n"
+            f"\nJSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"home automation utility explanation\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON: Explain the specific HOME AUTOMATION VALUE, not the entity's current value.\n\n" + "\n".join(entity_details)
         )
     
     # Log token estimation
@@ -159,52 +157,34 @@ def _auto_categorize_entity(state: State) -> tuple[str, str]:
     if entity_state in ['unavailable', 'unknown', 'error']:
         return 'ALERTS', 'SERVICE'
     
-    # Battery level check - prioritize alerts for low battery
+    # Only keep critical state-based checks, let AI decide the rest
     battery_level = attributes.get('battery_level')
-    if battery_level is not None and battery_level < 30:  # More aggressive threshold
+    if battery_level is not None and battery_level < 15:  # Only very critical levels
         return 'ALERTS', 'SERVICE'
     
-    # Special handling for battery sensors - they should be ALERTS if they track battery levels
-    if 'battery' in entity_id.lower() and domain == 'sensor':
-        # Battery sensors are primarily for alerts, not just data
-        return 'ALERTS', 'SERVICE'
-    
-    # Special handling for ink/toner sensors - alerts when low
-    if any(keyword in entity_id.lower() for keyword in ['ink', 'toner', 'cartridge']) and domain == 'sensor':
-        return 'ALERTS', 'SERVICE'
-    
-    # Domain-based categorization with management type
+    # Domain-based categorization with management type - basic guidelines only
     if domain == 'camera':
-        # Cameras can benefit from AI vision services
+        # Cameras typically provide data and can benefit from AI vision services
         return 'DATA', 'SERVICE'
     elif domain == 'update':
         # Update entities are informational and may trigger service actions
         return 'DATA', 'SERVICE'
     elif domain in ['sensor', 'binary_sensor']:
-        # Sensors provide data, some may need diagnostic services
-        if any(keyword in entity_id.lower() for keyword in ['battery', 'signal', 'rssi', 'linkquality', 'voltage', 'uptime', 'memory', 'cpu', 'disk']):
-            return 'DATA', 'SERVICE'  # Diagnostic sensors
-        elif any(keyword in entity_id.lower() for keyword in ['low_battery', 'offline', 'error', 'problem', 'fault']):
-            return 'ALERTS', 'SERVICE'  # Alert sensors
+        # Let AI decide if sensors are DATA or ALERTS based on their purpose
+        # Only obvious diagnostic sensors get SERVICE type
+        if any(keyword in entity_id.lower() for keyword in ['rssi', 'linkquality', 'uptime', 'memory', 'cpu', 'disk', 'connection']):
+            return 'DATA', 'SERVICE'  # Clear diagnostic sensors
         else:
-            return 'DATA', 'USER'  # Regular data sensors
-    elif domain in ['device_tracker', 'weather']:
+            return 'DATA', 'USER'  # Let AI decide DATA vs ALERTS in analysis
+    elif domain in ['device_tracker', 'weather', 'person', 'zone']:
         return 'DATA', 'USER'
-    elif domain in ['switch', 'light', 'climate', 'cover', 'fan']:
-        # User controllable devices
+    elif domain in ['switch', 'light', 'climate', 'cover', 'fan', 'media_player']:
         return 'CONTROL', 'USER'
     elif domain in ['lock', 'alarm_control_panel']:
-        # Security devices - controllable but may need service alerts
         return 'CONTROL', 'SERVICE'
     elif domain in ['input_boolean', 'input_select', 'input_number', 'input_text']:
         return 'CONTROL', 'USER'
     elif domain in ['alert', 'automation']:
-        return 'ALERTS', 'SERVICE'
-    elif domain in ['person', 'zone']:
-        return 'DATA', 'USER'
-    elif domain in ['media_player']:
-        return 'CONTROL', 'USER'
-    elif 'alarm' in entity_id or 'alert' in entity_id or 'problem' in entity_id:
         return 'ALERTS', 'SERVICE'
     else:
         # Default based on entity name patterns
@@ -261,80 +241,25 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                 unit = attributes.get('unit_of_measurement', '')
                 device_class = attributes.get('device_class', '')
                 
-                # Battery percentage
-                if device_class == 'battery' or 'battery' in entity_id.lower():
+                # Battery percentage - only generate if clearly a battery sensor
+                if (device_class == 'battery' or 'battery_level' in entity_id.lower()) and 0 <= num_value <= 100:
                     result.update({
                         "entity_type": "battery_percent",
                         "thresholds": {
                             "LOW": {"value": 30, "condition": "< 30%", "description": "Battery getting low"},
-                            "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low - consider charging"},
-                            "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical - immediate attention"}
+                            "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low"},
+                            "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical"}
                         }
                     })
                 
-                # Temperature sensors
-                elif device_class == 'temperature' or 'temperature' in entity_id.lower():
-                    if 'C' in unit or 'celsius' in unit.lower():
-                        result.update({
-                            "entity_type": "temperature_celsius",
-                            "thresholds": {
-                                "LOW": {"value": 35, "condition": "> 35°C", "description": "High temperature warning"},
-                                "MEDIUM": {"value": 40, "condition": "> 40°C", "description": "Very high temperature"},
-                                "HIGH": {"value": 50, "condition": "> 50°C", "description": "Dangerous temperature level"}
-                            }
-                        })
-                
-                # Humidity sensors
-                elif device_class == 'humidity' or 'humidity' in entity_id.lower():
+                # Only very obvious diagnostic thresholds
+                elif any(keyword in entity_id.lower() for keyword in ['cpu', 'memory', 'disk']) and '%' in unit:
                     result.update({
-                        "entity_type": "humidity_percent",
+                        "entity_type": "usage_percent", 
                         "thresholds": {
-                            "LOW": {"value": 70, "condition": "> 70%", "description": "High humidity warning"},
-                            "MEDIUM": {"value": 80, "condition": "> 80%", "description": "Very high humidity"},
-                            "HIGH": {"value": 90, "condition": "> 90%", "description": "Excessive humidity - risk of mold"}
-                        }
-                    })
-                
-                # Signal strength (RSSI, Link Quality)
-                elif any(keyword in entity_id.lower() for keyword in ['rssi', 'signal', 'linkquality']):
-                    if 'rssi' in entity_id.lower():
-                        result.update({
-                            "entity_type": "signal_rssi",
-                            "thresholds": {
-                                "LOW": {"value": -70, "condition": "< -70 dBm", "description": "Weak signal strength"},
-                                "MEDIUM": {"value": -80, "condition": "< -80 dBm", "description": "Poor signal strength"},
-                                "HIGH": {"value": -90, "condition": "< -90 dBm", "description": "Very poor signal - connection issues"}
-                            }
-                        })
-                    else:  # Link quality percentage
-                        result.update({
-                            "entity_type": "link_quality",
-                            "thresholds": {
-                                "LOW": {"value": 50, "condition": "< 50", "description": "Low link quality"},
-                                "MEDIUM": {"value": 30, "condition": "< 30", "description": "Poor link quality"},
-                                "HIGH": {"value": 10, "condition": "< 10", "description": "Very poor link quality - device may disconnect"}
-                            }
-                        })
-                
-                # Memory/Storage usage
-                elif any(keyword in entity_id.lower() for keyword in ['memory', 'ram', 'disk', 'storage']):
-                    result.update({
-                        "entity_type": "usage_percent",
-                        "thresholds": {
-                            "LOW": {"value": 80, "condition": "> 80%", "description": "High resource usage"},
-                            "MEDIUM": {"value": 90, "condition": "> 90%", "description": "Very high resource usage"},
-                            "HIGH": {"value": 95, "condition": "> 95%", "description": "Critical resource usage - immediate attention"}
-                        }
-                    })
-                
-                # CPU usage
-                elif 'cpu' in entity_id.lower():
-                    result.update({
-                        "entity_type": "cpu_percent",
-                        "thresholds": {
-                            "LOW": {"value": 70, "condition": "> 70%", "description": "High CPU usage"},
-                            "MEDIUM": {"value": 85, "condition": "> 85%", "description": "Very high CPU usage"},
-                            "HIGH": {"value": 95, "condition": "> 95%", "description": "Critical CPU usage - system may be unresponsive"}
+                            "LOW": {"value": 80, "condition": "> 80%", "description": "High usage"},
+                            "MEDIUM": {"value": 90, "condition": "> 90%", "description": "Very high usage"},
+                            "HIGH": {"value": 95, "condition": "> 95%", "description": "Critical usage"}
                         }
                     })
                     
@@ -951,8 +876,8 @@ async def _process_single_batch(
                             "batch_number": batch_num,
                         }
                         
-                        # Generate auto-thresholds for alert-worthy entities
-                        if category == 'ALERTS' or any(keyword in item["entity_id"].lower() for keyword in ['battery', 'temperature', 'humidity', 'signal', 'cpu', 'memory']):
+                        # Generate auto-thresholds only for very obvious cases
+                        if category == 'ALERTS' or 'battery' in item["entity_id"].lower():
                             state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
                             if state and hass:
                                 auto_thresholds = await _generate_auto_thresholds(hass, item["entity_id"], state)
@@ -1145,27 +1070,22 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         "batch_number": batch_num,
     }
     
-    # Generate auto-thresholds for alert-worthy entities in fallback too
-    if category == 'ALERTS' or any(keyword in entity_id.lower() for keyword in ['battery', 'temperature', 'humidity', 'signal', 'cpu', 'memory']):
-        if state and hasattr(_generate_auto_thresholds, '__await__'):  # Async function check
-            try:
-                # Use a dummy hass context for fallback - in real scenario we'd pass proper hass
-                auto_thresholds = {
-                    "auto_generated": True,
-                    "entity_type": "fallback_generated",
-                    "thresholds": {}
+    # Generate auto-thresholds only for obvious battery cases in fallback
+    if 'battery' in entity_id.lower() and category == 'ALERTS':
+        try:
+            # Simple fallback threshold logic for obvious battery sensors
+            auto_thresholds = {
+                "auto_generated": True,
+                "entity_type": "fallback_battery",
+                "thresholds": {
+                    "LOW": {"value": 30, "condition": "< 30%", "description": "Battery getting low"},
+                    "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low"},
+                    "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical"}
                 }
-                
-                # Simple fallback threshold logic
-                if 'battery' in entity_id.lower():
-                    auto_thresholds["thresholds"] = {
-                        "LOW": {"value": 30, "condition": "< 30%", "description": "Battery getting low"},
-                        "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low"},
-                        "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical"}
-                    }
-                    result["auto_thresholds"] = auto_thresholds
-            except Exception:
-                pass  # Skip auto-thresholds if error
+            }
+            result["auto_thresholds"] = auto_thresholds
+        except Exception:
+            pass  # Skip auto-thresholds if error
     
     return result
 
