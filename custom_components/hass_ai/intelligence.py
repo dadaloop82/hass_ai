@@ -52,8 +52,8 @@ def _get_localized_message(message_key: str, language: str, **kwargs) -> str:
     
     return messages.get(message_key, {}).get('it' if is_italian else 'en', f"Message key '{message_key}' not found")
 
-def _create_localized_prompt(batch_states: list[State], entity_details: list[str], language: str, compact_mode: bool = False, analysis_type: str = "importance") -> str:
-    """Create a localized prompt for entity analysis with optional compact mode for token limit recovery."""
+def _create_localized_prompt(batch_states: list[State], entity_details: list[str], language: str, compact_mode: bool = False, analysis_type: str = "comprehensive") -> str:
+    """Create a comprehensive prompt for entity analysis that includes all types of analysis."""
     
     is_italian = language.startswith('it')
     
@@ -66,73 +66,54 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
             summary = f"{state.entity_id}({state.domain},{state.state},{name[:20]})"
             entity_summary.append(summary)
         
-        if analysis_type == "alerts":
-            if is_italian:
-                return (
-                    f"Trova allerte in {len(batch_states)} entità HA. "
-                    f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"problema\",\"category\":\"ALERTS\",\"management_type\":\"SERVICE\"}}]. "
-                    f"REASON IN INGLESE. Solo problemi: offline, batteria<20%, errori. Entità: " + ", ".join(entity_summary[:30])
-                )
-            else:
-                return (
-                    f"Find alerts in {len(batch_states)} HA entities. "
-                    f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"issue\",\"category\":\"ALERTS\",\"management_type\":\"SERVICE\"}}]. "
-                    f"REASON IN ENGLISH. Only problems: offline, battery<20%, errors. Entities: " + ", ".join(entity_summary[:30])
-                )
+        if is_italian:
+            return (
+                f"Analizza {len(batch_states)} entità HA completa. Punteggio 0-5. "
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"REASON IN INGLESE. Entità: " + ", ".join(entity_summary[:30])
+            )
         else:
-            if is_italian:
-                return (
-                    f"Analizza {len(batch_states)} entità HA. Punteggio 0-5. "
-                    f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
-                    f"REASON IN INGLESE. Entità: " + ", ".join(entity_summary[:30])
-                )
-            else:
-                return (
-                    f"Analyze {len(batch_states)} HA entities. Score 0-5. "
-                    f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
-                    f"REASON IN ENGLISH. Entities: " + ", ".join(entity_summary[:30])
-                )
+            return (
+                f"Comprehensive analysis of {len(batch_states)} HA entities. Score 0-5. "
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"REASON IN ENGLISH. Entities: " + ", ".join(entity_summary[:30])
+            )
     
-    if analysis_type == "alerts":
-        if is_italian:
-            prompt = (
-                f"Trova allerte e allarmi in {len(batch_states)} entità HA. Gravità 0-5:\n"
-                f"0=Nessun problema, 1=Minimo, 2=Leggero, 3=Moderato, 4=Grave, 5=Critico\n"
-                f"SOLO problemi: dispositivi offline, batteria<20%, errori, malfunzionamenti, allarmi\n"
-                f"Categoria: sempre ALERTS per problemi rilevati\n"
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"problema\",\"category\":\"ALERTS\",\"management_type\":\"SERVICE\"}}]\n"
-                f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
-            )
-        else:
-            prompt = (
-                f"Find alerts and alarms in {len(batch_states)} HA entities. Severity 0-5:\n"
-                f"0=No problem, 1=Minimal, 2=Minor, 3=Moderate, 4=Severe, 5=Critical\n"
-                f"ONLY problems: offline devices, battery<20%, errors, malfunctions, alarms\n"
-                f"Category: always ALERTS for detected problems\n"
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"issue\",\"category\":\"ALERTS\",\"management_type\":\"SERVICE\"}}]\n"
-                f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
-            )
+    # Comprehensive analysis prompt that covers all aspects
+    if is_italian:
+        prompt = (
+            f"Analizza completamente {len(batch_states)} entità HA. Valuta importanza e problemi. Punteggio 0-5:\n"
+            f"0=Ignora/Nessun problema, 1=Molto bassa/Minimo, 2=Bassa/Leggero, 3=Media/Moderato, 4=Alta/Grave, 5=Critica/Critico\n"
+            f"\nCATEGORIE:\n"
+            f"- DATA: sensori, misurazioni, informazioni\n"
+            f"- CONTROL: interruttori, controlli, automazioni\n" 
+            f"- ALERTS: problemi, offline, batteria<20%, errori, malfunzionamenti\n"
+            f"\nTIPO GESTIONE:\n"
+            f"- USER: entità controllabili dall'utente\n"
+            f"- SERVICE: problemi che richiedono intervento tecnico\n"
+            f"\nAssegna categoria appropriata basata su funzione dell'entità, non solo sui problemi.\n"
+            f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"descrizione\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
+        )
     else:
-        if is_italian:
-            prompt = (
-                f"Analizza {len(batch_states)} entità HA. Importanza 0-5:\n"
-                f"0=Ignora, 1=Molto bassa, 2=Bassa, 3=Media, 4=Alta, 5=Critica\n"
-                f"Categorie: DATA (sensori), CONTROL (controlli), ALERTS (problemi/offline/batteria<20%)\n"
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"breve\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-                f"REASON IN INGLESE.\n\n" + "\n".join(entity_details)
-            )
-        else:
-            prompt = (
-                f"Analyze {len(batch_states)} HA entities. Importance 0-5:\n"
-                f"0=Ignore, 1=Very low, 2=Low, 3=Medium, 4=High, 5=Critical\n"
-                f"Categories: DATA (sensors), CONTROL (controls), ALERTS (problems/offline/battery<20%)\n"
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"brief\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
-                f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
-            )
+        prompt = (
+            f"Comprehensive analysis of {len(batch_states)} HA entities. Evaluate importance and issues. Score 0-5:\n"
+            f"0=Ignore/No problem, 1=Very low/Minimal, 2=Low/Minor, 3=Medium/Moderate, 4=High/Severe, 5=Critical\n"
+            f"\nCATEGORIES:\n"
+            f"- DATA: sensors, measurements, information\n"
+            f"- CONTROL: switches, controls, automations\n"
+            f"- ALERTS: problems, offline, battery<20%, errors, malfunctions\n"
+            f"\nMANAGEMENT TYPE:\n"
+            f"- USER: user-controllable entities\n"
+            f"- SERVICE: problems requiring technical intervention\n"
+            f"\nAssign appropriate category based on entity function, not just problems.\n"
+            f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"description\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]\n"
+            f"REASON IN ENGLISH.\n\n" + "\n".join(entity_details)
+        )
     
     # Log token estimation
     token_count = _estimate_tokens(prompt)
-    _LOGGER.info(f"Prompt tokens estimated: {token_count} (chars: {len(prompt)}, type: {analysis_type})")
+            _LOGGER.info(f"💬 Sending conversation via service")
     
     return prompt
 
@@ -154,6 +135,44 @@ ENTITY_IMPORTANCE_MAP = {
     "sun": 1,      # Less critical for most automations
     "person": 4,   # Person tracking is important
 }
+
+# Auto-categorization based on domain and entity characteristics
+def _auto_categorize_entity(state: State) -> str:
+    """Automatically categorize entity based on domain and characteristics."""
+    domain = state.domain
+    entity_id = state.entity_id
+    attributes = state.attributes
+    entity_state = state.state
+    
+    # Check for alerts/problems first
+    if entity_state in ['unavailable', 'unknown', 'error']:
+        return 'ALERTS'
+    
+    # Battery level check
+    battery_level = attributes.get('battery_level')
+    if battery_level is not None and battery_level < 20:
+        return 'ALERTS'
+    
+    # Domain-based categorization
+    if domain in ['sensor', 'binary_sensor', 'device_tracker', 'weather']:
+        # These provide data/information
+        return 'DATA'
+    elif domain in ['switch', 'light', 'climate', 'cover', 'lock', 'input_boolean', 'input_select', 'input_number', 'input_text']:
+        # These are controllable by user
+        return 'CONTROL'
+    elif domain in ['alarm_control_panel', 'alert', 'automation']:
+        # Security and system alerts
+        return 'ALERTS'
+    elif 'alarm' in entity_id or 'alert' in entity_id or 'problem' in entity_id:
+        return 'ALERTS'
+    else:
+        # Default based on typical usage
+        if any(keyword in entity_id for keyword in ['temperature', 'humidity', 'pressure', 'battery', 'signal']):
+            return 'DATA'
+        elif any(keyword in entity_id for keyword in ['switch', 'light', 'fan', 'heater']):
+            return 'CONTROL'
+        else:
+            return 'DATA'  # Default to DATA for unknown entities
 
 # Alert Severity Levels for user notification thresholds
 ALERT_SEVERITY_LEVELS = {
@@ -439,7 +458,7 @@ async def get_entities_importance_batched(
         # Use fallback for all entities if no API key
         all_results = []
         for state in states:
-            all_results.append(_create_fallback_result(state.entity_id, 0))
+            all_results.append(_create_fallback_result(state.entity_id, 0, "no_api_key", state))
         return all_results
     
     all_results = []
@@ -538,7 +557,7 @@ async def get_entities_importance_batched(
                     
                     # Send fallback results to frontend immediately
                     for state in remaining_states:
-                        fallback_result = _create_fallback_result(state.entity_id, overall_batch_num, "token_limit_exceeded")
+                        fallback_result = _create_fallback_result(state.entity_id, overall_batch_num, "token_limit_exceeded", state)
                         all_results.append(fallback_result)
                         
                         # Send each fallback result to frontend
@@ -578,7 +597,7 @@ async def get_entities_importance_batched(
     processed_entity_ids = {res["entity_id"] for res in all_results}
     for state in states:
         if state.entity_id not in processed_entity_ids:
-            all_results.append(_create_fallback_result(state.entity_id, 0))
+            all_results.append(_create_fallback_result(state.entity_id, 0, "missing_result", state))
 
     # Send scan completion message to frontend with token statistics
     if connection and msg_id:
@@ -687,9 +706,7 @@ async def _process_single_batch(
                 # Return minimal stats even on token limit
                 prompt_tokens = _estimate_tokens(prompt)
                 batch_stats = {
-                    "prompt_chars": len(prompt),
                     "prompt_tokens": prompt_tokens,
-                    "response_chars": len(response_text),
                     "response_tokens": _estimate_tokens(response_text),
                     "total_tokens": prompt_tokens + _estimate_tokens(response_text)
                 }
@@ -710,7 +727,7 @@ async def _process_single_batch(
                 }))
             # Use fallback for all entities in this batch
             for state in batch_states:
-                fallback_result = _create_fallback_result(state.entity_id, batch_num)
+                fallback_result = _create_fallback_result(state.entity_id, batch_num, "unsupported_provider", state)
                 all_results.append(fallback_result)
                 
                 # Send fallback result to frontend
@@ -769,7 +786,9 @@ async def _process_single_batch(
                             }))
                     else:
                         _LOGGER.warning(f"Invalid rating {rating} for entity {item['entity_id']}, using fallback")
-                        fallback_result = _create_fallback_result(item["entity_id"], batch_num)
+                        # Find the corresponding state
+                        entity_state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
+                        fallback_result = _create_fallback_result(item["entity_id"], batch_num, "invalid_rating", entity_state)
                         all_results.append(fallback_result)
                         
                         # Send fallback result to frontend
@@ -784,7 +803,7 @@ async def _process_single_batch(
             _LOGGER.warning(f"AI response is not a list, using fallback for batch {batch_num}")
             # Use fallback for all entities in this batch
             for state in batch_states:
-                fallback_result = _create_fallback_result(state.entity_id, batch_num)
+                fallback_result = _create_fallback_result(state.entity_id, batch_num, "invalid_response", state)
                 all_results.append(fallback_result)
                 
                 # Send fallback result to frontend
@@ -797,9 +816,7 @@ async def _process_single_batch(
         # Return minimal stats for fallback cases
         prompt_tokens = _estimate_tokens(prompt)
         batch_stats = {
-            "prompt_chars": len(prompt),
             "prompt_tokens": prompt_tokens,
-            "response_chars": len(response_text) if 'response_text' in locals() else 0,
             "response_tokens": _estimate_tokens(response_text) if 'response_text' in locals() else 0,
             "total_tokens": prompt_tokens + (_estimate_tokens(response_text) if 'response_text' in locals() else 0)
         }
@@ -811,7 +828,7 @@ async def _process_single_batch(
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
         for state in batch_states:
-            fallback_result = _create_fallback_result(state.entity_id, batch_num)
+            fallback_result = _create_fallback_result(state.entity_id, batch_num, "json_decode_error", state)
             all_results.append(fallback_result)
             
             # Send fallback result to frontend
@@ -824,9 +841,7 @@ async def _process_single_batch(
         # Return minimal stats for JSON decode error
         prompt_tokens = _estimate_tokens(prompt)
         batch_stats = {
-            "prompt_chars": len(prompt),
             "prompt_tokens": prompt_tokens,
-            "response_chars": len(response_text) if 'response_text' in locals() else 0,
             "response_tokens": _estimate_tokens(response_text) if 'response_text' in locals() else 0,
             "total_tokens": prompt_tokens + (_estimate_tokens(response_text) if 'response_text' in locals() else 0)
         }
@@ -837,7 +852,7 @@ async def _process_single_batch(
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
         for state in batch_states:
-            fallback_result = _create_fallback_result(state.entity_id, batch_num)
+            fallback_result = _create_fallback_result(state.entity_id, batch_num, "processing_error", state)
             all_results.append(fallback_result)
             
             # Send fallback result to frontend
@@ -852,9 +867,7 @@ async def _process_single_batch(
     response_tokens = _estimate_tokens(response_text) if 'response_text' in locals() else 0
     
     batch_stats = {
-        "prompt_chars": len(prompt),
         "prompt_tokens": prompt_tokens,
-        "response_chars": len(response_text) if 'response_text' in locals() else 0,
         "response_tokens": response_tokens,
         "total_tokens": prompt_tokens + response_tokens
     }
@@ -876,7 +889,7 @@ def _check_token_limit_exceeded(response_text: str) -> bool:
     return False
 
 
-def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domain_fallback") -> dict:
+def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domain_fallback", state: State = None) -> dict:
     """Create a fallback result when AI analysis fails."""
     domain = entity_id.split(".")[0]
     
@@ -888,26 +901,36 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
     service_managed_domains = {"sensor", "binary_sensor", "weather", "sun", "system_log", "automation", "script"}
     
     if domain in user_managed_domains:
-        management_type = "user"
+        management_type = "USER"
     elif domain in service_managed_domains:
-        management_type = "service"
+        management_type = "SERVICE"
     else:
-        management_type = "user"  # Default to user for unknown domains
+        management_type = "USER"  # Default to user for unknown domains
     
-    # Determine category based on domain and entity name patterns
-    data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker"}
-    
-    # Check for HEALTH conditions based on entity name patterns
-    entity_lower = entity_id.lower()
-    if ("battery" in entity_lower or 
-        "unavailable" in entity_lower or 
-        "offline" in entity_lower or
-        "signal" in entity_lower or
-        "error" in entity_lower or
-        "connection" in entity_lower):
-        category = "HEALTH"
+    # Use auto-categorization if state is available, otherwise fallback to domain-based
+    if state:
+        category = _auto_categorize_entity(state)
     else:
-        category = "DATA" if domain in data_domains else "CONTROL"
+        # Fallback domain-based categorization
+        data_domains = {"sensor", "binary_sensor", "weather", "sun", "person", "device_tracker"}
+        control_domains = {"light", "switch", "climate", "cover", "fan", "lock", "input_boolean", "input_number", "input_select", "input_text"}
+        
+        entity_lower = entity_id.lower()
+        if ("battery" in entity_lower or 
+            "unavailable" in entity_lower or 
+            "offline" in entity_lower or
+            "signal" in entity_lower or
+            "error" in entity_lower or
+            "connection" in entity_lower or
+            "alarm" in entity_lower or
+            "alert" in entity_lower):
+            category = "ALERTS"
+        elif domain in data_domains:
+            category = "DATA"
+        elif domain in control_domains:
+            category = "CONTROL"
+        else:
+            category = "DATA"  # Default to DATA
     
     reason_map = {
         0: "Entity marked as ignore - likely diagnostic or unnecessary",
@@ -922,8 +945,8 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         fallback_reason = f"{reason_map[importance]} (fallback due to token limit exceeded)"
         analysis_method = "domain_fallback_token_limit"
     else:
-        fallback_reason = f"{reason_map[importance]} (using domain-based classification)"
-        analysis_method = "domain_fallback"
+        fallback_reason = f"{reason_map[importance]} (using auto-categorization)"
+        analysis_method = "auto_categorization"
     
     return {
         "entity_id": entity_id,
@@ -1038,7 +1061,7 @@ Se nessuna correlazione: []"""
 Reply ONLY JSON: [{{"entity_id":"entity_name","type":"functional","strength":3,"reason":"brief reason"}}]
 If no correlation: []"""
         
-        _LOGGER.debug(f"Correlation prompt for {target_id}: {len(prompt)} chars")
+        _LOGGER.debug(f"Correlation prompt for {target_id}")
         
         # Query AI for correlations with timeout
         try:

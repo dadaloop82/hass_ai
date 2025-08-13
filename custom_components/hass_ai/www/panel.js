@@ -1,4 +1,4 @@
-// HASS AI Panel v1.9.15 - Updated 2025-08-13T17:00:00Z - CACHE BUSTER
+// HASS AI Panel v1.9.16 - Updated 2025-08-13T17:00:00Z - CACHE BUSTER
 // Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds
 // Force reload timestamp: 1723572000000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
@@ -21,7 +21,6 @@ class HassAiPanel extends LitElement {
       categoryFilter: { state: true },
       tokenStats: { state: true },
       alertThresholds: { state: true },
-      analysisType: { state: true },
     };
   }
 
@@ -35,7 +34,6 @@ class HassAiPanel extends LitElement {
     this.minWeight = 3; // Filter: minimum weight to show entities (default 3)
     this.searchTerm = ''; // Search filter
     this.categoryFilter = 'ALL'; // Category filter: ALL, DATA, CONTROL, ALERTS, ENHANCED, ENHANCED
-    this.analysisType = 'importance'; // Analysis type: importance, alerts, enhanced
     this.correlations = {}; // Store correlations for each entity
     this.scanProgress = {
       show: false,
@@ -49,8 +47,6 @@ class HassAiPanel extends LitElement {
     };
     this.tokenStats = {
       totalTokens: 0,
-      promptChars: 0,
-      responseChars: 0,
       currentBatchTokens: 0,
       averageTokensPerEntity: 0,
       estimatedCost: 0 // Rough cost estimation
@@ -292,43 +288,17 @@ class HassAiPanel extends LitElement {
       return isItalian ? "Scansione in corso..." : "Scanning...";
     }
     
-    const analysisNames = {
-      'importance': isItalian ? 'Importanza' : 'Importance',
-      'alerts': isItalian ? 'Allerte' : 'Alerts', 
-      'enhanced': isItalian ? 'Miglioramenti' : 'Enhanced'
-    };
-    
-    const analysisName = analysisNames[this.analysisType] || analysisNames.importance;
-    
     if (unevaluatedCount > 0 && Object.keys(this.entities).length > 0) {
       return isItalian ? 
-        `${analysisName}: Scansiona ${unevaluatedCount} entità nuove` :
-        `${analysisName}: Scan ${unevaluatedCount} new entities`;
+        `🔍 Scansiona ${unevaluatedCount} entità nuove` :
+        `🔍 Scan ${unevaluatedCount} new entities`;
     }
     
     return isItalian ? 
-      `🚀 Avvia Analisi ${analysisName}` : 
-      `🚀 Start ${analysisName} Analysis`;
+      `🚀 Avvia Analisi Completa` : 
+      `🚀 Start Complete Analysis`;
   }
   
-  _getAnalysisTypeDescription() {
-    const isItalian = (this.hass.language || navigator.language).startsWith('it');
-    
-    const descriptions = {
-      'importance': isItalian ? 
-        '📊 Analizza l\'importanza delle entità per automazioni e controllo' :
-        '📊 Analyze entity importance for automation and control',
-      'alerts': isItalian ?
-        '🚨 Rileva problemi: dispositivi offline, batteria scarica, errori' :
-        '🚨 Detect problems: offline devices, low battery, errors',
-      'enhanced': isItalian ?
-        '⚡ Trova entità che possono beneficiare di servizi AI aggiuntivi' :
-        '⚡ Find entities that can benefit from additional AI services'
-    };
-    
-    return descriptions[this.analysisType] || descriptions.importance;
-  }
-
   async _runScan() {
     this.loading = true;
     
@@ -359,8 +329,6 @@ class HassAiPanel extends LitElement {
     // Reset token statistics for new scan
     this.tokenStats = {
       totalTokens: 0,
-      promptChars: 0,
-      responseChars: 0,
       currentBatchTokens: 0,
       averageTokensPerEntity: 0,
       estimatedCost: 0
@@ -375,7 +343,7 @@ class HassAiPanel extends LitElement {
         language: this.hass.language || navigator.language || 'en',
         new_entities_only: shouldScanOnlyNew,
         existing_entities: shouldScanOnlyNew ? Object.keys(this.entities) : [],
-        analysis_type: this.analysisType || 'importance'
+        analysis_type: 'comprehensive'
       }
     );
   }
@@ -541,14 +509,12 @@ class HassAiPanel extends LitElement {
       if (message.data.prompt_size) {
         this.tokenStats = {
           ...this.tokenStats,
-          promptChars: (this.tokenStats.promptChars || 0) + message.data.prompt_size,
           currentBatchTokens: Math.ceil(message.data.prompt_size / 4), // Estimate tokens
         };
       }
       if (message.data.response_size) {
         this.tokenStats = {
           ...this.tokenStats,
-          responseChars: (this.tokenStats.responseChars || 0) + message.data.response_size,
           currentBatchTokens: (this.tokenStats.currentBatchTokens || 0) + Math.ceil(message.data.response_size / 4),
         };
         
@@ -631,8 +597,6 @@ class HassAiPanel extends LitElement {
       if (message.data.token_stats) {
         this.tokenStats = {
           totalTokens: message.data.token_stats.total_tokens || this.tokenStats.totalTokens,
-          promptChars: message.data.token_stats.prompt_chars || this.tokenStats.promptChars,
-          responseChars: message.data.token_stats.response_chars || this.tokenStats.responseChars,
           averageTokensPerEntity: message.data.token_stats.average_tokens_per_entity || this.tokenStats.averageTokensPerEntity,
           estimatedCost: Math.round((message.data.token_stats.total_tokens || 0) * 0.00003 * 1000) / 1000,
           currentBatchTokens: 0 // Reset current batch
@@ -1036,41 +1000,6 @@ class HassAiPanel extends LitElement {
           
           <div class="analysis-steps">
             <!-- Analysis Type Selection -->
-            <div class="analysis-type-selection">
-              <div class="analysis-type-header">
-                <span>${isItalian ? '🔬 Tipo di Analisi:' : '🔬 Analysis Type:'}</span>
-              </div>
-              <div class="analysis-type-buttons">
-                <ha-button 
-                  .outlined=${this.analysisType !== 'importance'}
-                  .raised=${this.analysisType === 'importance'}
-                  @click=${() => { this.analysisType = 'importance'; this.requestUpdate(); }}
-                  class="analysis-type-btn"
-                >
-                  📊 ${isItalian ? 'Importanza' : 'Importance'}
-                </ha-button>
-                <ha-button 
-                  .outlined=${this.analysisType !== 'alerts'}
-                  .raised=${this.analysisType === 'alerts'}
-                  @click=${() => { this.analysisType = 'alerts'; this.requestUpdate(); }}
-                  class="analysis-type-btn"
-                >
-                  🚨 ${isItalian ? 'Allerte' : 'Alerts'}
-                </ha-button>
-                <ha-button 
-                  .outlined=${this.analysisType !== 'enhanced'}
-                  .raised=${this.analysisType === 'enhanced'}
-                  @click=${() => { this.analysisType = 'enhanced'; this.requestUpdate(); }}
-                  class="analysis-type-btn"
-                >
-                  ⚡ ${isItalian ? 'Miglioramenti' : 'Enhanced'}
-                </ha-button>
-              </div>
-              <div class="analysis-type-description">
-                ${this._getAnalysisTypeDescription()}
-              </div>
-            </div>
-            
             <div class="step-item ${Object.keys(this.entities).length === 0 ? 'active' : 'completed'}">
               <span class="step-number">1</span>
               <ha-button 
