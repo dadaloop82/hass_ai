@@ -884,6 +884,50 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     }
   }
 
+  async _refreshAlertStatus() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    try {
+      // Force update of alertStatus by checking entity state
+      const entity = this.hass.states['input_text.hass_ai_alerts'];
+      
+      if (entity) {
+        this.alertStatus = {
+          ...this.alertStatus,
+          input_text_exists: true,
+          input_text_value: entity.state,
+          input_text_entity: 'input_text.hass_ai_alerts'
+        };
+        
+        this._showMessage(
+          isItalian ? '🔄 Stato aggiornato' : '🔄 Status refreshed',
+          'success'
+        );
+      } else {
+        this.alertStatus = {
+          ...this.alertStatus,
+          input_text_exists: false,
+          input_text_value: '',
+          input_text_entity: 'input_text.hass_ai_alerts'
+        };
+        
+        this._showMessage(
+          isItalian ? '⚠️ Entità non trovata' : '⚠️ Entity not found',
+          'warning'
+        );
+      }
+      
+      // Force update of the UI
+      this.requestUpdate();
+    } catch (error) {
+      console.error('Error refreshing alert status:', error);
+      this._showMessage(
+        isItalian ? '❌ Errore nell\'aggiornamento' : '❌ Error refreshing status',
+        'error'
+      );
+    }
+  }
+
   async _reidentifyThresholds() {
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     
@@ -2027,6 +2071,14 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                     title="${isItalian ? 'Peso minimo' : 'Minimum weight'}: ${this.minWeight}"
                   />
                   <span class="weight-display large">${this.minWeight}</span>
+                </div>
+                <div class="weight-intervals-info">
+                  <small style="color: #666; font-style: italic;">
+                    ${isItalian ? 
+                      '⏱️ Intervalli di controllo: peso 5: 30 secondi, peso 4: 1 minuto, peso 3: 5 minuti, peso 2: 15 minuti, peso 1: 30 minuti' :
+                      '⏱️ Check intervals: weight 5: 30 seconds, weight 4: 1 minute, weight 3: 5 minutes, weight 2: 15 minutes, weight 1: 30 minutes'
+                    }
+                  </small>
                 </div>
               </div>
               ${Object.keys(this.entities).length > 0 ? html`
@@ -3891,14 +3943,16 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       .weight-filter-container {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 12px;
         background: var(--card-background-color);
         border: 3px solid #ff4444;
         border-radius: 12px;
-        padding: 16px;
-        margin: 8px 0;
+        padding: 24px;
+        margin: 12px 0;
         box-shadow: 0 2px 8px rgba(255, 68, 68, 0.15);
         position: relative;
+        width: 100%;
+        max-width: none;
       }
       
       .weight-filter-container::before {
@@ -3936,13 +3990,16 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       .weight-slider-row {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 16px;
+        width: 100%;
       }
       
       .weight-slider.large {
         flex: 1;
-        height: 12px;
-        min-width: 250px;
+        height: 20px;
+        min-width: 500px;
+        width: 100%;
+        max-width: 800px;
       }
       
       .weight-display {
@@ -3959,10 +4016,11 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       }
       
       .weight-display.large {
-        min-width: 32px;
-        height: 32px;
-        font-size: 14px;
-        font-weight: 700;
+        min-width: 48px;
+        height: 48px;
+        font-size: 20px;
+        font-weight: 900;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       }
       
       /* Alert threshold columns */
@@ -4447,12 +4505,19 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                   ${this.hass.states['input_text.hass_ai_alerts']?.state || (isItalian ? 'Non disponibile' : 'Not available')}
                 </div>
               </div>
-              <div class="config-row">
+              <div class="config-row" style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button 
                   class="clear-button"
                   @click=${this._clearInputTextValue}
                 >
                   🗑️ ${isItalian ? 'Cancella Alert' : 'Clear Alert'}
+                </button>
+                <button 
+                  class="refresh-button"
+                  @click=${this._refreshAlertStatus}
+                  style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 5px;"
+                >
+                  🔄 ${isItalian ? 'Aggiorna Stato' : 'Refresh Status'}
                 </button>
               </div>
             ` : ''}

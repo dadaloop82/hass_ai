@@ -424,21 +424,10 @@ input_text:
         if alerts_to_notify:
             await self._send_cumulative_notification(alerts_to_notify)
             
-    def _calculate_check_interval(self, weight: int) -> int:
-        """Calculate check interval in minutes based on weight"""
-        # Weight 5 = 0.5 minutes (30 seconds)
-        # Weight 1 = 30 minutes
-        # Linear interpolation between these values
-        if weight >= 5:
-            return 0.5
-        elif weight <= 1:
-            return 30
-        else:
-            # Linear interpolation: y = mx + b
-            # At weight 5: 0.5 minutes
-            # At weight 1: 30 minutes
-            # slope = (30 - 0.5) / (1 - 5) = -7.375
-            return max(0.5, 30 - (weight - 1) * 7.375)
+    def _calculate_check_interval(self, weight: int) -> float:
+        """Calculate check interval based on weight: peso 5: 30 secondi, peso 4: 1 minuto, peso 3: 5 minuti, peso 2: 15 minuti, peso 1: 30 minuti"""
+        weight_intervals = {5: 0.5, 4: 1.0, 3: 5.0, 2: 15.0, 1: 30.0}  # minutes
+        return weight_intervals.get(weight, 5.0)  # Default to 5 minutes for invalid weights
             
     async def _check_entity_alert(self, entity_id: str, config: Dict) -> Optional[str]:
         """Check if entity is in alert state"""
