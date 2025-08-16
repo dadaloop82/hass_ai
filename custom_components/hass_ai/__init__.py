@@ -852,20 +852,42 @@ async def handle_save_alert_threshold(hass: HomeAssistant, connection: websocket
         entity_id = msg["entity_id"]
         threshold = msg["threshold"]
         
-        # Validate threshold level
+        # Validate threshold level - accept frontend values
         if threshold not in ["MEDIUM", "SEVERE", "CRITICAL"]:
             raise ValueError(f"Invalid threshold level: {threshold}")
         
-        # Save to storage
-        from .intelligence import _save_entity_alert_threshold
-        success = _save_entity_alert_threshold(entity_id, threshold, hass)
+        # Map frontend values to backend values
+        threshold_map = {
+            "MEDIUM": "WARNING",
+            "SEVERE": "ALERT", 
+            "CRITICAL": "CRITICAL"
+        }
         
-        if success:
-            connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
-        else:
-            connection.send_message(websocket_api.error_message(
-                msg["id"], "save_error", "Failed to save alert threshold"
-            ))
+        backend_threshold = threshold_map.get(threshold, threshold)
+        
+        # Get alert monitor from domain data
+        config_entry = None
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            config_entry = entry
+            break
+            
+        if not config_entry:
+            raise ValueError("No configuration found")
+            
+        domain_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
+        alert_monitor = domain_data.get("alert_monitor")
+        
+        if not alert_monitor:
+            raise ValueError("Alert monitor not available")
+        
+        # Save threshold using alert monitor
+        await alert_monitor.configure_entity_alerts(entity_id, {}, {backend_threshold: None})
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {
+            "success": True,
+            "entity_id": entity_id,
+            "threshold": threshold
+        }))
         
     except Exception as e:
         _LOGGER.error(f"Error saving alert threshold: {e}")

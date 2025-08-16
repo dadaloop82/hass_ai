@@ -159,23 +159,41 @@ class HassAiPanel extends LitElement {
   }
 
   async _saveAlertThreshold(entityId, threshold) {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
     try {
-      await this.hass.callWS({ 
+      const response = await this.hass.callWS({ 
         type: "hass_ai/save_alert_threshold",
         entity_id: entityId,
         threshold: threshold
       });
       
-      // Update local cache
-      this.alertThresholds[entityId] = {
-        level: threshold,
-        customized: true,
-        updated_at: new Date().toISOString()
-      };
+      if (response && response.success) {
+        // Update local cache
+        this.alertThresholds[entityId] = {
+          level: threshold,
+          customized: true,
+          updated_at: new Date().toISOString()
+        };
+        
+        this._showMessage(
+          isItalian ? '✅ Soglia salvata con successo' : '✅ Threshold saved successfully',
+          'success'
+        );
+        
+        this.requestUpdate();
+      } else {
+        throw new Error(response?.error || 'Save failed');
+      }
       
-      this.requestUpdate();
     } catch (error) {
       console.error('Failed to save alert threshold:', error);
+      this._showMessage(
+        isItalian ? 
+          `❌ Errore nel salvare la soglia: ${error.message}` : 
+          `❌ Error saving threshold: ${error.message}`,
+        'error'
+      );
     }
   }
 
@@ -935,7 +953,9 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
 
       if (response && response.success) {
         this._showSimpleNotification(
-          isItalian ? '✅ Ri-identificazione completata con successo!' : '✅ Re-identification completed successfully!',
+          isItalian ? 
+            `✅ Ri-identificazione completata! ${response.successful_generations || 0} soglie generate` : 
+            `✅ Re-identification completed! ${response.successful_generations || 0} thresholds generated`,
           'success'
         );
 
@@ -2054,14 +2074,6 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                       '(0=Not important, 5=Critical) - Only entities with weight ≥ value will be shown and monitored.'
                     }
                   </div>
-                  <div class="weight-intervals-info">
-                    <small style="color: #666; font-style: italic;">
-                      ${isItalian ? 
-                        '⏱️ Intervalli: peso 5: 30s, peso 4: 1min, peso 3: 5min, peso 2: 15min, peso 1: 30min' :
-                        '⏱️ Intervals: weight 5: 30s, weight 4: 1min, weight 3: 5min, weight 2: 15min, weight 1: 30min'
-                      }
-                    </small>
-                  </div>
                 </div>
               </div>
               ${Object.keys(this.entities).length > 0 ? html`
@@ -2070,6 +2082,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                   @click=${(e) => this._confirmResetAll(e)}
                   class="reset-button compact"
                   ?disabled=${this.loading}
+                  style="margin-left: 10px;"
                 >
                   ${isItalian ? 'Cancella Tutto' : 'Clear All'}
                 </mwc-button>
@@ -2184,6 +2197,13 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                                 </div>
                                 
                                 ${(Array.isArray(entity.category) ? entity.category.includes('ALERTS') : entity.category === 'ALERTS') ? html`
+                                  <div class="current-value-section">
+                                    <strong>${isItalian ? '📊 Valore Attuale:' : '📊 Current Value:'}</strong>
+                                    <span class="current-value-display">
+                                      ${this.hass.states[entity.entity_id]?.state || (isItalian ? 'Non disponibile' : 'Not available')}
+                                      ${this.hass.states[entity.entity_id]?.attributes?.unit_of_measurement || ''}
+                                    </span>
+                                  </div>
                                   <div class="alert-threshold-section">
                                     <strong>${isItalian ? '🚨 Soglia Allerta:' : '🚨 Alert Threshold:'}</strong>
                                     <div class="alert-threshold-controls">
@@ -4509,19 +4529,13 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                   ${this.hass.states['input_text.hass_ai_alerts']?.state || (isItalian ? 'Non disponibile' : 'Not available')}
                 </div>
               </div>
-              <div class="config-row" style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button 
-                  class="clear-button"
-                  @click=${this._clearInputTextValue}
-                >
-                  🗑️ ${isItalian ? 'Cancella Alert' : 'Clear Alert'}
-                </button>
+              <div class="config-row">
                 <button 
                   class="refresh-button"
                   @click=${this._refreshAlertStatus}
                   style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 5px;"
                 >
-                  🔄 ${isItalian ? 'Aggiorna Stato' : 'Refresh Status'}
+                  🔄 ${isItalian ? 'Aggiorna Alert' : 'Refresh Alert'}
                 </button>
               </div>
             ` : ''}
