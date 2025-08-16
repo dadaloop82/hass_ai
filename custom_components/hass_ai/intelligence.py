@@ -1546,6 +1546,21 @@ async def find_entity_correlations(hass: HomeAssistant, target_entity: dict, all
         target_category = target_entity.get("category", ["DATA"])  # Default to DATA instead of UNKNOWN
         target_domain = target_id.split('.')[0]
         
+        # Skip correlations for entities with ONLY ALERTS category
+        if isinstance(target_category, list):
+            if target_category == ["ALERTS"] or (len(target_category) == 1 and target_category[0] == "ALERTS"):
+                return []
+        elif target_category == "ALERTS":
+            return []
+        
+        # Only entities with DATA or CONTROL categories can have correlations
+        valid_categories = ["DATA", "CONTROL"]
+        if isinstance(target_category, list):
+            if not any(cat in valid_categories for cat in target_category):
+                return []
+        elif target_category not in valid_categories:
+            return []
+        
         # Smart candidate filtering based on target entity type
         candidate_entities = []
         
@@ -1583,6 +1598,19 @@ async def find_entity_correlations(hass: HomeAssistant, target_entity: dict, all
         # Filter candidates intelligently
         for entity in all_entities:
             if entity["entity_id"] == target_id or entity.get("ai_weight", 0) < 2:
+                continue
+            
+            # Skip entities with ONLY ALERTS category for correlations
+            entity_category = entity.get("category", ["DATA"])
+            if isinstance(entity_category, list):
+                if entity_category == ["ALERTS"] or (len(entity_category) == 1 and entity_category[0] == "ALERTS"):
+                    continue
+                # Only entities with DATA or CONTROL categories can be in correlations
+                if not any(cat in ["DATA", "CONTROL"] for cat in entity_category):
+                    continue
+            elif entity_category == "ALERTS":
+                continue
+            elif entity_category not in ["DATA", "CONTROL"]:
                 continue
                 
             entity_id = entity["entity_id"]
