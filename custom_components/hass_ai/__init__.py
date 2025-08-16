@@ -152,6 +152,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register the websocket API
     websocket_api.async_register_command(hass, handle_scan_entities)
+    websocket_api.async_register_command(hass, handle_generate_thresholds)
     websocket_api.async_register_command(hass, handle_save_overrides)
     websocket_api.async_register_command(hass, handle_load_overrides)
     websocket_api.async_register_command(hass, handle_load_ai_results)
@@ -372,6 +373,141 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
     except Exception as e:
         _LOGGER.error(f"Error during entity scan: {e}")
         connection.send_message(websocket_api.error_message(msg["id"], "scan_failed", str(e)))
+    finally:
+        # Clean up active operation
+        hass_id = id(hass)
+        if hass_id in _active_operations:
+            del _active_operations[hass_id]
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/generate_thresholds",
+    vol.Optional("force_regenerate", default=False): bool,
+})
+@websocket_api.async_response
+async def handle_generate_thresholds(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to generate/regenerate AI thresholds for all entities."""
+    try:
+        # Register this operation as active
+        hass_id = id(hass)
+        _active_operations[hass_id] = {
+            "type": "threshold_generation",
+            "cancelled": False,
+            "connection": connection,
+            "msg_id": msg["id"]
+        }
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
+        
+        force_regenerate = msg.get("force_regenerate", False)
+        
+        # Load existing AI results
+        ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
+        ai_data = await ai_results_store.async_load()
+        
+        if not ai_data or "results" not in ai_data:
+            connection.send_message(websocket_api.error_message(
+                msg["id"], "no_entities", "No entities found. Please run entity scan first."
+            ))
+            return
+            
+        entities = ai_data["results"]
+        
+        # Get configuration
+        config_entry = None
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            config_entry = entry
+            break
+            
+        if not config_entry:
+            connection.send_message(websocket_api.error_message(
+                msg["id"], "no_config", "No configuration found"
+            ))
+            return
+            
+        ai_provider = config_entry.data.get("ai_provider", "OpenAI")
+        api_key = config_entry.data.get("api_key")
+        
+        # Get conversation agent
+        try:
+            agent = await async_get_agent(hass, config_entry.data.get(CONF_CONVERSATION_AGENT))
+        except Exception as e:
+            _LOGGER.warning(f"Failed to get conversation agent: {e}")
+            agent = None
+            
+        if not agent:
+            connection.send_message(websocket_api.error_message(
+                msg["id"], "no_agent", "No conversation agent available"
+            ))
+            return
+        
+        # Import here to avoid circular imports
+        from .intelligence import generate_thresholds_for_entities
+        
+        # Generate thresholds for all entities
+        total_entities = len(entities)
+        processed = 0
+        successful = 0
+        
+        for entity_id, entity_data in entities.items():
+            # Check if operation was cancelled
+            if hass_id in _active_operations and _active_operations[hass_id]["cancelled"]:
+                break
+                
+            try:
+                # Only generate if we don't have thresholds or force regenerate
+                existing_thresholds = entity_data.get("alert_thresholds", {})
+                if not force_regenerate and existing_thresholds:
+                    _LOGGER.debug(f"Skipping {entity_id}: already has thresholds")
+                    processed += 1
+                    continue
+                
+                # Generate thresholds for this entity
+                thresholds = await generate_thresholds_for_entities(
+                    hass, [entity_data], agent, ai_provider, api_key
+                )
+                
+                if thresholds and entity_id in thresholds:
+                    entities[entity_id]["alert_thresholds"] = thresholds[entity_id]
+                    successful += 1
+                    _LOGGER.info(f"Generated thresholds for {entity_id}")
+                    
+                    # Send progress update
+                    connection.send_message(websocket_api.event_message(msg["id"], {
+                        "type": "threshold_progress",
+                        "entity_id": entity_id,
+                        "processed": processed + 1,
+                        "total": total_entities,
+                        "successful": successful
+                    }))
+                
+                processed += 1
+                
+                # Small delay to prevent overwhelming the AI service
+                await asyncio.sleep(1)
+                
+            except Exception as e:
+                _LOGGER.error(f"Error generating thresholds for {entity_id}: {e}")
+                processed += 1
+                
+        # Save updated results
+        ai_data["results"] = entities
+        ai_data["last_threshold_update"] = dt.utcnow().isoformat()
+        await ai_results_store.async_save(ai_data)
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {
+            "success": True,
+            "total_processed": processed,
+            "successful_generations": successful,
+            "message": f"Generated thresholds for {successful} out of {processed} entities"
+        }))
+        
+    except asyncio.CancelledError:
+        _LOGGER.info("Threshold generation was cancelled")
+        connection.send_message(websocket_api.event_message(msg["id"], {"type": "generation_cancelled"}))
+    except Exception as e:
+        _LOGGER.error(f"Error during threshold generation: {e}")
+        connection.send_message(websocket_api.error_message(msg["id"], "generation_failed", str(e)))
     finally:
         # Clean up active operation
         hass_id = id(hass)

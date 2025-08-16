@@ -527,10 +527,21 @@ class HassAiPanel extends LitElement {
   _generateAlertMessageExample() {
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     
-    // Trova entità reali per l'esempio
-    const alertEntities = Object.entries(this.entities).filter(([entityId, entity]) => 
-      entity.categories && entity.categories.includes('ALERTS')
-    );
+    // Get only ALERTS entities that are currently visible in the filter (same logic as _renderAlertConfigPanel)
+    const alertEntities = Object.entries(this.entities)
+      .filter(([entityId, entity]) => {
+        const categories = Array.isArray(entity.category) ? entity.category : [entity.category];
+        if (!categories.includes('ALERTS')) return false;
+        
+        // Apply the same filtering logic as the main table
+        const weight = this.overrides[entityId]?.overall_weight ?? entity.overall_weight;
+        const matchesWeight = weight >= this.minWeight;
+        
+        // Category filter - if not showing ALL, only show entities that match current category filter
+        const matchesCategory = this.categoryFilter === 'ALL' || categories.includes(this.categoryFilter);
+        
+        return matchesWeight && matchesCategory;
+      });
     
     if (alertEntities.length > 0) {
       // Usa entità reali per l'esempio
@@ -768,6 +779,59 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         isItalian ? '❌ Errore nella cancellazione' : '❌ Error clearing alert',
         'error'
       );
+    }
+  }
+
+  async _reidentifyThresholds() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    if (this.isScanning || this.isGeneratingThresholds) {
+      this._showSimpleNotification(
+        isItalian ? '⏳ Operazione già in corso, attendere...' : '⏳ Operation already in progress, please wait...',
+        'warning'
+      );
+      return;
+    }
+
+    try {
+      this.isGeneratingThresholds = true;
+      this.requestUpdate();
+
+      this._showSimpleNotification(
+        isItalian ? '🔄 Avvio ri-identificazione delle soglie AI...' : '🔄 Starting AI threshold re-identification...',
+        'info'
+      );
+
+      // Chiama il servizio per ri-identificare tutte le soglie
+      const response = await this.hass.callWS({
+        type: "hass_ai/generate_thresholds",
+        force_regenerate: true
+      });
+
+      if (response && response.success) {
+        this._showSimpleNotification(
+          isItalian ? '✅ Ri-identificazione completata con successo!' : '✅ Re-identification completed successfully!',
+          'success'
+        );
+
+        // Ricarica i risultati AI aggiornati
+        await this._loadAiResults();
+        this.requestUpdate();
+      } else {
+        throw new Error(response?.error || 'Unknown error');
+      }
+
+    } catch (error) {
+      console.error('Error in reidentify thresholds:', error);
+      this._showSimpleNotification(
+        isItalian ? 
+          `❌ Errore nella ri-identificazione: ${error.message}` : 
+          `❌ Error in re-identification: ${error.message}`,
+        'error'
+      );
+    } finally {
+      this.isGeneratingThresholds = false;
+      this.requestUpdate();
     }
   }
 
@@ -3214,6 +3278,68 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         color: var(--primary-text-color);
       }
       
+      .reidentify-section {
+        background: var(--secondary-background-color, #f5f5f5);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      
+      .reidentify-btn {
+        --mdc-theme-primary: var(--primary-color);
+        margin-bottom: 8px;
+        font-weight: 500;
+      }
+      
+      .reidentify-btn[disabled] {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      
+      .reidentify-help {
+        margin: 0;
+        font-size: 13px;
+        color: var(--secondary-text-color);
+        line-height: 1.4;
+      }
+      
+      .manual-config-guide {
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        padding: 16px;
+        margin-top: 12px;
+        text-align: left;
+      }
+      
+      .manual-config-guide h5 {
+        margin: 16px 0 8px 0;
+        color: var(--primary-color);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      
+      .manual-config-guide h5:first-child {
+        margin-top: 0;
+      }
+      
+      .manual-config-guide p {
+        margin: 8px 0;
+        line-height: 1.5;
+        white-space: pre-line;
+      }
+      
+      .manual-config-guide pre {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        padding: 12px;
+        overflow-x: auto;
+        margin: 8px 0;
+      }
+      
       .service-select {
         flex: 1;
         padding: 8px 12px;
@@ -4087,6 +4213,24 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         <div class="notification-config">
           <h3>${isItalian ? '🔔 Configurazione Notifiche' : '🔔 Notification Configuration'}</h3>
           
+          <!-- Re-identification Button -->
+          <div class="reidentify-section">
+            <ha-button 
+              outlined
+              @click=${() => this._reidentifyThresholds()}
+              class="reidentify-btn"
+              ?disabled=${this.isScanning || this.isGeneratingThresholds}
+            >
+              ${isItalian ? '🔄 Ripeti Identificazione Automatica' : '🔄 Retry Automatic Identification'}
+            </ha-button>
+            <p class="reidentify-help">
+              ${isItalian ? 
+                'Ripete l\'analisi AI per identificare nuovamente le soglie di alert per tutte le entità' :
+                'Repeats AI analysis to re-identify alert thresholds for all entities'
+              }
+            </p>
+          </div>
+          
           <div class="config-row">
             <label>
               <input 
@@ -4165,19 +4309,19 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
             
             ${!this.alertStatus.input_text_exists ? html`
               <div class="config-help">
-                <h4>${isItalian ? '📝 Configurazione Automatica' : '📝 Automatic Setup'}</h4>
-                <p>${isItalian ? 'Posso creare automaticamente l\'entità input_text per te!' : 'I can create the input_text entity automatically for you!'}</p>
-                <div class="auto-config-actions">
-                  <ha-button 
-                    raised
-                    @click=${this._createInputTextEntity}
-                    class="create-entity-btn"
-                  >
-                    ${isItalian ? '✨ Crea Entità Automaticamente' : '✨ Create Entity Automatically'}
-                  </ha-button>
-                </div>
-                <details class="manual-config">
-                  <summary>${isItalian ? 'Configurazione manuale (se preferisci)' : 'Manual configuration (if you prefer)'}</summary>
+                <h4>${isItalian ? '📝 Configurazione Manuale Richiesta' : '📝 Manual Configuration Required'}</h4>
+                <p>${isItalian ? 
+                  'Per utilizzare gli alert con Input Text, devi creare manualmente l\'entità:' : 
+                  'To use alerts with Input Text, you need to manually create the entity:'
+                }</p>
+                <div class="manual-config-guide">
+                  <h5>${isItalian ? 'Opzione 1: Helper UI' : 'Option 1: Helper UI'}</h5>
+                  <p>${isItalian ? 
+                    '1. Vai in Impostazioni > Dispositivi e Servizi > Helper\n2. Clicca "Crea Helper"\n3. Seleziona "Testo"\n4. Usa ID: hass_ai_alerts' :
+                    '1. Go to Settings > Devices & Services > Helpers\n2. Click "Create Helper"\n3. Select "Text"\n4. Use ID: hass_ai_alerts'
+                  }</p>
+                  
+                  <h5>${isItalian ? 'Opzione 2: Configuration.yaml' : 'Option 2: Configuration.yaml'}</h5>
                   <p>${isItalian ? 'Aggiungi al tuo configuration.yaml:' : 'Add to your configuration.yaml:'}</p>
                   <pre><code>input_text:
   hass_ai_alerts:
@@ -4186,7 +4330,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     icon: mdi:alert-circle
     initial: "No alerts"</code></pre>
                   <p><em>${isItalian ? 'Poi riavvia Home Assistant' : 'Then restart Home Assistant'}</em></p>
-                </details>
+                </div>
               </div>
             ` : ''}
           ` : ''}

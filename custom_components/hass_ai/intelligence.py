@@ -352,8 +352,10 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                         f"• 💻 CPU/Sistema: LOW=70%, MEDIUM=85%, HIGH=95%\n"
                         f"• ❤️ Battiti cardiaci: LOW=50bpm, MEDIUM=40bpm, HIGH=35bpm (basso) o LOW=100bpm, MEDIUM=120bpm, HIGH=140bpm (alto)\n"
                         f"• 📦 Update: disponibilità aggiornamenti\n\n"
-                        f"⚡ IMPORTANTE: Scegli valori REALISTICI per uso domestico!\n\n"
-                        f"JSON RICHIESTO: {{\"LOW\":{{\"value\":numero,\"condition\":\"< X o > Y\",\"description\":\"problema rilevato\"}},\"MEDIUM\":{{\"value\":numero,\"condition\":\"< X o > Y\",\"description\":\"problema rilevato\"}},\"HIGH\":{{\"value\":numero,\"condition\":\"< X o > Y\",\"description\":\"problema rilevato\"}}}}"
+                        f"🔥 OBBLIGATORIO: TUTTE E 3 LE SOGLIE (LOW, MEDIUM, HIGH)!\n\n"
+                        f"⚡ FORMATO RICHIESTO - COPIA ESATTO:\n"
+                        f"{{\"LOW\":{{\"value\":numero,\"condition\":\"< X\",\"description\":\"problema lieve\"}},\"MEDIUM\":{{\"value\":numero,\"condition\":\"< Y\",\"description\":\"problema medio\"}},\"HIGH\":{{\"value\":numero,\"condition\":\"< Z\",\"description\":\"problema grave\"}}}}\n\n"
+                        f"🚨 NON dimenticare nessuna delle 3 soglie!"
                     )
                 
                 try:
@@ -374,14 +376,25 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                         if json_start >= 0 and json_end > json_start:
                             try:
                                 threshold_data = json.loads(response_text[json_start:json_end])
-                                _LOGGER.info(f"✅ AI generated thresholds for {entity_id}: {threshold_data}")
-                                result.update({
-                                    "entity_type": "ai_generated",
-                                    "thresholds": threshold_data
-                                })
-                                return result
+                                
+                                # Validate that all 3 thresholds are present
+                                required_levels = ['LOW', 'MEDIUM', 'HIGH']
+                                missing_levels = [level for level in required_levels if level not in threshold_data]
+                                
+                                if missing_levels:
+                                    _LOGGER.warning(f"❌ AI response for {entity_id} missing levels: {missing_levels}")
+                                    _LOGGER.warning(f"❌ Partial response: {threshold_data}")
+                                else:
+                                    _LOGGER.info(f"✅ AI generated ALL 3 thresholds for {entity_id}: {threshold_data}")
+                                    result.update({
+                                        "entity_type": "ai_generated",
+                                        "thresholds": threshold_data
+                                    })
+                                    return result
+                                    
                             except json.JSONDecodeError as je:
                                 _LOGGER.warning(f"❌ JSON parse error for {entity_id}: {je}")
+                                _LOGGER.warning(f"❌ Raw response: {response_text[json_start:json_end]}")
                         else:
                             _LOGGER.warning(f"❌ No valid JSON found in AI response for {entity_id}")
                     else:
@@ -1699,3 +1712,41 @@ If no useful correlation: []"""
     except Exception as e:
         _LOGGER.error(f"Error finding correlations for {target_entity.get('entity_id', 'unknown')}: {e}")
         return []
+
+
+async def generate_thresholds_for_entities(hass: HomeAssistant, entities: list, agent, ai_provider: str, api_key: str) -> dict:
+    """Generate AI thresholds for multiple entities."""
+    results = {}
+    
+    if not entities:
+        return results
+        
+    _LOGGER.info(f"Generating thresholds for {len(entities)} entities")
+    
+    for entity_data in entities:
+        entity_id = entity_data.get("entity_id")
+        if not entity_id:
+            continue
+            
+        try:
+            # Get current state
+            state = hass.states.get(entity_id)
+            if not state:
+                _LOGGER.warning(f"Entity {entity_id} not found in state registry")
+                continue
+                
+            # Generate thresholds using existing function
+            threshold_result = await _generate_auto_thresholds(hass, entity_id, state)
+            
+            if threshold_result and threshold_result.get("thresholds"):
+                results[entity_id] = threshold_result["thresholds"]
+                _LOGGER.debug(f"Generated thresholds for {entity_id}: {threshold_result['thresholds']}")
+            else:
+                _LOGGER.debug(f"No thresholds generated for {entity_id}")
+                
+        except Exception as e:
+            _LOGGER.error(f"Error generating thresholds for {entity_id}: {e}")
+            continue
+    
+    _LOGGER.info(f"Successfully generated thresholds for {len(results)} out of {len(entities)} entities")
+    return results
