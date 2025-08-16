@@ -540,7 +540,14 @@ class HassAiPanel extends LitElement {
         // Category filter - if not showing ALL, only show entities that match current category filter
         const matchesCategory = this.categoryFilter === 'ALL' || categories.includes(this.categoryFilter);
         
-        return matchesWeight && matchesCategory;
+        // Filter out entities with invalid/non-evaluable states
+        const state = this.hass.states[entityId];
+        const currentValue = state?.state;
+        const isValidState = currentValue && 
+          !['unknown', 'unavailable', 'none', 'null', ''].includes(currentValue.toLowerCase()) &&
+          currentValue !== 'N/A';
+        
+        return matchesWeight && matchesCategory && isValidState;
       });
     
     if (alertEntities.length > 0) {
@@ -3340,6 +3347,22 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         margin: 8px 0;
       }
       
+      .monitoring-info {
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        padding: 12px;
+        margin: 12px 0;
+      }
+      
+      .info-note {
+        margin: 0;
+        font-size: 13px;
+        color: var(--secondary-text-color);
+        line-height: 1.4;
+        text-align: center;
+      }
+      
       .service-select {
         flex: 1;
         padding: 8px 12px;
@@ -3788,10 +3811,27 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         flex-direction: column;
         gap: 8px;
         background: var(--card-background-color);
-        border: 1px solid var(--divider-color);
-        border-radius: 8px;
-        padding: 12px;
+        border: 3px solid #ff4444;
+        border-radius: 12px;
+        padding: 16px;
         margin: 8px 0;
+        box-shadow: 0 2px 8px rgba(255, 68, 68, 0.15);
+        position: relative;
+      }
+      
+      .weight-filter-container::before {
+        content: "⚠️ IMPORTANTE";
+        position: absolute;
+        top: -12px;
+        left: 16px;
+        background: #ff4444;
+        color: white;
+        padding: 4px 12px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
       }
       
       .weight-filter-label {
@@ -4145,7 +4185,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
   }
 
   _renderAlertConfigPanel(isItalian) {
-    // Get only ALERTS entities that are currently visible in the filter
+    // Get only ALERTS entities that are currently visible in the filter (for UI display)
     const alertEntities = Object.entries(this.entities)
       .filter(([entityId, entity]) => {
         const categories = Array.isArray(entity.category) ? entity.category : [entity.category];
@@ -4158,7 +4198,30 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         // Category filter - if not showing ALL, only show entities that match current category filter
         const matchesCategory = this.categoryFilter === 'ALL' || categories.includes(this.categoryFilter);
         
-        return matchesWeight && matchesCategory;
+        // Filter out entities with invalid/non-evaluable states
+        const state = this.hass.states[entityId];
+        const currentValue = state?.state;
+        const isValidState = currentValue && 
+          !['unknown', 'unavailable', 'none', 'null', ''].includes(currentValue.toLowerCase()) &&
+          currentValue !== 'N/A';
+        
+        return matchesWeight && matchesCategory && isValidState;
+      });
+
+    // Get ALL monitorable ALERTS entities (regardless of UI filters) for accurate monitoring count
+    const allMonitorableAlerts = Object.entries(this.entities)
+      .filter(([entityId, entity]) => {
+        const categories = Array.isArray(entity.category) ? entity.category : [entity.category];
+        if (!categories.includes('ALERTS')) return false;
+        
+        // Only filter by valid states, not by UI weight filter
+        const state = this.hass.states[entityId];
+        const currentValue = state?.state;
+        const isValidState = currentValue && 
+          !['unknown', 'unavailable', 'none', 'null', ''].includes(currentValue.toLowerCase()) &&
+          currentValue !== 'N/A';
+          
+        return isValidState;
       });
 
     const availableServices = this._getAvailableNotificationServices();
@@ -4199,7 +4262,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
             </div>
             <div class="status-item">
               <span class="status-label">${isItalian ? 'Entità monitorate:' : 'Monitored entities:'}</span>
-              <span class="status-value">${this.alertStatus.total_monitored || 0}</span>
+              <span class="status-value">${allMonitorableAlerts.length}</span>
             </div>
             <div class="status-item">
               <span class="status-label">${isItalian ? 'Alert attivi:' : 'Active alerts:'}</span>
@@ -4207,6 +4270,15 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                 ${Object.keys(this.alertStatus.active_alerts || {}).length}
               </span>
             </div>
+          </div>
+          
+          <div class="monitoring-info">
+            <p class="info-note">
+              ${isItalian ? 
+                `📊 Vengono monitorate ${allMonitorableAlerts.length} entità ALERT valide (indipendentemente dal filtro peso). Mostrate nella tabella: ${alertEntities.length}` :
+                `📊 Monitoring ${allMonitorableAlerts.length} valid ALERT entities (regardless of weight filter). Shown in table: ${alertEntities.length}`
+              }
+            </p>
           </div>
         </div>
 
