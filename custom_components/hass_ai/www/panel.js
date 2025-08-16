@@ -1,4 +1,4 @@
-// HASS AI Panel v1.9.37 - Updated 2025-08-16T15:30:00Z - FIXED ENTITY CATEGORIZATION
+// HASS AI Panel v1.9.37.1 - Updated 2025-08-16T16:00:00Z - FIXED MULTI-CATEGORY DISPLAY
 // Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds + Stop Operation
 // Force reload timestamp: 1723572000000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
@@ -204,6 +204,20 @@ class HassAiPanel extends LitElement {
         }
         
         if (Object.keys(this.entities).length > 0) {
+          // Migrate old format categories to new array format
+          Object.keys(this.entities).forEach(entityId => {
+            const entity = this.entities[entityId];
+            if (entity.category && typeof entity.category === 'string') {
+              // Convert single category string to array
+              entity.category = [entity.category];
+              console.log(`🔄 Migrated ${entityId} category to array format`);
+            } else if (!entity.category || !Array.isArray(entity.category)) {
+              // Ensure all entities have array categories
+              entity.category = ['DATA'];
+              console.log(`🔄 Set default category for ${entityId}`);
+            }
+          });
+          
           console.log(`📂 ${isItalian ? 'Caricati' : 'Loaded'} ${Object.keys(this.entities).length} ${isItalian ? 'risultati di analisi AI salvati' : 'saved AI analysis results'}`);
           this.requestUpdate();
         }
@@ -251,8 +265,9 @@ class HassAiPanel extends LitElement {
         entityId.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         (entity.name && entity.name.toLowerCase().includes(this.searchTerm.toLowerCase()));
       
-      // Category filter
-      const matchesCategory = this.categoryFilter === 'ALL' || entity.category === this.categoryFilter;
+      // Category filter - handle both array and string categories
+      const entityCategories = Array.isArray(entity.category) ? entity.category : [entity.category];
+      const matchesCategory = this.categoryFilter === 'ALL' || entityCategories.includes(this.categoryFilter);
       
       return matchesWeight && matchesSearch && matchesCategory;
     }).map(([entityId, entity]) => entity); // Return just the entity objects, not tuples
@@ -982,8 +997,61 @@ class HassAiPanel extends LitElement {
       weight_legend: "(0=Ignore, 5=Critical)"
     };
 
-    // Function to get category info with localization
+    // Function to get category info with localization - supports multiple categories
     const getCategoryInfo = (category) => {
+      // Handle multiple categories
+      if (Array.isArray(category)) {
+        if (category.length === 0) {
+          return { 
+            icon: 'mdi:help-circle', 
+            color: '#9E9E9E', 
+            label: isItalian ? 'Sconosciuto' : 'Unknown' 
+          };
+        }
+        
+        // For multiple categories, show them as combined label
+        const categoryLabels = category.map(cat => {
+          switch (cat) {
+            case 'DATA': return isItalian ? 'Dati' : 'Data';
+            case 'CONTROL': return isItalian ? 'Controllo' : 'Control';
+            case 'ALERTS': return isItalian ? 'Allerte' : 'Alerts';
+            case 'SERVICE': return isItalian ? 'Servizio' : 'Service';
+            default: return cat;
+          }
+        });
+        
+        // Use icon of first category, combine labels
+        const firstCategory = category[0];
+        let icon = 'mdi:help-circle';
+        let color = '#9E9E9E';
+        
+        switch (firstCategory) {
+          case 'DATA':
+            icon = 'mdi:chart-line';
+            color = '#2196F3';
+            break;
+          case 'CONTROL':
+            icon = 'mdi:tune';
+            color = '#4CAF50';
+            break;
+          case 'ALERTS':
+            icon = 'mdi:alert-circle';
+            color = '#FF9800';
+            break;
+          case 'SERVICE':
+            icon = 'mdi:cog';
+            color = '#9C27B0';
+            break;
+        }
+        
+        return {
+          icon: icon,
+          color: color,
+          label: categoryLabels.join(' + ')
+        };
+      }
+      
+      // Handle single category (legacy support)
       switch (category) {
         case 'DATA':
           return { 
@@ -1002,6 +1070,12 @@ class HassAiPanel extends LitElement {
             icon: 'mdi:alert-circle', 
             color: '#FF9800', 
             label: isItalian ? 'Allerte' : 'Alerts' 
+          };
+        case 'SERVICE':
+          return { 
+            icon: 'mdi:cog', 
+            color: '#9C27B0', 
+            label: isItalian ? 'Servizio' : 'Service' 
           };
         default:
           return { 
@@ -1188,6 +1262,7 @@ class HassAiPanel extends LitElement {
                   <option value="DATA">${isItalian ? 'Dati' : 'Data'}</option>
                   <option value="CONTROL">${isItalian ? 'Controllo' : 'Control'}</option>
                   <option value="ALERTS">${isItalian ? 'Allerte' : 'Alerts'}</option>
+                  <option value="SERVICE">${isItalian ? 'Servizio' : 'Service'}</option>
                   <option value="ENHANCED">${isItalian ? 'Miglioramenti' : 'Enhanced'}</option>
                 </select>
               </div>
@@ -1309,7 +1384,7 @@ class HassAiPanel extends LitElement {
                                   </span>
                                 </div>
                                 
-                                ${entity.category === 'ALERTS' ? html`
+                                ${(Array.isArray(entity.category) ? entity.category.includes('ALERTS') : entity.category === 'ALERTS') ? html`
                                   <div class="alert-threshold-section">
                                     <strong>${isItalian ? '🚨 Soglia Allerta:' : '🚨 Alert Threshold:'}</strong>
                                     <div class="alert-threshold-controls">

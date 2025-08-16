@@ -25,7 +25,7 @@ CORRELATIONS_KEY = f"{DOMAIN}_correlations"
 PANEL_URL_PATH = "hass-ai-panel"
 
 # Cache busting timestamp
-CACHE_BUSTER = int(time.time())  # v1.9.1 - Fresh timestamp
+CACHE_BUSTER = int(time.time())  # v1.9.37.1 - Multi-category frontend support
 
 # Global operation tracking
 _active_operations = {}  # Dict to track active operations by hass instance ID
@@ -325,7 +325,7 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         
         # Get importance for all entities in batches
         importance_results = await get_entities_importance_batched(
-            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"], conversation_agent, language, analysis_type, is_cancelled
+            hass, filtered_states, 3, ai_provider, api_key, connection, msg["id"], conversation_agent, language, analysis_type, is_cancelled
         )
 
         # Send each result as it's processed
