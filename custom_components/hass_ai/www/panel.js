@@ -191,34 +191,61 @@ class HassAiPanel extends LitElement {
     // First check if entity is in alertStatus.active_alerts with thresholds
     const alertStatus = this.alertStatus.active_alerts?.[entityId];
     if (alertStatus?.thresholds?.[level] !== undefined) {
-      return alertStatus.thresholds[level];
+      return this._formatThresholdValue(alertStatus.thresholds[level]);
     }
     
     // Check entities data for manual thresholds (highest priority after active alerts)
     const entity = this.entities[entityId];
     if (entity?.thresholds?.[level] !== undefined) {
-      return entity.thresholds[level];
+      return this._formatThresholdValue(entity.thresholds[level]);
     }
     
-    // Check auto_thresholds (AI generated during scan)
+    // Check auto_thresholds (AI generated during scan) - NEW FORMAT
+    if (entity?.alert_thresholds) {
+      const levelMap = { 'WARNING': 'LOW', 'ALERT': 'MEDIUM', 'CRITICAL': 'HIGH' };
+      const autoLevel = levelMap[level];
+      const threshold = entity.alert_thresholds[autoLevel];
+      if (threshold) {
+        return this._formatThresholdValue(threshold);
+      }
+    }
+    
+    // Check auto_thresholds (AI generated during scan) - OLD FORMAT
     if (entity?.auto_thresholds?.thresholds) {
       const levelMap = { 'WARNING': 'LOW', 'ALERT': 'MEDIUM', 'CRITICAL': 'HIGH' };
       const autoLevel = levelMap[level];
       if (entity.auto_thresholds.thresholds[autoLevel]) {
         const threshold = entity.auto_thresholds.thresholds[autoLevel];
-        return threshold.condition || threshold.value;
+        return this._formatThresholdValue(threshold);
       }
     }
     
     return null; // Will show "Set" or "Imposta" in UI for manual setting
   }
 
-  async _handleThresholdClick(entityId, level) {
-    // Only allow manual threshold setting if no auto threshold exists
-    if (this._getEntityThreshold(entityId, level)) {
-      return; // Already has a threshold, don't allow editing
+  _formatThresholdValue(threshold) {
+    if (!threshold) return null;
+    
+    // Handle new format: {value: number, operator: "<", description: "..."}
+    if (typeof threshold === 'object' && threshold.value !== undefined && threshold.operator) {
+      return `${threshold.operator} ${threshold.value}`;
     }
+    
+    // Handle old format: {value: number, condition: "< 50", description: "..."}
+    if (typeof threshold === 'object' && threshold.condition) {
+      return threshold.condition;
+    }
+    
+    // Handle old format: {value: number}
+    if (typeof threshold === 'object' && threshold.value !== undefined) {
+      return threshold.value.toString();
+    }
+    
+    // Handle simple string/number
+    return threshold.toString();
+  }
 
+  async _handleThresholdClick(entityId, level) {
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     const entity = this.entities[entityId];
     const state = this.hass.states[entityId];
@@ -236,10 +263,14 @@ class HassAiPanel extends LitElement {
     const unit = state.attributes.unit_of_measurement || '';
     const domain = state.domain;
     const deviceClass = state.attributes.device_class || '';
+    
+    // Get current threshold value for editing
+    const currentThreshold = this._getEntityThreshold(entityId, level);
 
     // Create threshold input dialog
     const thresholdValue = await this._showThresholdInputDialog(entityId, level, {
       currentValue,
+      currentThreshold,
       unit,
       domain,
       deviceClass,
@@ -252,7 +283,7 @@ class HassAiPanel extends LitElement {
   }
 
   async _showThresholdInputDialog(entityId, level, entityInfo) {
-    const { currentValue, unit, domain, deviceClass, isItalian } = entityInfo;
+    const { currentValue, currentThreshold, unit, domain, deviceClass, isItalian } = entityInfo;
     
     return new Promise((resolve) => {
       // Create dialog content
@@ -264,25 +295,73 @@ class HassAiPanel extends LitElement {
 
       const examples = this._getThresholdExamples(domain, deviceClass, unit, isItalian);
       
+      // Extract current threshold value if exists
+      let currentOperator = '<';
+      let currentValue = '';
+      let currentDescription = '';
+      
+      if (currentThreshold) {
+        // Parse current threshold to show in inputs
+        if (typeof currentThreshold === 'object') {
+          if (currentThreshold.operator && currentThreshold.value !== undefined) {
+            // New format: {operator: "<", value: 50, description: "..."}
+            currentOperator = currentThreshold.operator;
+            currentValue = currentThreshold.value.toString();
+            currentDescription = currentThreshold.description || '';
+          } else if (currentThreshold.condition) {
+            // Old format: {condition: "< 50", description: "..."}  
+            const match = currentThreshold.condition.match(/([<>=!]+)\s*(\d+)/);
+            if (match) {
+              currentOperator = match[1];
+              currentValue = match[2];
+            }
+            currentDescription = currentThreshold.description || '';
+          }
+        } else if (typeof currentThreshold === 'string') {
+          // Parse string like "< 50"
+          const match = currentThreshold.match(/([<>=!]+)\s*(\d+)/);
+          if (match) {
+            currentOperator = match[1];
+            currentValue = match[2];
+          }
+        }
+      }
+      
       const dialogContent = document.createElement('div');
       dialogContent.innerHTML = `
         <div style="padding: 20px;">
           <h3>${isItalian ? 'Imposta Soglia' : 'Set Threshold'} ${levelNames[level]}</h3>
           <p><strong>${isItalian ? 'Entità' : 'Entity'}:</strong> ${entityId}</p>
           <p><strong>${isItalian ? 'Valore attuale' : 'Current value'}:</strong> ${currentValue} ${unit}</p>
+          ${currentThreshold ? `<p><strong>${isItalian ? 'Soglia attuale' : 'Current threshold'}:</strong> ${currentOperator} ${currentValue}</p>` : ''}
           
           ${examples ? `<div style="background: #f5f5f5; padding: 10px; border-radius: 8px; margin: 10px 0;">
             <strong>${isItalian ? 'Esempi suggeriti' : 'Suggested examples'}:</strong><br>
             ${examples}
           </div>` : ''}
           
-          <div style="margin: 15px 0;">
-            <label style="display: block; margin-bottom: 5px;">
-              <strong>${isItalian ? 'Condizione di allerta' : 'Alert condition'}:</strong>
-            </label>
-            <input type="text" id="threshold-input" 
-                   placeholder="${isItalian ? 'es: < 20, > 80, == offline' : 'e.g: < 20, > 80, == offline'}"
-                   style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+          <div style="margin: 15px 0; display: flex; gap: 10px; align-items: end;">
+            <div style="flex: 0 0 80px;">
+              <label style="display: block; margin-bottom: 5px;">
+                <strong>${isItalian ? 'Operatore' : 'Operator'}:</strong>
+              </label>
+              <select id="operator-select" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                <option value="<" ${currentOperator === '<' ? 'selected' : ''}>&lt; ${isItalian ? 'minore di' : 'less than'}</option>
+                <option value=">" ${currentOperator === '>' ? 'selected' : ''}>&gt; ${isItalian ? 'maggiore di' : 'greater than'}</option>
+                <option value="==" ${currentOperator === '==' ? 'selected' : ''}>=== ${isItalian ? 'uguale a' : 'equal to'}</option>
+                <option value="!=" ${currentOperator === '!=' ? 'selected' : ''}>!= ${isItalian ? 'diverso da' : 'not equal to'}</option>
+              </select>
+            </div>
+            <div style="flex: 1;">
+              <label style="display: block; margin-bottom: 5px;">
+                <strong>${isItalian ? 'Valore soglia' : 'Threshold value'}:</strong>
+              </label>
+              <input type="text" id="threshold-input" 
+                     value="${currentValue}"
+                     placeholder="${isItalian ? 'es: 20, 80, offline' : 'e.g: 20, 80, offline'}"
+                     style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            </div>
+          </div>
           </div>
           
           <div style="margin: 15px 0;">
@@ -290,6 +369,7 @@ class HassAiPanel extends LitElement {
               <strong>${isItalian ? 'Descrizione problema' : 'Problem description'}:</strong>
             </label>
             <input type="text" id="description-input" 
+                   value="${currentDescription}"
                    placeholder="${isItalian ? 'es: Batteria scarica, Temperatura alta' : 'e.g: Battery low, Temperature high'}"
                    style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
           </div>
@@ -324,6 +404,7 @@ class HassAiPanel extends LitElement {
       document.body.appendChild(dialog);
 
       // Add event listeners
+      const operatorSelect = dialogContent.querySelector('#operator-select');
       const thresholdInput = dialogContent.querySelector('#threshold-input');
       const descriptionInput = dialogContent.querySelector('#description-input');
       const cancelBtn = dialogContent.querySelector('#cancel-btn');
@@ -335,17 +416,28 @@ class HassAiPanel extends LitElement {
       };
 
       saveBtn.onclick = () => {
-        const condition = thresholdInput.value.trim();
+        const operator = operatorSelect.value;
+        const value = thresholdInput.value.trim();
         const description = descriptionInput.value.trim();
         
-        if (!condition) {
-          alert(isItalian ? 'Inserisci una condizione di allerta' : 'Please enter an alert condition');
+        if (!value) {
+          alert(isItalian ? 'Inserisci un valore per la soglia' : 'Please enter a threshold value');
           return;
+        }
+
+        // Try to parse as number for numeric operators
+        let finalValue = value;
+        if (['<', '>', '<=', '>='].includes(operator)) {
+          const numValue = parseFloat(value);
+          if (!isNaN(numValue)) {
+            finalValue = numValue;
+          }
         }
 
         document.body.removeChild(dialog);
         resolve({
-          condition: condition,
+          operator: operator,
+          value: finalValue,
           description: description || `${levelNames[level]} threshold for ${entityId}`
         });
       };
@@ -433,6 +525,19 @@ class HassAiPanel extends LitElement {
     try {
       const response = await this.hass.callWS({ type: "hass_ai/get_alert_status" });
       this.alertStatus = response;
+      
+      // Auto-configure fixed entity if not set
+      if (this.alertStatus.use_input_text && 
+          (!this.alertStatus.input_text_entity || this.alertStatus.input_text_entity !== 'input_text.hass_ai_alerts')) {
+        console.log('Auto-configuring fixed input_text entity');
+        await this._configureAlertService({
+          input_text_entity: 'input_text.hass_ai_alerts'
+        });
+        // Reload status to get updated values
+        const updatedResponse = await this.hass.callWS({ type: "hass_ai/get_alert_status" });
+        this.alertStatus = updatedResponse;
+      }
+      
       this.requestUpdate();
     } catch (error) {
       console.error('Failed to load alert status:', error);
@@ -754,22 +859,12 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     }
   }
 
-  async _updateInputTextEntity(entityId) {
-    await this._configureAlertService({
-      input_text_entity: entityId
-    });
-    
-    // Reload status to check if entity exists
-    await this._loadAlertStatus();
-  }
-
   async _clearInputTextValue() {
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
-    if (!this.alertStatus.input_text_entity) return;
     
     try {
       await this.hass.callService('input_text', 'set_value', {
-        entity_id: this.alertStatus.input_text_entity,
+        entity_id: 'input_text.hass_ai_alerts',
         value: isItalian ? 'Nessun alert attivo' : 'No active alerts'
       });
       
@@ -1972,11 +2067,6 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                     <th>${t.ai_weight}</th>
                     <th>${t.reason}</th>
                     <th>${t.your_weight} <span class="legend">${t.weight_legend}</span></th>
-                    ${this.categoryFilter === 'ALERTS' ? html`
-                      <th class="alert-threshold-header">⚠️ WARNING</th>
-                      <th class="alert-threshold-header">🚨 ALERT</th>
-                      <th class="alert-threshold-header">🔥 CRITICAL</th>
-                    ` : ''}
                   </tr>
                 </thead>
                 <tbody>
@@ -2147,17 +2237,17 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                         
                         ${(Array.isArray(entity.category) ? entity.category.includes('ALERTS') : entity.category === 'ALERTS') ? html`
                           <div class="alert-thresholds-mini">
-                            <div class="threshold-mini warning ${!this._getEntityThreshold(entity.entity_id, 'WARNING') ? 'clickable' : ''}" 
+                            <div class="threshold-mini warning clickable" 
                                  @click=${() => this._handleThresholdClick(entity.entity_id, 'WARNING')}>
                               <span class="level-icon">⚠️</span>
                               <span class="threshold-value">${this._getEntityThreshold(entity.entity_id, 'WARNING') || 'Set'}</span>
                             </div>
-                            <div class="threshold-mini alert ${!this._getEntityThreshold(entity.entity_id, 'ALERT') ? 'clickable' : ''}"
+                            <div class="threshold-mini alert clickable"
                                  @click=${() => this._handleThresholdClick(entity.entity_id, 'ALERT')}>
                               <span class="level-icon">🚨</span>
                               <span class="threshold-value">${this._getEntityThreshold(entity.entity_id, 'ALERT') || 'Set'}</span>
                             </div>
-                            <div class="threshold-mini critical ${!this._getEntityThreshold(entity.entity_id, 'CRITICAL') ? 'clickable' : ''}"
+                            <div class="threshold-mini critical clickable"
                                  @click=${() => this._handleThresholdClick(entity.entity_id, 'CRITICAL')}>
                               <span class="level-icon">🔥</span>
                               <span class="threshold-value">${this._getEntityThreshold(entity.entity_id, 'CRITICAL') || 'Set'}</span>
@@ -2165,30 +2255,6 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                           </div>
                         ` : ''}
                       </td>
-                      ${this.categoryFilter === 'ALERTS' && (Array.isArray(entity.category) ? entity.category.includes('ALERTS') : entity.category === 'ALERTS') ? html`
-                        <td class="alert-threshold-cell warning ${!this._getEntityThreshold(entity.entity_id, 'WARNING') ? 'clickable' : ''}"
-                            @click=${() => this._handleThresholdClick(entity.entity_id, 'WARNING')}>
-                          <span class="threshold-value">
-                            ${this._getEntityThreshold(entity.entity_id, 'WARNING') || 'Imposta'}
-                          </span>
-                        </td>
-                        <td class="alert-threshold-cell alert ${!this._getEntityThreshold(entity.entity_id, 'ALERT') ? 'clickable' : ''}"
-                            @click=${() => this._handleThresholdClick(entity.entity_id, 'ALERT')}>
-                          <span class="threshold-value">
-                            ${this._getEntityThreshold(entity.entity_id, 'ALERT') || 'Imposta'}
-                          </span>
-                        </td>
-                        <td class="alert-threshold-cell critical ${!this._getEntityThreshold(entity.entity_id, 'CRITICAL') ? 'clickable' : ''}"
-                            @click=${() => this._handleThresholdClick(entity.entity_id, 'CRITICAL')}>
-                          <span class="threshold-value">
-                            ${this._getEntityThreshold(entity.entity_id, 'CRITICAL') || 'Imposta'}
-                          </span>
-                        </td>
-                      ` : this.categoryFilter === 'ALERTS' ? html`
-                        <td class="alert-threshold-cell disabled" colspan="3">
-                          <span class="threshold-na">${isItalian ? 'Non applicabile' : 'Not applicable'}</span>
-                        </td>
-                      ` : ''}
                     </tr>
                     `;
                   })}
@@ -3363,6 +3429,22 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         text-align: center;
       }
       
+      .fixed-entity-display {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      .fixed-entity-display code {
+        background: var(--secondary-background-color);
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        color: var(--primary-color);
+        border: 1px solid var(--divider-color);
+      }
+      
       .service-select {
         flex: 1;
         padding: 8px 12px;
@@ -4346,27 +4428,23 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
           
           ${this.alertStatus.use_input_text ? html`
             <div class="config-row">
-              <label>${isItalian ? 'Entity ID:' : 'Entity ID:'}</label>
-              <input 
-                type="text" 
-                .value=${this.alertStatus.input_text_entity}
-                @change=${(e) => this._updateInputTextEntity(e.target.value)}
-                placeholder="input_text.hass_ai_alerts"
-                class="entity-input"
-              />
-              <div class="entity-status">
-                ${this.alertStatus.input_text_exists ? 
-                  html`<span class="status-ok">✅ ${isItalian ? 'Esiste' : 'Exists'}</span>` :
-                  html`<span class="status-error">❌ ${isItalian ? 'Non trovato' : 'Not found'}</span>`
-                }
+              <label>${isItalian ? 'Entità Fissa:' : 'Fixed Entity:'}</label>
+              <div class="fixed-entity-display">
+                <code>input_text.hass_ai_alerts</code>
+                <div class="entity-status">
+                  ${this.alertStatus.input_text_exists ? 
+                    html`<span class="status-ok">✅ ${isItalian ? 'Esiste' : 'Exists'}</span>` :
+                    html`<span class="status-error">❌ ${isItalian ? 'Non trovato' : 'Not found'}</span>`
+                  }
+                </div>
               </div>
             </div>
             
-            ${this.alertStatus.input_text_exists && this.alertStatus.input_text_entity ? html`
+            ${this.alertStatus.input_text_exists ? html`
               <div class="config-row">
                 <label>${isItalian ? 'Valore Attuale:' : 'Current Value:'}</label>
                 <div class="current-value">
-                  ${this.hass.states[this.alertStatus.input_text_entity]?.state || isItalian ? 'Non disponibile' : 'Not available'}
+                  ${this.hass.states['input_text.hass_ai_alerts']?.state || (isItalian ? 'Non disponibile' : 'Not available')}
                 </div>
               </div>
               <div class="config-row">
@@ -4383,8 +4461,8 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
               <div class="config-help">
                 <h4>${isItalian ? '📝 Configurazione Manuale Richiesta' : '📝 Manual Configuration Required'}</h4>
                 <p>${isItalian ? 
-                  'Per utilizzare gli alert con Input Text, devi creare manualmente l\'entità:' : 
-                  'To use alerts with Input Text, you need to manually create the entity:'
+                  'HASS AI utilizza sempre l\'entità fissa input_text.hass_ai_alerts. Devi crearla manualmente:' : 
+                  'HASS AI always uses the fixed entity input_text.hass_ai_alerts. You need to create it manually:'
                 }</p>
                 <div class="manual-config-guide">
                   <h5>${isItalian ? 'Opzione 1: Helper UI' : 'Option 1: Helper UI'}</h5>
