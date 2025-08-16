@@ -1120,13 +1120,24 @@ async def _process_single_batch(
                             "batch_number": batch_num,
                         }
                         
-                        # Generate auto-thresholds for entities with ALERTS category
-                        if 'ALERTS' in category or 'battery' in item["entity_id"].lower():
-                            state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
-                            if state and hass:
+                        # Generate auto-thresholds for relevant entities (more inclusive approach)
+                        state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
+                        if state and hass:
+                            # Check if entity warrants automatic threshold generation
+                            should_generate_thresholds = (
+                                'ALERTS' in category or  # Entities categorized as ALERTS
+                                'battery' in item["entity_id"].lower() or  # Battery entities
+                                state.domain in ['binary_sensor', 'update'] or  # Binary sensors and update entities
+                                (state.domain == 'sensor' and state.attributes.get('device_class') in ['battery', 'temperature', 'humidity', 'signal_strength']) or  # Specific sensor types
+                                any(keyword in item["entity_id"].lower() for keyword in ['temperature', 'humidity', 'cpu', 'memory', 'disk', 'heart_rate', 'signal'])  # Keyword matching
+                            )
+                            
+                            if should_generate_thresholds:
                                 auto_thresholds = await _generate_auto_thresholds(hass, item["entity_id"], state)
                                 if auto_thresholds.get("thresholds"):
                                     result["auto_thresholds"] = auto_thresholds
+                                    _LOGGER.debug(f"Generated auto-thresholds for {item['entity_id']}: {auto_thresholds['entity_type']}")
+                        
                         
                         all_results.append(result)
                         

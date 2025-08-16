@@ -81,6 +81,7 @@ class HassAiPanel extends LitElement {
     this._loadAiResults();
     this._loadCorrelations();
     this._loadAlertThresholds();
+    this._loadEntityThresholds();
     this._loadAlertStatus();
   }
 
@@ -126,6 +127,37 @@ class HassAiPanel extends LitElement {
     }
   }
 
+  async _loadEntityThresholds() {
+    try {
+      // Load saved entity thresholds and merge them into entities data
+      const response = await this.hass.callWS({ type: "hass_ai/load_entity_thresholds" });
+      const entityThresholds = response.thresholds || {};
+      
+      // Merge manual thresholds into entities data
+      Object.keys(entityThresholds).forEach(entityId => {
+        if (!this.entities[entityId]) {
+          this.entities[entityId] = {};
+        }
+        if (!this.entities[entityId].thresholds) {
+          this.entities[entityId].thresholds = {};
+        }
+        
+        // Merge manual thresholds
+        Object.keys(entityThresholds[entityId]).forEach(level => {
+          const thresholdData = entityThresholds[entityId][level];
+          if (thresholdData.manual) {
+            this.entities[entityId].thresholds[level] = thresholdData.condition;
+          }
+        });
+      });
+      
+      console.log(`Loaded ${Object.keys(entityThresholds).length} manual entity thresholds`);
+      this.requestUpdate();
+    } catch (error) {
+      console.error('Failed to load entity thresholds:', error);
+    }
+  }
+
   async _saveAlertThreshold(entityId, threshold) {
     try {
       await this.hass.callWS({ 
@@ -162,22 +194,239 @@ class HassAiPanel extends LitElement {
       return alertStatus.thresholds[level];
     }
     
-    // Check entities data for thresholds
+    // Check entities data for manual thresholds (highest priority after active alerts)
     const entity = this.entities[entityId];
     if (entity?.thresholds?.[level] !== undefined) {
       return entity.thresholds[level];
     }
     
-    // Check auto_thresholds
+    // Check auto_thresholds (AI generated during scan)
     if (entity?.auto_thresholds?.thresholds) {
       const levelMap = { 'WARNING': 'LOW', 'ALERT': 'MEDIUM', 'CRITICAL': 'HIGH' };
       const autoLevel = levelMap[level];
       if (entity.auto_thresholds.thresholds[autoLevel]) {
-        return entity.auto_thresholds.thresholds[autoLevel].condition;
+        const threshold = entity.auto_thresholds.thresholds[autoLevel];
+        return threshold.condition || threshold.value;
       }
     }
     
-    return null; // Will show "Auto" in UI
+    return null; // Will show "Set" or "Imposta" in UI for manual setting
+  }
+
+  async _handleThresholdClick(entityId, level) {
+    // Only allow manual threshold setting if no auto threshold exists
+    if (this._getEntityThreshold(entityId, level)) {
+      return; // Already has a threshold, don't allow editing
+    }
+
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    const entity = this.entities[entityId];
+    const state = this.hass.states[entityId];
+    
+    if (!entity || !state) {
+      this._showSimpleNotification(
+        isItalian ? '❌ Entità non trovata' : '❌ Entity not found',
+        'error'
+      );
+      return;
+    }
+
+    // Get entity information for better threshold suggestions
+    const currentValue = state.state;
+    const unit = state.attributes.unit_of_measurement || '';
+    const domain = state.domain;
+    const deviceClass = state.attributes.device_class || '';
+
+    // Create threshold input dialog
+    const thresholdValue = await this._showThresholdInputDialog(entityId, level, {
+      currentValue,
+      unit,
+      domain,
+      deviceClass,
+      isItalian
+    });
+
+    if (thresholdValue !== null) {
+      await this._saveManualThreshold(entityId, level, thresholdValue);
+    }
+  }
+
+  async _showThresholdInputDialog(entityId, level, entityInfo) {
+    const { currentValue, unit, domain, deviceClass, isItalian } = entityInfo;
+    
+    return new Promise((resolve) => {
+      // Create dialog content
+      const levelNames = {
+        'WARNING': isItalian ? 'Avviso' : 'Warning',
+        'ALERT': isItalian ? 'Allerta' : 'Alert', 
+        'CRITICAL': isItalian ? 'Critico' : 'Critical'
+      };
+
+      const examples = this._getThresholdExamples(domain, deviceClass, unit, isItalian);
+      
+      const dialogContent = document.createElement('div');
+      dialogContent.innerHTML = `
+        <div style="padding: 20px;">
+          <h3>${isItalian ? 'Imposta Soglia' : 'Set Threshold'} ${levelNames[level]}</h3>
+          <p><strong>${isItalian ? 'Entità' : 'Entity'}:</strong> ${entityId}</p>
+          <p><strong>${isItalian ? 'Valore attuale' : 'Current value'}:</strong> ${currentValue} ${unit}</p>
+          
+          ${examples ? `<div style="background: #f5f5f5; padding: 10px; border-radius: 8px; margin: 10px 0;">
+            <strong>${isItalian ? 'Esempi suggeriti' : 'Suggested examples'}:</strong><br>
+            ${examples}
+          </div>` : ''}
+          
+          <div style="margin: 15px 0;">
+            <label style="display: block; margin-bottom: 5px;">
+              <strong>${isItalian ? 'Condizione di allerta' : 'Alert condition'}:</strong>
+            </label>
+            <input type="text" id="threshold-input" 
+                   placeholder="${isItalian ? 'es: < 20, > 80, == offline' : 'e.g: < 20, > 80, == offline'}"
+                   style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+          </div>
+          
+          <div style="margin: 15px 0;">
+            <label style="display: block; margin-bottom: 5px;">
+              <strong>${isItalian ? 'Descrizione problema' : 'Problem description'}:</strong>
+            </label>
+            <input type="text" id="description-input" 
+                   placeholder="${isItalian ? 'es: Batteria scarica, Temperatura alta' : 'e.g: Battery low, Temperature high'}"
+                   style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+          </div>
+          
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button id="cancel-btn" style="padding: 8px 16px; background: #ccc; border: none; border-radius: 4px; cursor: pointer;">
+              ${isItalian ? 'Annulla' : 'Cancel'}
+            </button>
+            <button id="save-btn" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              ${isItalian ? 'Salva' : 'Save'}
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Create and show dialog
+      const dialog = document.createElement('div');
+      dialog.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+        background: rgba(0,0,0,0.5); z-index: 10000; display: flex; 
+        align-items: center; justify-content: center;
+      `;
+      
+      const dialogBox = document.createElement('div');
+      dialogBox.style.cssText = `
+        background: white; border-radius: 8px; max-width: 500px; 
+        width: 90%; max-height: 90vh; overflow-y: auto;
+      `;
+      
+      dialogBox.appendChild(dialogContent);
+      dialog.appendChild(dialogBox);
+      document.body.appendChild(dialog);
+
+      // Add event listeners
+      const thresholdInput = dialogContent.querySelector('#threshold-input');
+      const descriptionInput = dialogContent.querySelector('#description-input');
+      const cancelBtn = dialogContent.querySelector('#cancel-btn');
+      const saveBtn = dialogContent.querySelector('#save-btn');
+
+      cancelBtn.onclick = () => {
+        document.body.removeChild(dialog);
+        resolve(null);
+      };
+
+      saveBtn.onclick = () => {
+        const condition = thresholdInput.value.trim();
+        const description = descriptionInput.value.trim();
+        
+        if (!condition) {
+          alert(isItalian ? 'Inserisci una condizione di allerta' : 'Please enter an alert condition');
+          return;
+        }
+
+        document.body.removeChild(dialog);
+        resolve({
+          condition: condition,
+          description: description || `${levelNames[level]} threshold for ${entityId}`
+        });
+      };
+
+      // Focus on first input
+      thresholdInput.focus();
+    });
+  }
+
+  _getThresholdExamples(domain, deviceClass, unit, isItalian) {
+    const examples = {
+      'sensor': {
+        'battery': isItalian ? 
+          '< 30 (batteria bassa), < 20 (batteria molto bassa), < 10 (batteria critica)' :
+          '< 30 (battery low), < 20 (battery very low), < 10 (battery critical)',
+        'temperature': isItalian ?
+          '< 15 (troppo freddo), > 28 (troppo caldo), > 35 (molto caldo)' :
+          '< 15 (too cold), > 28 (too hot), > 35 (very hot)',
+        'humidity': isItalian ?
+          '< 30 (troppo secco), > 70 (troppo umido), > 85 (molto umido)' :
+          '< 30 (too dry), > 70 (too humid), > 85 (very humid)'
+      },
+      'binary_sensor': {
+        'default': isItalian ?
+          '== on (attivato), == off (spento)' :
+          '== on (activated), == off (turned off)'
+      }
+    };
+
+    if (domain === 'sensor' && deviceClass) {
+      return examples.sensor[deviceClass];
+    } else if (domain === 'binary_sensor') {
+      return examples.binary_sensor.default;
+    } else if (unit === '%') {
+      return isItalian ? 
+        '< 20 (basso), > 80 (alto), > 95 (critico)' :
+        '< 20 (low), > 80 (high), > 95 (critical)';
+    }
+    
+    return null;
+  }
+
+  async _saveManualThreshold(entityId, level, thresholdData) {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    try {
+      // Initialize entity thresholds if not exist
+      if (!this.entities[entityId]) {
+        this.entities[entityId] = {};
+      }
+      if (!this.entities[entityId].thresholds) {
+        this.entities[entityId].thresholds = {};
+      }
+
+      // Save threshold data
+      this.entities[entityId].thresholds[level] = thresholdData.condition;
+      
+      // Save to backend
+      await this.hass.callWS({
+        type: "hass_ai/save_entity_threshold",
+        entity_id: entityId,
+        level: level,
+        condition: thresholdData.condition,
+        description: thresholdData.description
+      });
+
+      this._showSimpleNotification(
+        isItalian ? `✅ Soglia ${level} salvata per ${entityId}` : `✅ ${level} threshold saved for ${entityId}`,
+        'success'
+      );
+
+      // Update UI
+      this.requestUpdate();
+      
+    } catch (error) {
+      console.error('Error saving manual threshold:', error);
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore nel salvare la soglia' : '❌ Error saving threshold',
+        'error'
+      );
+    }
   }
 
   async _loadAlertStatus() {
@@ -293,9 +542,9 @@ class HassAiPanel extends LitElement {
       const unit = state?.attributes?.unit_of_measurement || '';
       
       if (isItalian) {
-        return `🚨 Ehi, c'è qualcosa che non va! Ho controllato ${friendlyName} e il valore attuale è ${currentValue}${unit}. 
+        return `🚨 Ehi, c'e' qualcosa che non va! Ho controllato ${friendlyName} e il valore attuale e' ${currentValue}${unit}. 
         
-Potrebbe essere il momento di dare un'occhiata... Non è urgentissimo, ma meglio non aspettare troppo! 😊
+Potrebbe essere il momento di dare un'occhiata... Non e' urgentissimo, ma meglio non aspettare troppo! 😊
 
 Comunque tranquillo, ti tengo d'occhio tutto io! 👀`;
       } else {
@@ -375,6 +624,42 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       console.error(isItalian ? 'Errore nel toggle monitoraggio:' : 'Error toggling monitoring:', error);
       this._showSimpleNotification(
         isItalian ? '❌ Errore nel cambiare stato monitoraggio' : '❌ Error changing monitoring status', 
+        'error'
+      );
+    }
+  }
+
+  async _enableMonitoring() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    try {
+      await this._configureAlertService({ monitoring_enabled: true });
+      this._showSimpleNotification(
+        isItalian ? '🔔 Monitoraggio alert attivato' : '🔔 Alert monitoring enabled', 
+        'success'
+      );
+      await this._loadAlertStatus();
+    } catch (error) {
+      console.error('Error enabling monitoring:', error);
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore nell\'attivazione monitoraggio' : '❌ Error enabling monitoring', 
+        'error'
+      );
+    }
+  }
+
+  async _disableMonitoring() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    try {
+      await this._configureAlertService({ monitoring_enabled: false });
+      this._showSimpleNotification(
+        isItalian ? '🔔 Monitoraggio alert disattivato' : '🔔 Alert monitoring disabled', 
+        'success'
+      );
+      await this._loadAlertStatus();
+    } catch (error) {
+      console.error('Error disabling monitoring:', error);
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore nella disattivazione monitoraggio' : '❌ Error disabling monitoring', 
         'error'
       );
     }
@@ -1585,7 +1870,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                   class="reset-button compact"
                   ?disabled=${this.loading}
                 >
-                  🗑️
+                  ${isItalian ? 'Cancella Tutto' : 'Clear All'}
                 </mwc-button>
               ` : ''}
             </div>
@@ -1788,21 +2073,44 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                             <ha-list-item value="${i}">${i}</ha-list-item>
                           `)}
                         </ha-select>
+                        
+                        ${(Array.isArray(entity.category) ? entity.category.includes('ALERTS') : entity.category === 'ALERTS') ? html`
+                          <div class="alert-thresholds-mini">
+                            <div class="threshold-mini warning ${!this._getEntityThreshold(entity.entity_id, 'WARNING') ? 'clickable' : ''}" 
+                                 @click=${() => this._handleThresholdClick(entity.entity_id, 'WARNING')}>
+                              <span class="level-icon">⚠️</span>
+                              <span class="threshold-value">${this._getEntityThreshold(entity.entity_id, 'WARNING') || 'Set'}</span>
+                            </div>
+                            <div class="threshold-mini alert ${!this._getEntityThreshold(entity.entity_id, 'ALERT') ? 'clickable' : ''}"
+                                 @click=${() => this._handleThresholdClick(entity.entity_id, 'ALERT')}>
+                              <span class="level-icon">🚨</span>
+                              <span class="threshold-value">${this._getEntityThreshold(entity.entity_id, 'ALERT') || 'Set'}</span>
+                            </div>
+                            <div class="threshold-mini critical ${!this._getEntityThreshold(entity.entity_id, 'CRITICAL') ? 'clickable' : ''}"
+                                 @click=${() => this._handleThresholdClick(entity.entity_id, 'CRITICAL')}>
+                              <span class="level-icon">🔥</span>
+                              <span class="threshold-value">${this._getEntityThreshold(entity.entity_id, 'CRITICAL') || 'Set'}</span>
+                            </div>
+                          </div>
+                        ` : ''}
                       </td>
                       ${this.categoryFilter === 'ALERTS' && (Array.isArray(entity.category) ? entity.category.includes('ALERTS') : entity.category === 'ALERTS') ? html`
-                        <td class="alert-threshold-cell warning">
+                        <td class="alert-threshold-cell warning ${!this._getEntityThreshold(entity.entity_id, 'WARNING') ? 'clickable' : ''}"
+                            @click=${() => this._handleThresholdClick(entity.entity_id, 'WARNING')}>
                           <span class="threshold-value">
-                            ${this._getEntityThreshold(entity.entity_id, 'WARNING') || 'Auto'}
+                            ${this._getEntityThreshold(entity.entity_id, 'WARNING') || 'Imposta'}
                           </span>
                         </td>
-                        <td class="alert-threshold-cell alert">
+                        <td class="alert-threshold-cell alert ${!this._getEntityThreshold(entity.entity_id, 'ALERT') ? 'clickable' : ''}"
+                            @click=${() => this._handleThresholdClick(entity.entity_id, 'ALERT')}>
                           <span class="threshold-value">
-                            ${this._getEntityThreshold(entity.entity_id, 'ALERT') || 'Auto'}
+                            ${this._getEntityThreshold(entity.entity_id, 'ALERT') || 'Imposta'}
                           </span>
                         </td>
-                        <td class="alert-threshold-cell critical">
+                        <td class="alert-threshold-cell critical ${!this._getEntityThreshold(entity.entity_id, 'CRITICAL') ? 'clickable' : ''}"
+                            @click=${() => this._handleThresholdClick(entity.entity_id, 'CRITICAL')}>
                           <span class="threshold-value">
-                            ${this._getEntityThreshold(entity.entity_id, 'CRITICAL') || 'Auto'}
+                            ${this._getEntityThreshold(entity.entity_id, 'CRITICAL') || 'Imposta'}
                           </span>
                         </td>
                       ` : this.categoryFilter === 'ALERTS' ? html`
@@ -3385,8 +3693,8 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       
       .weight-slider.large {
         flex: 1;
-        height: 8px;
-        min-width: 150px;
+        height: 12px;
+        min-width: 250px;
       }
       
       .weight-display {
@@ -3445,6 +3753,24 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         color: var(--secondary-text-color);
         font-style: italic;
       }
+
+      .alert-threshold-cell.clickable {
+        cursor: pointer;
+        border: 1px dashed #ccc;
+        background: rgba(255,255,255,0.8) !important;
+        transition: all 0.2s ease;
+      }
+
+      .alert-threshold-cell.clickable:hover {
+        background: #e3f2fd !important;
+        border-color: #2196F3;
+        transform: scale(1.02);
+      }
+
+      .alert-threshold-cell.clickable .threshold-value {
+        color: #2196F3;
+        font-style: italic;
+      }
       
       .threshold-value {
         font-weight: 600;
@@ -3454,6 +3780,67 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       .threshold-na {
         font-size: 10px;
         opacity: 0.7;
+      }
+      
+      /* Mini alert thresholds in weight column */
+      .alert-thresholds-mini {
+        display: flex;
+        gap: 4px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+      }
+      
+      .threshold-mini {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        font-size: 9px;
+        padding: 2px 4px;
+        border-radius: 3px;
+        border: 1px solid transparent;
+      }
+
+      .threshold-mini.clickable {
+        cursor: pointer;
+        border: 1px dashed #ccc !important;
+        background: rgba(255,255,255,0.8) !important;
+        transition: all 0.2s ease;
+      }
+
+      .threshold-mini.clickable:hover {
+        background: #e3f2fd !important;
+        border-color: #2196F3 !important;
+        transform: scale(1.05);
+      }
+
+      .threshold-mini.clickable .threshold-value {
+        color: #2196F3;
+        font-style: italic;
+      }
+      
+      .threshold-mini.warning {
+        border-color: #ff9800;
+        background: rgba(255, 152, 0, 0.1);
+      }
+      
+      .threshold-mini.alert {
+        border-color: #f44336;
+        background: rgba(244, 67, 54, 0.1);
+      }
+      
+      .threshold-mini.critical {
+        border-color: #d32f2f;
+        background: rgba(211, 47, 47, 0.1);
+      }
+      
+      .threshold-mini .level-icon {
+        font-size: 8px;
+      }
+      
+      .threshold-mini .threshold-value {
+        font-weight: 600;
+        font-family: monospace;
+        font-size: 8px;
       }
       
       .reset-button.compact {
@@ -3468,6 +3855,24 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         display: flex;
         align-items: center;
         gap: 12px;
+      }
+      
+      .monitoring-buttons {
+        display: flex;
+        gap: 8px;
+      }
+      
+      .monitoring-btn.enable {
+        --mdc-theme-primary: var(--success-color, #4caf50);
+      }
+      
+      .monitoring-btn.disable {
+        --mdc-theme-primary: var(--error-color, #f44336);
+      }
+      
+      .monitoring-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
       
       .monitoring-btn {
@@ -3642,16 +4047,24 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                     (isItalian ? '❌ Inattivo' : '❌ Inactive')
                   }
                 </span>
-                <ha-button
-                  outlined
-                  @click=${() => this._toggleAlertMonitoring()}
-                  class="monitoring-btn ${this.alertStatus.monitoring_enabled ? 'stop' : 'start'}"
-                >
-                  ${this.alertStatus.monitoring_enabled ? 
-                    (isItalian ? '🛑 Disattiva' : '🛑 Disable') :
-                    (isItalian ? '▶️ Attiva' : '▶️ Enable')
-                  }
-                </ha-button>
+                <div class="monitoring-buttons">
+                  <ha-button
+                    outlined
+                    @click=${() => this._enableMonitoring()}
+                    class="monitoring-btn enable"
+                    ?disabled=${this.alertStatus.monitoring_enabled}
+                  >
+                    ${isItalian ? '▶️ Attiva' : '▶️ Enable'}
+                  </ha-button>
+                  <ha-button
+                    outlined
+                    @click=${() => this._disableMonitoring()}
+                    class="monitoring-btn disable"
+                    ?disabled=${!this.alertStatus.monitoring_enabled}
+                  >
+                    ${isItalian ? '🛑 Disattiva' : '🛑 Disable'}
+                  </ha-button>
+                </div>
               </div>
             </div>
             <div class="status-item">

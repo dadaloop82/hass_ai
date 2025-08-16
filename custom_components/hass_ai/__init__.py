@@ -161,6 +161,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_load_correlations)
     websocket_api.async_register_command(hass, handle_save_alert_threshold)
     websocket_api.async_register_command(hass, handle_load_alert_thresholds)
+    websocket_api.async_register_command(hass, handle_save_entity_threshold)
+    websocket_api.async_register_command(hass, handle_load_entity_thresholds)
     websocket_api.async_register_command(hass, handle_get_alert_status)
     websocket_api.async_register_command(hass, handle_configure_alert_service)
     websocket_api.async_register_command(hass, handle_update_filtered_alerts)
@@ -169,6 +171,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
+    
+    # Load entity thresholds from storage
+    entity_thresholds_store = storage.Store(hass, STORAGE_VERSION, f"{DOMAIN}_entity_thresholds")
+    try:
+        entity_thresholds = await entity_thresholds_store.async_load() or {}
+        hass.data["hass_ai_entity_thresholds"] = entity_thresholds
+        _LOGGER.info(f"Loaded {len(entity_thresholds)} entity thresholds from storage")
+    except Exception as e:
+        _LOGGER.warning(f"Could not load entity thresholds: {e}")
+        hass.data["hass_ai_entity_thresholds"] = {}
     
     # Initialize alert monitor
     alert_monitor = AlertMonitor(hass)
@@ -741,6 +753,79 @@ async def handle_load_alert_thresholds(hass: HomeAssistant, connection: websocke
         
     except Exception as e:
         _LOGGER.error(f"Error loading alert thresholds: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "load_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/save_entity_threshold",
+    vol.Required("entity_id"): str,
+    vol.Required("level"): str,
+    vol.Required("condition"): str,
+    vol.Required("description"): str,
+})
+@websocket_api.async_response
+async def handle_save_entity_threshold(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to save a manual threshold for an entity."""
+    try:
+        entity_id = msg["entity_id"]
+        level = msg["level"]
+        condition = msg["condition"]
+        description = msg["description"]
+        
+        # Validate threshold level
+        if level not in ["WARNING", "ALERT", "CRITICAL"]:
+            raise ValueError(f"Invalid threshold level: {level}")
+
+        # Get or create the entity thresholds storage
+        if "hass_ai_entity_thresholds" not in hass.data:
+            hass.data["hass_ai_entity_thresholds"] = {}
+        
+        entity_thresholds = hass.data["hass_ai_entity_thresholds"]
+        
+        # Initialize entity entry if not exists
+        if entity_id not in entity_thresholds:
+            entity_thresholds[entity_id] = {}
+        
+        # Save the threshold
+        entity_thresholds[entity_id][level] = {
+            "condition": condition,
+            "description": description,
+            "manual": True,
+            "timestamp": hass.loop.time()
+        }
+        
+        # Persist to storage
+        storage = hass.helpers.storage.Store(1, f"{DOMAIN}_entity_thresholds")
+        await storage.async_save(entity_thresholds)
+        
+        _LOGGER.info(f"Saved manual threshold for {entity_id}: {level} = {condition}")
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error saving entity threshold: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "save_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/load_entity_thresholds",
+})
+@websocket_api.async_response
+async def handle_load_entity_thresholds(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle the command to load entity thresholds."""
+    try:
+        entity_thresholds = hass.data.get("hass_ai_entity_thresholds", {})
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {
+            "thresholds": entity_thresholds
+        }))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error loading entity thresholds: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "load_error", str(e)
         ))
