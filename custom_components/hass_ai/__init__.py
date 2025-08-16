@@ -16,6 +16,7 @@ import voluptuous as vol
 from .const import DOMAIN, CONF_CONVERSATION_AGENT
 from .intelligence import get_entities_importance_batched
 from .services import async_setup_services, async_unload_services
+from .alert_monitor import AlertMonitor
 
 _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
@@ -160,15 +161,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_load_correlations)
     websocket_api.async_register_command(hass, handle_save_alert_threshold)
     websocket_api.async_register_command(hass, handle_load_alert_thresholds)
+    websocket_api.async_register_command(hass, handle_get_alert_status)
+    websocket_api.async_register_command(hass, handle_configure_alert_service)
     websocket_api.async_register_command(hass, handle_clear_storage)
     websocket_api.async_register_command(hass, handle_stop_operation)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
+    
+    # Initialize alert monitor
+    alert_monitor = AlertMonitor(hass)
+    await alert_monitor.async_setup()
+    
     hass.data[DOMAIN][entry.entry_id] = {
         "store": store,
         "config": entry.data,
-        "options": entry.options
+        "options": entry.options,
+        "alert_monitor": alert_monitor
     }
 
     # Get scan interval from config entry (from data or options)
@@ -395,6 +404,13 @@ async def handle_save_ai_results(hass: HomeAssistant, connection: websocket_api.
         }
         
         await _save_ai_results(hass, results_data)
+        
+        # Update alert monitor with new entities
+        entry_id = next(iter(hass.data[DOMAIN]))
+        alert_monitor = hass.data[DOMAIN][entry_id].get("alert_monitor")
+        if alert_monitor:
+            await alert_monitor.update_monitored_entities(msg["results"])
+        
         connection.send_message(websocket_api.result_message(msg["id"], {"success": True}))
         
     except Exception as e:
@@ -407,6 +423,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         # Unload services
         await async_unload_services(hass)
+        
+        # Unload alert monitor
+        entry_data = hass.data[DOMAIN].get(entry.entry_id, {})
+        alert_monitor = entry_data.get("alert_monitor")
+        if alert_monitor:
+            await alert_monitor.async_unload()
         
         # Remove panel
         frontend.async_remove_panel(hass, PANEL_URL_PATH)
@@ -483,7 +505,7 @@ async def handle_evaluate_single_entity(hass: HomeAssistant, connection: websock
         vol.Required("entity_id"): str,
         vol.Required("ai_weight"): vol.Any(int, float),
         vol.Required("reason"): str,
-        vol.Required("category"): str,
+        vol.Required("category"): vol.Any(str, [str]),  # Accept both string and array
     })],
     vol.Optional("language", default="en"): str,
 })
@@ -826,4 +848,86 @@ async def handle_stop_operation(hass: HomeAssistant, connection, msg):
         _LOGGER.error(f"Error stopping operation: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "stop_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/get_alert_status",
+})
+@websocket_api.async_response
+async def handle_get_alert_status(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle getting alert monitoring status."""
+    try:
+        # Get alert monitor from first entry
+        entry_id = next(iter(hass.data[DOMAIN]))
+        alert_monitor = hass.data[DOMAIN][entry_id].get("alert_monitor")
+        
+        if alert_monitor:
+            status = await alert_monitor.get_alert_status()
+            connection.send_message(websocket_api.result_message(msg["id"], status))
+        else:
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "monitoring_enabled": False,
+                "error": "Alert monitor not initialized"
+            }))
+            
+    except Exception as e:
+        _LOGGER.error(f"Error getting alert status: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "status_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/configure_alert_service",
+    vol.Optional("notification_service"): str,
+    vol.Optional("use_input_text"): bool,
+    vol.Optional("input_text_entity"): str,
+    vol.Optional("entity_thresholds"): dict,
+})
+@websocket_api.async_response
+async def handle_configure_alert_service(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle configuring alert notification service."""
+    try:
+        # Get alert monitor from first entry
+        entry_id = next(iter(hass.data[DOMAIN]))
+        alert_monitor = hass.data[DOMAIN][entry_id].get("alert_monitor")
+        
+        if alert_monitor:
+            # Update notification method
+            if "notification_service" in msg:
+                alert_monitor.notification_service = msg["notification_service"]
+                
+            if "use_input_text" in msg:
+                alert_monitor.use_input_text = msg["use_input_text"]
+                
+            if "input_text_entity" in msg:
+                alert_monitor.input_text_entity = msg["input_text_entity"]
+            
+            # Ensure input_text entity if using that mode
+            if alert_monitor.use_input_text:
+                await alert_monitor._ensure_input_text_entity()
+            
+            # Update entity thresholds if provided
+            entity_thresholds = msg.get("entity_thresholds", {})
+            for entity_id, thresholds in entity_thresholds.items():
+                if entity_id in alert_monitor.monitored_entities:
+                    alert_monitor.monitored_entities[entity_id]["thresholds"] = thresholds
+                    
+            # Save configuration
+            await alert_monitor._save_configuration()
+            
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "success": True,
+                "message": "Alert configuration updated"
+            }))
+        else:
+            connection.send_message(websocket_api.error_message(
+                msg["id"], "config_error", "Alert monitor not initialized"
+            ))
+            
+    except Exception as e:
+        _LOGGER.error(f"Error configuring alert service: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "config_error", str(e)
         ))

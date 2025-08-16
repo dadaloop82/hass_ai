@@ -1,6 +1,6 @@
 # HASS AI - Advanced Entity Analysis and Automation Assistant
 
-**Version 1.9.37** | *Enhanced AI-Powered Entity Management for Home Assistant*
+**Version 1.9.38** | *Enhanced AI-Powered Entity Management for Home Assistant*
 
 HASS AI is a sophisticated Home Assistant custom component that leverages artificial intelligence to analyze, categorize, and optimize entity management across your smart home ecosystem.
 
@@ -11,11 +11,21 @@ HASS AI is a sophisticated Home Assistant custom component that leverages artifi
 - **Alert Detection**: Identify problems, offline devices, and critical alerts
 - **Enhancement Opportunities**: Discover entities that can benefit from AI services
 
-### 🚨 **Smart Alert System**
-- **Three-Level Alert Thresholds**: Medium, Severe, Critical
-- **User-Customizable Settings**: Personalize alert levels per entity
-- **Intelligent Detection**: Automatically identify devices needing attention
-- **Battery & Health Monitoring**: Track device status and connectivity
+### 🚨 **Intelligent Alert Monitoring System** ⭐ **NEW!**
+- **Three-Level Thresholds**: WARNING, ALERT, CRITICAL with configurable values
+- **Weight-Based Monitoring**: High-priority entities checked every 30 seconds, low-priority every 30 minutes
+- **AI-Generated Notifications**: Smart, contextual alert messages created by AI
+- **Cumulative Alerts**: Groups multiple alerts into concise, actionable notifications
+- **Flexible Notification Services**: Choose from any available Home Assistant notification service
+- **Automatic Throttling**: Prevents notification spam with intelligent timing
+- **Real-Time Status Dashboard**: Visual monitoring of all alert entities
+
+### 🔧 **Smart Alert Configuration**
+- **Auto-Detection**: Automatically identifies alert thresholds based on entity type and current values
+- **Manual Override**: Customize thresholds for any monitored entity
+- **Entity Type Recognition**: Supports sensors, binary sensors, switches, and more
+- **Threshold Examples**: Battery < 10% (CRITICAL), Temperature > 30°C (ALERT), Motion detected (WARNING)
+- **Visual Status Indicators**: Color-coded badges show current alert levels
 
 ### ⚡ **Enhanced Entity Services**
 - **Vision Analysis**: AI interpretation for camera feeds
@@ -77,12 +87,51 @@ Entities that can benefit from additional AI services:
 4. **Customize Settings**: Adjust weights and alert thresholds
 5. **Find Correlations**: Discover entity relationships and dependencies
 
-### Alert Threshold Configuration
-- **Medium**: Standard monitoring, routine notifications
-- **Severe**: Important issues requiring attention
-- **Critical**: Urgent problems needing immediate action
+## 🔔 Alert Monitoring System
 
-Each entity's alert threshold can be customized based on your specific needs and priorities.
+### Overview
+The intelligent alert monitoring system continuously watches entities with the ALERTS category and sends notifications when thresholds are exceeded.
+
+### Configuration Steps
+1. **Run AI Analysis**: First scan your entities to identify alert-worthy devices
+2. **Open Alert Configuration**: Click "🔔 Configure Alert Notifications" button
+3. **Choose Notification Service**: Select from available Home Assistant notification services
+4. **Review Alert Entities**: See which entities are monitored and their current status
+5. **Customize Thresholds**: Adjust WARNING/ALERT/CRITICAL levels as needed
+
+### Alert Levels
+- **WARNING** ⚠️: Monitor situation (e.g., battery < 20%, temperature > 25°C)
+- **ALERT** 🚨: Requires attention (e.g., battery < 10%, temperature > 30°C) 
+- **CRITICAL** 🔥: Immediate action required (e.g., battery < 5%, temperature > 35°C)
+
+### Monitoring Frequency
+- **Weight 5 entities**: Checked every 30 seconds (critical devices)
+- **Weight 4 entities**: Checked every ~7 minutes
+- **Weight 3 entities**: Checked every ~15 minutes  
+- **Weight 2 entities**: Checked every ~22 minutes
+- **Weight 1 entities**: Checked every 30 minutes (low priority)
+
+### AI-Generated Notifications
+When alerts are detected, the system:
+1. **Groups Related Alerts**: Combines multiple alerts into one notification
+2. **Generates Smart Message**: AI creates contextual, actionable notifications
+3. **Prevents Spam**: Throttles notifications based on alert level
+4. **Provides Actions**: Includes suggested next steps
+
+### Example Alert Message
+```
+🔥 2 CRITICAL and 1 ALERT detected!
+• Living room temperature: 35°C (CRITICAL)
+• Motion sensor battery: 3% (CRITICAL)
+• Bathroom window open: 2h (ALERT)
+Check your home immediately.
+```
+
+### Supported Entity Types
+- **Sensors**: Temperature, humidity, battery, CO2, pressure
+- **Binary Sensors**: Doors, windows, motion, smoke, gas detection
+- **Switches**: Security systems, emergency controls
+- **Lights**: Emergency lighting systems
 
 ## 🔧 Advanced Features
 

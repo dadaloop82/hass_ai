@@ -28,6 +28,18 @@ STORAGE_KEY_OVERRIDES = "overrides"
 STORAGE_KEY_LAST_SCAN = "last_scan"
 STORAGE_KEY_VERSION = "version"
 
+# Alert monitoring constants
+ALERT_MONITORING_ENABLED = "alert_monitoring_enabled"
+ALERT_NOTIFICATION_SERVICE = "alert_notification_service"
+ALERT_NOTIFICATION_TARGET = "alert_notification_target"
+ALERT_LAST_NOTIFICATIONS = "alert_last_notifications"
+
+# Alert monitoring intervals (in seconds)
+ALERT_INTERVAL_WEIGHT_5 = 30      # Critical alerts every 30 seconds
+ALERT_INTERVAL_WEIGHT_1 = 1800    # Low alerts every 30 minutes
+ALERT_MIN_INTERVAL = 30           # Minimum interval between same entity alerts
+ALERT_THROTTLE_TIME = 300         # 5 minutes throttle for repeated alerts
+
 # Token limit management
 MAX_TOKEN_ERROR_KEYWORDS = [
     "exceed",

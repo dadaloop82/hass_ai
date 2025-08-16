@@ -1,6 +1,6 @@
-// HASS AI Panel v1.9.37.1 - Updated 2025-08-16T16:00:00Z - FIXED MULTI-CATEGORY DISPLAY
-// Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds + Stop Operation
-// Force reload timestamp: 1723572000000
+// HASS AI Panel v1.9.38.1 - Updated 2025-08-16T21:00:00Z - ADDED INPUT_TEXT OPTION FOR ALERT DISPLAY
+// Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds + Stop Operation + Intelligent Alert Notifications + Input Text Mode
+// Force reload timestamp: 1723590000000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
@@ -59,6 +59,16 @@ class HassAiPanel extends LitElement {
       entityCount: 0
     };
     this.alertThresholds = {}; // User-customizable alert thresholds
+    this.alertStatus = {
+      monitoring_enabled: false,
+      total_monitored: 0,
+      active_alerts: {},
+      notification_service: 'notify.notify',
+      use_input_text: false,
+      input_text_entity: 'input_text.hass_ai_alerts',
+      input_text_exists: false
+    };
+    this.showAlertConfig = false; // Toggle alert configuration panel
   }
 
   connectedCallback() {
@@ -71,6 +81,7 @@ class HassAiPanel extends LitElement {
     this._loadAiResults();
     this._loadCorrelations();
     this._loadAlertThresholds();
+    this._loadAlertStatus();
   }
 
   async _saveAiResults() {
@@ -143,6 +154,119 @@ class HassAiPanel extends LitElement {
     };
   }
 
+  async _loadAlertStatus() {
+    try {
+      const response = await this.hass.callWS({ type: "hass_ai/get_alert_status" });
+      this.alertStatus = response;
+      this.requestUpdate();
+    } catch (error) {
+      console.error('Failed to load alert status:', error);
+    }
+  }
+
+  async _configureAlertService(config = {}) {
+    try {
+      const payload = {
+        type: "hass_ai/configure_alert_service"
+      };
+      
+      // Add configuration options
+      if (config.notification_service) {
+        payload.notification_service = config.notification_service;
+      }
+      if (config.use_input_text !== undefined) {
+        payload.use_input_text = config.use_input_text;
+      }
+      if (config.input_text_entity) {
+        payload.input_text_entity = config.input_text_entity;
+      }
+      if (config.entity_thresholds) {
+        payload.entity_thresholds = config.entity_thresholds;
+      }
+      
+      await this.hass.callWS(payload);
+      
+      // Update local status
+      Object.assign(this.alertStatus, config);
+      const isItalian = (this.hass.language || navigator.language).startsWith('it');
+      this._showSimpleNotification(
+        isItalian ? '🔔 Configurazione alert aggiornata con successo' : '🔔 Alert configuration updated successfully', 
+        'success'
+      );
+      this.requestUpdate();
+    } catch (error) {
+      const isItalian = (this.hass.language || navigator.language).startsWith('it');
+      console.error(isItalian ? 'Impossibile configurare il servizio alert:' : 'Failed to configure alert service:', error);
+      this._showSimpleNotification(
+        isItalian ? '❌ Impossibile configurare il servizio alert' : '❌ Failed to configure alert service', 
+        'error'
+      );
+    }
+  }
+
+  _getAvailableNotificationServices() {
+    // Get available notification services from Home Assistant
+    const services = this.hass.services?.notify || {};
+    const notificationServices = [];
+    
+    // Add default notify service
+    notificationServices.push({
+      id: 'notify.notify',
+      name: 'Default Notification Service'
+    });
+    
+    // Add specific notification services
+    Object.keys(services).forEach(service => {
+      if (service !== 'notify') {
+        notificationServices.push({
+          id: `notify.${service}`,
+          name: service.charAt(0).toUpperCase() + service.slice(1)
+        });
+      }
+    });
+    
+    return notificationServices;
+  }
+
+  _getAlertLevelConfig(level) {
+    const configs = {
+      'WARNING': {
+        color: '#ff9800',
+        icon: '⚠️',
+        description: 'Warning - Monitor situation'
+      },
+      'ALERT': {
+        color: '#f44336',
+        icon: '🚨',
+        description: 'Alert - Requires attention'
+      },
+      'CRITICAL': {
+        color: '#d32f2f',
+        icon: '🔥',
+        description: 'Critical - Immediate action required'
+      }
+    };
+    return configs[level] || configs['WARNING'];
+  }
+
+  _generateAlertMessageExample() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    if (isItalian) {
+      return `🔥 2 CRITICAL e 1 ALERT rilevati! 
+• Temperatura soggiorno: 35°C (CRITICAL)
+• Batteria sensore movimento: 3% (CRITICAL) 
+• Finestra bagno aperta: 2h (ALERT)
+Controlla immediatamente la tua casa.`;
+    } else {
+      return `🔥 2 CRITICAL and 1 ALERT detected!
+• Living room temperature: 35°C (CRITICAL)
+• Motion sensor battery: 3% (CRITICAL)
+• Bathroom window open: 2h (ALERT)
+Check your home immediately.`;
+    }
+  }
+
   _getAlertThresholdConfig(level) {
     const configs = {
       'MEDIUM': {
@@ -164,12 +288,56 @@ class HassAiPanel extends LitElement {
     return configs[level] || configs['MEDIUM'];
   }
 
+  async _toggleAlertMode(useInputText) {
+    await this._configureAlertService({
+      use_input_text: useInputText
+    });
+    
+    // Reload status to update UI
+    await this._loadAlertStatus();
+  }
+
+  async _updateInputTextEntity(entityId) {
+    await this._configureAlertService({
+      input_text_entity: entityId
+    });
+    
+    // Reload status to check if entity exists
+    await this._loadAlertStatus();
+  }
+
+  async _clearInputTextValue() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    if (!this.alertStatus.input_text_entity) return;
+    
+    try {
+      await this.hass.callService('input_text', 'set_value', {
+        entity_id: this.alertStatus.input_text_entity,
+        value: isItalian ? 'Nessun alert attivo' : 'No active alerts'
+      });
+      
+      this._showMessage(
+        isItalian ? '✅ Alert cancellato' : '✅ Alert cleared',
+        'success'
+      );
+      
+      // Force update of the UI
+      this.requestUpdate();
+    } catch (error) {
+      console.error('Error clearing input_text value:', error);
+      this._showMessage(
+        isItalian ? '❌ Errore nella cancellazione' : '❌ Error clearing alert',
+        'error'
+      );
+    }
+  }
+
   async _loadCorrelations() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
     try {
       const correlations = await this.hass.callWS({ type: "hass_ai/load_correlations" });
       if (correlations && Object.keys(correlations).length > 0) {
         this.correlations = correlations;
-        const isItalian = (this.hass.language || navigator.language).startsWith('it');
         console.log(isItalian ? 
           `📂 Caricate ${Object.keys(correlations).length} correlazioni salvate` : 
           `📂 Loaded ${Object.keys(correlations).length} saved correlations`
@@ -177,11 +345,12 @@ class HassAiPanel extends LitElement {
         this.requestUpdate();
       }
     } catch (error) {
-      console.error('Failed to load correlations:', error);
+      console.error(isItalian ? 'Errore durante il caricamento delle correlazioni:' : 'Failed to load correlations:', error);
     }
   }
 
   async _loadAiResults() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
     try {
       const response = await this.hass.callWS({ type: "hass_ai/load_ai_results" });
       
@@ -223,7 +392,6 @@ class HassAiPanel extends LitElement {
         }
       }
     } catch (error) {
-      const isItalian = (this.hass.language || navigator.language).startsWith('it');
       console.log(isItalian ? 'Nessun risultato AI precedente trovato:' : 'No previous AI results found:', error);
     }
   }
@@ -1149,6 +1317,22 @@ class HassAiPanel extends LitElement {
               ${this.lastScanInfo.timestamp ? html`
                 <br><small>🕐 ${new Date(this.lastScanInfo.timestamp).toLocaleString()}</small>
               ` : ''}
+            </div>
+          ` : ''}
+          
+          <!-- Alert Configuration Panel -->
+          ${Object.keys(this.entities).length > 0 ? html`
+            <div class="alert-config-section">
+              <ha-button 
+                outlined 
+                @click=${() => { this.showAlertConfig = !this.showAlertConfig; this.requestUpdate(); }}
+                class="alert-config-btn"
+              >
+                ${isItalian ? '🔔 Configura Notifiche Alert' : '🔔 Configure Alert Notifications'}
+                <ha-icon icon=${this.showAlertConfig ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
+              </ha-button>
+              
+              ${this.showAlertConfig ? this._renderAlertConfigPanel(isItalian) : ''}
             </div>
           ` : ''}
         </div>
@@ -2447,6 +2631,361 @@ class HassAiPanel extends LitElement {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.6; }
       }
+      
+      /* Alert Configuration Styles */
+      .alert-config-section {
+        margin-top: 20px;
+        border: 2px solid var(--divider-color);
+        border-radius: 8px;
+        background: var(--card-background-color);
+      }
+      
+      .alert-config-btn {
+        width: 100%;
+        --mdc-typography-button-font-size: 14px;
+        --mdc-button-horizontal-padding: 16px;
+        border-radius: 8px 8px 0 0;
+        border-bottom: 1px solid var(--divider-color);
+      }
+      
+      .alert-config-panel {
+        padding: 20px;
+        background: var(--card-background-color);
+        border-radius: 0 0 8px 8px;
+      }
+      
+      .alert-status h3,
+      .notification-config h3,
+      .alert-entities h3 {
+        margin: 0 0 12px 0;
+        color: var(--primary-text-color);
+        font-size: 16px;
+        font-weight: 600;
+      }
+      
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      
+      .status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: var(--primary-background-color);
+        border-radius: 6px;
+        border: 1px solid var(--divider-color);
+      }
+      
+      .status-label {
+        font-weight: 500;
+        color: var(--secondary-text-color);
+      }
+      
+      .status-value {
+        font-weight: 600;
+      }
+      
+      .status-value.enabled {
+        color: var(--success-color, #4CAF50);
+      }
+      
+      .status-value.disabled {
+        color: var(--error-color, #f44336);
+      }
+      
+      .alert-count {
+        color: var(--warning-color, #ff9800);
+      }
+      
+      .config-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      
+      .config-row label {
+        min-width: 140px;
+        font-weight: 500;
+        color: var(--primary-text-color);
+      }
+      
+      .service-select {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        background: var(--card-background-color);
+        color: var(--primary-text-color);
+        font-size: 14px;
+      }
+      
+      .alert-example {
+        margin-top: 16px;
+        padding: 12px;
+        background: var(--primary-background-color);
+        border-radius: 6px;
+        border-left: 4px solid var(--info-color, #2196F3);
+      }
+      
+      .alert-example h4 {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        color: var(--primary-text-color);
+      }
+      
+      .example-message {
+        font-family: monospace;
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        white-space: pre-wrap;
+        background: var(--card-background-color);
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid var(--divider-color);
+      }
+      
+      .entities-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 12px;
+        margin-top: 12px;
+      }
+      
+      .alert-entity-card {
+        padding: 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        background: var(--card-background-color);
+        transition: border-color 0.2s ease;
+      }
+      
+      .alert-entity-card.has-alert {
+        border-color: var(--error-color, #f44336);
+        background: rgba(244, 67, 54, 0.05);
+      }
+      
+      .entity-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+      
+      .entity-name {
+        font-weight: 600;
+        color: var(--primary-text-color);
+        font-size: 14px;
+      }
+      
+      .alert-badge {
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+      
+      .alert-badge.ok {
+        background: var(--success-color, #4CAF50);
+        color: white;
+      }
+      
+      .alert-badge.warning {
+        background: var(--warning-color, #ff9800);
+        color: white;
+      }
+      
+      .alert-badge.alert {
+        background: var(--error-color, #f44336);
+        color: white;
+      }
+      
+      .alert-badge.critical {
+        background: #d32f2f;
+        color: white;
+        animation: pulse 1.5s infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+      
+      .entity-details {
+        font-size: 12px;
+      }
+      
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      }
+      
+      .detail-row:last-child {
+        margin-bottom: 0;
+      }
+      
+      .thresholds {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      
+      .threshold-item {
+        font-size: 10px;
+        padding: 1px 4px;
+        border-radius: 2px;
+      }
+      
+      .threshold-item.warning {
+        background: rgba(255, 152, 0, 0.2);
+        color: var(--warning-color, #ff9800);
+      }
+      
+      .threshold-item.alert {
+        background: rgba(244, 67, 54, 0.2);
+        color: var(--error-color, #f44336);
+      }
+      
+      .threshold-item.critical {
+        background: rgba(211, 47, 47, 0.2);
+        color: #d32f2f;
+      }
+      
+      .no-alert-entities {
+        text-align: center;
+        padding: 20px;
+        color: var(--secondary-text-color);
+        font-style: italic;
+      }
+      
+      .alert-info {
+        margin-top: 20px;
+        padding: 12px;
+        background: var(--primary-background-color);
+        border-radius: 6px;
+        border-left: 4px solid var(--info-color, #2196F3);
+      }
+      
+      .alert-info h4 {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        color: var(--primary-text-color);
+      }
+      
+      .alert-info ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+      
+      .alert-info li {
+        margin-bottom: 4px;
+        font-size: 12px;
+        color: var(--secondary-text-color);
+      }
+      
+      /* Input Text Configuration Styles */
+      .entity-input {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        background: var(--card-background-color);
+        color: var(--primary-text-color);
+        font-size: 14px;
+        font-family: monospace;
+      }
+      
+      .entity-status {
+        margin-left: 8px;
+        font-size: 12px;
+      }
+      
+      .status-ok {
+        color: var(--success-color, #4CAF50);
+      }
+      
+      .status-error {
+        color: var(--error-color, #f44336);
+      }
+      
+      .current-value {
+        padding: 8px 12px;
+        background: var(--secondary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        font-family: monospace;
+        color: var(--primary-text-color);
+        font-size: 14px;
+        word-break: break-all;
+        max-height: 100px;
+        overflow-y: auto;
+      }
+      
+      .clear-button {
+        padding: 8px 16px;
+        background: var(--error-color, #f44336);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s;
+      }
+      
+      .clear-button:hover {
+        background: var(--error-color-dark, #d32f2f);
+      }
+      
+      .config-help {
+        margin-top: 12px;
+        padding: 12px;
+        background: rgba(33, 150, 243, 0.1);
+        border-radius: 6px;
+        border-left: 4px solid var(--info-color, #2196F3);
+      }
+      
+      .config-help h4 {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        color: var(--primary-text-color);
+      }
+      
+      .config-help p {
+        margin: 4px 0;
+        font-size: 12px;
+        color: var(--secondary-text-color);
+      }
+      
+      .config-help pre {
+        background: var(--card-background-color);
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid var(--divider-color);
+        font-size: 11px;
+        color: var(--primary-text-color);
+        overflow-x: auto;
+      }
+      
+      .config-help code {
+        font-family: 'Roboto Mono', 'Consolas', 'Monaco', monospace;
+      }
+      
+      .config-row label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: auto;
+      }
+      
+      .config-row input[type="radio"] {
+        margin: 0;
+      }
     `;
   }
 
@@ -2571,6 +3110,226 @@ class HassAiPanel extends LitElement {
     // Use browser's native confirm dialog for simplicity and reliability
     const fullMessage = `${title}\n\n${message}`;
     return confirm(fullMessage);
+  }
+
+  _renderAlertConfigPanel(isItalian) {
+    const alertEntities = Object.entries(this.entities)
+      .filter(([entityId, entity]) => {
+        const categories = Array.isArray(entity.category) ? entity.category : [entity.category];
+        return categories.includes('ALERTS');
+      });
+
+    const availableServices = this._getAvailableNotificationServices();
+
+    return html`
+      <div class="alert-config-panel">
+        <div class="alert-status">
+          <h3>${isItalian ? '📊 Stato Monitoraggio Alert' : '📊 Alert Monitoring Status'}</h3>
+          <div class="status-grid">
+            <div class="status-item">
+              <span class="status-label">${isItalian ? 'Monitoraggio:' : 'Monitoring:'}</span>
+              <span class="status-value ${this.alertStatus.monitoring_enabled ? 'enabled' : 'disabled'}">
+                ${this.alertStatus.monitoring_enabled ? 
+                  (isItalian ? '✅ Attivo' : '✅ Active') : 
+                  (isItalian ? '❌ Inattivo' : '❌ Inactive')
+                }
+              </span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">${isItalian ? 'Entità monitorate:' : 'Monitored entities:'}</span>
+              <span class="status-value">${this.alertStatus.total_monitored || 0}</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">${isItalian ? 'Alert attivi:' : 'Active alerts:'}</span>
+              <span class="status-value alert-count">
+                ${Object.keys(this.alertStatus.active_alerts || {}).length}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="notification-config">
+          <h3>${isItalian ? '🔔 Configurazione Notifiche' : '🔔 Notification Configuration'}</h3>
+          
+          <div class="config-row">
+            <label>
+              <input 
+                type="radio" 
+                name="alert-mode" 
+                .checked=${!this.alertStatus.use_input_text}
+                @change=${() => this._toggleAlertMode(false)}
+              />
+              ${isItalian ? 'Servizio di Notifica' : 'Notification Service'}
+            </label>
+          </div>
+          
+          ${!this.alertStatus.use_input_text ? html`
+            <div class="config-row">
+              <label>${isItalian ? 'Servizio:' : 'Service:'}</label>
+              <select 
+                .value=${this.alertStatus.notification_service}
+                @change=${(e) => this._configureAlertService({notification_service: e.target.value})}
+                class="service-select"
+              >
+                ${availableServices.map(service => html`
+                  <option value=${service.id} ?selected=${service.id === this.alertStatus.notification_service}>
+                    ${service.name}
+                  </option>
+                `)}
+              </select>
+            </div>
+          ` : ''}
+          
+          <div class="config-row">
+            <label>
+              <input 
+                type="radio" 
+                name="alert-mode" 
+                .checked=${this.alertStatus.use_input_text}
+                @change=${() => this._toggleAlertMode(true)}
+              />
+              ${isItalian ? 'Input Text Entity' : 'Input Text Entity'}
+            </label>
+          </div>
+          
+          ${this.alertStatus.use_input_text ? html`
+            <div class="config-row">
+              <label>${isItalian ? 'Entity ID:' : 'Entity ID:'}</label>
+              <input 
+                type="text" 
+                .value=${this.alertStatus.input_text_entity}
+                @change=${(e) => this._updateInputTextEntity(e.target.value)}
+                placeholder="input_text.hass_ai_alerts"
+                class="entity-input"
+              />
+              <div class="entity-status">
+                ${this.alertStatus.input_text_exists ? 
+                  html`<span class="status-ok">✅ ${isItalian ? 'Esiste' : 'Exists'}</span>` :
+                  html`<span class="status-error">❌ ${isItalian ? 'Non trovato' : 'Not found'}</span>`
+                }
+              </div>
+            </div>
+            
+            ${this.alertStatus.input_text_exists && this.alertStatus.input_text_entity ? html`
+              <div class="config-row">
+                <label>${isItalian ? 'Valore Attuale:' : 'Current Value:'}</label>
+                <div class="current-value">
+                  ${this.hass.states[this.alertStatus.input_text_entity]?.state || isItalian ? 'Non disponibile' : 'Not available'}
+                </div>
+              </div>
+              <div class="config-row">
+                <button 
+                  class="clear-button"
+                  @click=${this._clearInputTextValue}
+                >
+                  🗑️ ${isItalian ? 'Cancella Alert' : 'Clear Alert'}
+                </button>
+              </div>
+            ` : ''}
+            
+            ${!this.alertStatus.input_text_exists ? html`
+              <div class="config-help">
+                <h4>${isItalian ? '📝 Configurazione Richiesta' : '📝 Required Configuration'}</h4>
+                <p>${isItalian ? 'Aggiungi al tuo configuration.yaml:' : 'Add to your configuration.yaml:'}</p>
+                <pre><code>input_text:
+  hass_ai_alerts:
+    name: "HASS AI Alerts"
+    max: 1000
+    icon: mdi:alert-circle
+    initial: "No alerts"</code></pre>
+                <p><em>${isItalian ? 'Poi riavvia Home Assistant' : 'Then restart Home Assistant'}</em></p>
+              </div>
+            ` : ''}
+          ` : ''}
+
+          <div class="alert-example">
+            <h4>${isItalian ? '📝 Esempio di Messaggio Alert' : '📝 Alert Message Example'}</h4>
+            <div class="example-message">
+              ${this._generateAlertMessageExample()}
+            </div>
+          </div>
+        </div>
+
+        ${alertEntities.length > 0 ? html`
+          <div class="alert-entities">
+            <h3>${isItalian ? '⚠️ Entità con Alert Configurate' : '⚠️ Configured Alert Entities'}</h3>
+            <div class="entities-grid">
+              ${alertEntities.map(([entityId, entity]) => {
+                const activeAlert = this.alertStatus.active_alerts?.[entityId];
+                const state = this.hass.states[entityId];
+                return html`
+                  <div class="alert-entity-card ${activeAlert ? 'has-alert' : ''}">
+                    <div class="entity-header">
+                      <span class="entity-name">
+                        ${state?.attributes?.friendly_name || entityId}
+                      </span>
+                      ${activeAlert ? html`
+                        <span class="alert-badge ${activeAlert.level.toLowerCase()}">
+                          ${this._getAlertLevelConfig(activeAlert.level).icon} ${activeAlert.level}
+                        </span>
+                      ` : html`
+                        <span class="alert-badge ok">✅ OK</span>
+                      `}
+                    </div>
+                    <div class="entity-details">
+                      <div class="detail-row">
+                        <span>${isItalian ? 'Valore:' : 'Value:'}</span>
+                        <span>${state?.state || 'N/A'}${state?.attributes?.unit_of_measurement || ''}</span>
+                      </div>
+                      <div class="detail-row">
+                        <span>${isItalian ? 'Peso:' : 'Weight:'}</span>
+                        <span>${entity.overall_weight}</span>
+                      </div>
+                      ${activeAlert ? html`
+                        <div class="detail-row alert-detail">
+                          <span>${isItalian ? 'Soglie:' : 'Thresholds:'}</span>
+                          <span class="thresholds">
+                            ${Object.entries(activeAlert.thresholds || {}).map(([level, value]) => html`
+                              <span class="threshold-item ${level.toLowerCase()}">
+                                ${level}: ${value}${state?.attributes?.unit_of_measurement || ''}
+                              </span>
+                            `)}
+                          </span>
+                        </div>
+                      ` : ''}
+                    </div>
+                  </div>
+                `;
+              })}
+            </div>
+          </div>
+        ` : html`
+          <div class="no-alert-entities">
+            <p>${isItalian ? 
+              '⚠️ Nessuna entità con categoria ALERTS trovata. Esegui prima una scansione AI per identificare entità che richiedono monitoraggio.' :
+              '⚠️ No ALERTS category entities found. Run an AI scan first to identify entities that require monitoring.'
+            }</p>
+          </div>
+        `}
+
+        <div class="alert-info">
+          <h4>${isItalian ? 'ℹ️ Come Funziona' : 'ℹ️ How It Works'}</h4>
+          <ul>
+            <li>${isItalian ? 
+              'Le entità con peso 5 vengono controllate ogni 30 secondi' :
+              'Weight 5 entities are checked every 30 seconds'
+            }</li>
+            <li>${isItalian ? 
+              'Le entità con peso 1 vengono controllate ogni 30 minuti' :
+              'Weight 1 entities are checked every 30 minutes'
+            }</li>
+            <li>${isItalian ? 
+              'Gli alert vengono raggruppati e inviati tramite AI intelligente' :
+              'Alerts are grouped and sent via intelligent AI'
+            }</li>
+            <li>${isItalian ? 
+              'Sistema di throttling previene spam di notifiche' :
+              'Throttling system prevents notification spam'
+            }</li>
+          </ul>
+        </div>
+      </div>
+    `;
   }
 }
 

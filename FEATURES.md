@@ -1,6 +1,6 @@
 # HASS AI Features - Complete Overview
 
-**Version 1.9.15** | *Advanced AI-Powered Entity Management*
+**Version 1.9.38** | *Advanced AI-Powered Entity Management with Intelligent Alert Monitoring*
 
 ## 🔍 Analysis Types
 
@@ -23,28 +23,30 @@ Comprehensive evaluation of entity relevance for home automation:
 - Historical usage patterns and accessibility
 - Integration complexity and reliability
 
-### 🚨 Alert Detection
-Proactive identification of problems and issues requiring attention:
+### 🚨 Alert Detection & Intelligent Monitoring
+**NEW v1.9.38**: Proactive AI-powered monitoring system with intelligent notifications:
 
-**Purpose**: Find devices and entities that need immediate attention or maintenance
+**Purpose**: Advanced monitoring of critical entities with AI-generated contextual alerts
 
-**Severity Levels**:
-- **Medium** (🟡): Standard monitoring, routine notifications
-- **Severe** (🟠): Important issues requiring attention  
-- **Critical** (🔴): Urgent problems needing immediate action
-
-**Detection Criteria**:
+**Alert Categories**:
 - **Offline Devices**: Unreachable or disconnected entities
 - **Low Battery**: Devices with < 20% battery charge
 - **Error States**: Entities reporting malfunctions or errors
 - **Connectivity Issues**: Network or communication problems
 - **Unusual Behavior**: Abnormal readings or patterns
 
-**User Customization**:
-- Per-entity alert threshold configuration
-- Custom severity level assignment
-- Notification integration with Home Assistant
-- Visual indicators with color-coded severity
+**Intelligent Alert System Features**:
+- **Weight-Based Monitoring**: Entities with higher weights monitored more frequently (30s to 30min intervals)
+- **Three-Tier Thresholds**: WARNING, ALERT, and CRITICAL levels with auto-detection
+- **AI-Generated Messages**: Context-aware notifications using Home Assistant conversation agents
+- **Flexible Notifications**: Choice between notification services or input_text entities
+- **Throttling System**: Prevents notification spam with intelligent grouping
+- **Real-Time Dashboard**: Visual monitoring with color-coded status indicators
+
+**Notification Options**:
+- **Notification Services**: Integration with Home Assistant notify services
+- **Input Text Display**: Alternative display via input_text entities for dashboard integration
+- **Multilingual Support**: AI messages generated in user's preferred language
 
 ### ⚡ Enhancement Opportunities
 AI-powered discovery of entities that can benefit from additional services:
@@ -270,7 +272,26 @@ Complete localization for international users:
 - Analysis descriptions and explanations
 - Error messages and help text
 - Progress indicators and status updates
+- AI-generated alert messages and prompts
+
+## 🔔 Intelligent Alert Monitoring System
+
+### Advanced Monitoring Engine
+**NEW v1.9.38**: Comprehensive monitoring solution for critical home automation entities:
+
+**Core Features**:
+- **Smart Categorization**: Automatic identification of ALERTS category entities
+- **Weight-Based Intervals**: Dynamic monitoring frequency based on entity importance
+- **AI-Powered Messages**: Context-aware notifications using conversation agents
+- **Flexible Output**: Choice between notification services or input_text entities
+- **Intelligent Throttling**: Prevents notification spam while ensuring critical alerts reach users
+
+**Monitoring Intelligence**:
+- **Automatic Threshold Detection**: AI analyzes entity patterns to set optimal alert thresholds
+- **Context-Aware Messages**: AI generates human-readable alerts with relevant context
+- **Multi-Language Support**: Alert messages generated in user's preferred language
+- **Real-Time Status**: Live dashboard showing monitoring status and active alerts
 
 ---
 
-*This comprehensive feature set makes HASS AI a powerful tool for intelligent entity management, proactive monitoring, and AI-powered home automation optimization.*
+*This comprehensive feature set makes HASS AI a powerful tool for intelligent entity management, proactive monitoring, and AI-powered home automation optimization with advanced alert capabilities.*

@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.38] - 2025-01-04
+
+### 🔔 **Intelligent Alert Monitoring System**
+- **NEW: Advanced Alert Engine**: Comprehensive monitoring system for critical entities with AI-powered notifications
+- **Weight-Based Monitoring**: Dynamic intervals from 30 seconds (weight 5) to 30 minutes (weight 1)
+- **AI-Generated Messages**: Context-aware alert notifications using Home Assistant conversation agents
+- **Flexible Notification Options**: Choice between notification services or input_text entities
+- **Three-Tier Alert System**: WARNING, ALERT, and CRITICAL levels with automatic threshold detection
+- **Intelligent Throttling**: Prevents notification spam while ensuring critical alerts are delivered
+- **Real-Time Dashboard**: Visual monitoring interface with color-coded status indicators
+
+#### Alert System Features
+- **Automatic Categorization**: Monitors entities with ALERTS category automatically
+- **Custom Thresholds**: AI analyzes entity patterns to set optimal alert thresholds
+- **Multilingual Support**: Alert messages generated in user's preferred language (Italian/English)
+- **Input Text Integration**: Alternative to notification services for dashboard display
+- **Configuration UI**: Easy setup interface for notification preferences and entity management
+
+#### Technical Enhancements
+- New `AlertMonitor` class with comprehensive monitoring logic
+- WebSocket API extensions for alert status and configuration
+- Enhanced panel.js with alert configuration interface
+- Persistent storage for alert configurations and monitored entities
+- Full localization support for all alert system components
+
 ## [1.9.37] - 2025-08-16
 
 ### 🔧 **Entity Categorization Fixes** 
