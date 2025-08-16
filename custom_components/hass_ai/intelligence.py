@@ -321,47 +321,74 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                 needs_thresholds = True
             
             if needs_thresholds:
-                # AI-generated thresholds prompt
-                threshold_prompt = (
-                    f"Proponi soglie di allerta intelligenti per l'entità: {entity_id}\n"
-                    f"Valore attuale: {current_value} {unit}\n"
-                    f"Tipo dispositivo: {device_class}\n"
-                    f"Dominio: {domain}\n\n"
-                    f"Genera 3 soglie di allerta (LOW, MEDIUM, HIGH) con valori specifici e appropriati.\n"
-                    f"Considera l'utilizzo pratico nella domotica e benessere:\n\n"
-                    f"ESEMPI PER TIPO:\n"
-                    f"• Batterie: LOW=30%, MEDIUM=20%, HIGH=10% (critico)\n"
-                    f"• Temperature casa: LOW=15°C, MEDIUM=10°C, HIGH=5°C (freddo) o LOW=28°C, MEDIUM=32°C, HIGH=35°C (caldo)\n"
-                    f"• Umidità: LOW=30%, MEDIUM=25%, HIGH=20% (secco) o LOW=70%, MEDIUM=80%, HIGH=90% (umido)\n"
-                    f"• Vento: LOW=20km/h, MEDIUM=40km/h, HIGH=60km/h (pericoloso)\n"
-                    f"• CPU/Sistema: LOW=70%, MEDIUM=85%, HIGH=95% (sovraccarico)\n"
-                    f"• Salute (battiti): LOW=50bpm, MEDIUM=40bpm, HIGH=35bpm (basso) o LOW=100bpm, MEDIUM=120bpm, HIGH=140bpm (alto)\n"
-                    f"• Update: Presenza aggiornamenti disponibili\n\n"
-                    f"SCEGLI VALORI REALISTICI per la domotica e considera il contesto dell'entità.\n\n"
-                    f"JSON: {{\"LOW\":{{\"value\":numero,\"condition\":\"condizione leggibile\",\"description\":\"descrizione del problema\"}},\"MEDIUM\":{{\"value\":numero,\"condition\":\"condizione leggibile\",\"description\":\"descrizione del problema\"}},\"HIGH\":{{\"value\":numero,\"condition\":\"condizione leggibile\",\"description\":\"descrizione del problema\"}}}}"
-                )
+                # Enhanced AI-generated thresholds prompt with binary sensor support
+                if domain == 'binary_sensor':
+                    threshold_prompt = (
+                        f"Analizza il sensore binario: {entity_id}\n"
+                        f"Stato attuale: {current_value}\n"
+                        f"Tipo dispositivo: {device_class}\n"
+                        f"Dominio: {domain}\n\n"
+                        f"Per sensori binari, determina quale stato rappresenta un PROBLEMA/PERICOLO:\n\n"
+                        f"ESEMPI:\n"
+                        f"• Batteria scarica: 'on' = problema (LOW)\n"
+                        f"• Problema/errore: 'on' = problema (MEDIUM)\n"
+                        f"• Fumo/gas: 'on' = pericolo (HIGH)\n"
+                        f"• Porta/finestra: 'on' = aperta (context-dependent)\n"
+                        f"• Connettività: 'off' = disconnesso (problema)\n\n"
+                        f"Rispondi in JSON: {{\"alert_state\":\"on/off\",\"severity\":\"LOW/MEDIUM/HIGH\",\"description\":\"descrizione problema\"}}"
+                    )
+                else:
+                    threshold_prompt = (
+                        f"🎯 ANALISI SOGLIE INTELLIGENTI per: {entity_id}\n"
+                        f"📊 Valore attuale: {current_value} {unit}\n"
+                        f"🏷️ Tipo dispositivo: {device_class}\n"
+                        f"🔧 Dominio: {domain}\n\n"
+                        f"🚨 Genera 3 soglie di allerta (LOW, MEDIUM, HIGH) specifiche per questa entità:\n\n"
+                        f"📋 ESEMPI PER CATEGORIA:\n"
+                        f"• 🔋 Batterie: LOW=30%, MEDIUM=20%, HIGH=10%\n"
+                        f"• 🌡️ Temperature casa: LOW=15°C, MEDIUM=10°C, HIGH=5°C (freddo) o LOW=28°C, MEDIUM=32°C, HIGH=35°C (caldo)\n"
+                        f"• 💧 Umidità: LOW=30%, MEDIUM=25%, HIGH=20% (secco) o LOW=70%, MEDIUM=80%, HIGH=90% (umido)\n"
+                        f"• 💨 Vento: LOW=20km/h, MEDIUM=40km/h, HIGH=60km/h\n"
+                        f"• 💻 CPU/Sistema: LOW=70%, MEDIUM=85%, HIGH=95%\n"
+                        f"• ❤️ Battiti cardiaci: LOW=50bpm, MEDIUM=40bpm, HIGH=35bpm (basso) o LOW=100bpm, MEDIUM=120bpm, HIGH=140bpm (alto)\n"
+                        f"• 📦 Update: disponibilità aggiornamenti\n\n"
+                        f"⚡ IMPORTANTE: Scegli valori REALISTICI per uso domestico!\n\n"
+                        f"JSON RICHIESTO: {{\"LOW\":{{\"value\":numero,\"condition\":\"< X o > Y\",\"description\":\"problema rilevato\"}},\"MEDIUM\":{{\"value\":numero,\"condition\":\"< X o > Y\",\"description\":\"problema rilevato\"}},\"HIGH\":{{\"value\":numero,\"condition\":\"< X o > Y\",\"description\":\"problema rilevato\"}}}}"
+                    )
                 
                 try:
-                    # Send to AI for threshold generation
+                    # Send to AI for threshold generation with enhanced logging
+                    _LOGGER.info(f"🤖 Generating AI thresholds for {entity_id} (domain: {domain}, device_class: {device_class})")
                     ai_response = await conversation_agent.async_process(threshold_prompt, None, None)
+                    
                     if ai_response and hasattr(ai_response, 'response') and ai_response.response:
                         # Try to parse AI response
                         import json
                         response_text = ai_response.response.speech.get('plain', {}).get('speech', '') if hasattr(ai_response.response, 'speech') else str(ai_response.response)
                         
+                        _LOGGER.debug(f"🤖 AI Response for {entity_id}: {response_text[:200]}...")
+                        
                         # Extract JSON from response
                         json_start = response_text.find('{')
                         json_end = response_text.rfind('}') + 1
                         if json_start >= 0 and json_end > json_start:
-                            threshold_data = json.loads(response_text[json_start:json_end])
-                            result.update({
-                                "entity_type": "ai_generated",
-                                "thresholds": threshold_data
-                            })
-                            return result
+                            try:
+                                threshold_data = json.loads(response_text[json_start:json_end])
+                                _LOGGER.info(f"✅ AI generated thresholds for {entity_id}: {threshold_data}")
+                                result.update({
+                                    "entity_type": "ai_generated",
+                                    "thresholds": threshold_data
+                                })
+                                return result
+                            except json.JSONDecodeError as je:
+                                _LOGGER.warning(f"❌ JSON parse error for {entity_id}: {je}")
+                        else:
+                            _LOGGER.warning(f"❌ No valid JSON found in AI response for {entity_id}")
+                    else:
+                        _LOGGER.warning(f"❌ Empty AI response for {entity_id}")
                             
                 except Exception as e:
-                    _LOGGER.debug(f"AI threshold generation failed for {entity_id}: {e}")
+                    _LOGGER.warning(f"❌ AI threshold generation failed for {entity_id}: {e}")
         
         # Fallback to basic thresholds for obvious cases
         if domain == 'binary_sensor':

@@ -668,10 +668,25 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
   async _createInputTextEntity() {
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     try {
-      // Crea l'entità input_text tramite Home Assistant
-      await this.hass.callService('input_text', 'reload');
+      // Controlla prima se l'entità esiste già
+      const entityExists = this.hass.states['input_text.hass_ai_alerts'];
       
-      // Prova a creare l'entità usando l'helper input_text
+      if (entityExists) {
+        this._showSimpleNotification(
+          isItalian ? '✅ Entità input_text.hass_ai_alerts già esistente!' : '✅ Input_text.hass_ai_alerts entity already exists!', 
+          'success'
+        );
+        
+        // Configura automaticamente l'entità esistente
+        await this._configureAlertService({
+          input_text_entity: 'input_text.hass_ai_alerts',
+          use_input_text: true
+        });
+        
+        return;
+      }
+      
+      // L'entità non esiste, proviamo a crearla
       const entityConfig = {
         name: 'HASS AI Alerts',
         min: 0,
@@ -680,48 +695,33 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         initial: isItalian ? 'Nessun alert attivo' : 'No active alerts'
       };
       
-      // Usa il servizio per creare l'helper (se disponibile)
       try {
-        await this.hass.callService('input_text', 'set_value', {
-          entity_id: 'input_text.hass_ai_alerts',
-          value: entityConfig.initial
+        await this.hass.callWS({
+          type: 'config/input_text/create',
+          name: 'HASS AI Alerts',
+          icon: 'mdi:alert-circle',
+          min: 0,
+          max: 1000,
+          initial: entityConfig.initial
         });
         
-        // Se il servizio funziona, l'entità esiste già
         this._showSimpleNotification(
-          isItalian ? '✅ Entità input_text già esistente!' : '✅ Input_text entity already exists!', 
+          isItalian ? '✅ Entità input_text.hass_ai_alerts creata con successo!' : '✅ Input_text.hass_ai_alerts entity created successfully!', 
           'success'
         );
-      } catch (setError) {
-        // L'entità non esiste, proviamo a crearla tramite storage
-        try {
-          await this.hass.callWS({
-            type: 'config/input_text/create',
-            name: 'HASS AI Alerts',
-            icon: 'mdi:alert-circle',
-            min: 0,
-            max: 1000,
-            initial: entityConfig.initial
-          });
-          
-          this._showSimpleNotification(
-            isItalian ? '✅ Entità input_text creata con successo!' : '✅ Input_text entity created successfully!', 
-            'success'
-          );
-          
-          // Configura automaticamente l'entità creata
-          await this._configureAlertService({
-            input_text_entity: 'input_text.hass_ai_alerts',
-            use_input_text: true
-          });
-          
-        } catch (createError) {
-          console.error('Failed to create input_text entity:', createError);
-          this._showSimpleNotification(
-            isItalian ? '⚠️ Non posso creare l\'entità automaticamente. Usa la configurazione manuale.' : '⚠️ Cannot create entity automatically. Use manual configuration.', 
-            'warning'
-          );
-        }
+        
+        // Configura automaticamente l'entità creata
+        await this._configureAlertService({
+          input_text_entity: 'input_text.hass_ai_alerts',
+          use_input_text: true
+        });
+        
+      } catch (createError) {
+        console.error('Failed to create input_text entity:', createError);
+        this._showSimpleNotification(
+          isItalian ? '⚠️ Non posso creare l\'entità automaticamente. Creala manualmente in Impostazioni > Dispositivi e Servizi > Helper > Input Text.' : '⚠️ Cannot create entity automatically. Create it manually in Settings > Devices & Services > Helpers > Input Text.', 
+          'warning'
+        );
       }
       
       // Ricarica lo status per aggiornare l'UI
@@ -3785,19 +3785,21 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       /* Mini alert thresholds in weight column */
       .alert-thresholds-mini {
         display: flex;
-        gap: 4px;
-        margin-top: 6px;
+        gap: 6px;
+        margin-top: 8px;
         flex-wrap: wrap;
       }
       
       .threshold-mini {
         display: flex;
         align-items: center;
-        gap: 2px;
-        font-size: 9px;
-        padding: 2px 4px;
-        border-radius: 3px;
+        gap: 3px;
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 6px;
         border: 1px solid transparent;
+        min-width: 60px;
+        justify-content: center;
       }
 
       .threshold-mini.clickable {
@@ -3834,13 +3836,15 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       }
       
       .threshold-mini .level-icon {
-        font-size: 8px;
+        font-size: 10px;
       }
       
       .threshold-mini .threshold-value {
         font-weight: 600;
         font-family: monospace;
-        font-size: 8px;
+        font-size: 10px;
+        min-width: 35px;
+        text-align: center;
       }
       
       .reset-button.compact {
