@@ -888,34 +888,13 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     
     try {
-      // Force update of alertStatus by checking entity state
-      const entity = this.hass.states['input_text.hass_ai_alerts'];
+      // Reload alert status completely
+      await this._loadAlertStatus();
       
-      if (entity) {
-        this.alertStatus = {
-          ...this.alertStatus,
-          input_text_exists: true,
-          input_text_value: entity.state,
-          input_text_entity: 'input_text.hass_ai_alerts'
-        };
-        
-        this._showMessage(
-          isItalian ? '🔄 Stato aggiornato' : '🔄 Status refreshed',
-          'success'
-        );
-      } else {
-        this.alertStatus = {
-          ...this.alertStatus,
-          input_text_exists: false,
-          input_text_value: '',
-          input_text_entity: 'input_text.hass_ai_alerts'
-        };
-        
-        this._showMessage(
-          isItalian ? '⚠️ Entità non trovata' : '⚠️ Entity not found',
-          'warning'
-        );
-      }
+      this._showMessage(
+        isItalian ? '🔄 Stato aggiornato' : '🔄 Status refreshed',
+        'success'
+      );
       
       // Force update of the UI
       this.requestUpdate();
@@ -2050,35 +2029,39 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                 <option value="ENHANCED">${isItalian ? 'Miglioramenti' : 'Enhanced'}</option>
               </select>
               <div class="weight-filter-container">
-                <label class="weight-filter-label">
-                  ${isItalian ? 'Filtro Peso Minimo' : 'Minimum Weight Filter'}
-                  <span class="weight-help">
-                    ${isItalian ? 
-                      '(0=Non importante, 5=Critico) - Filtra entità per importanza. Solo le entità con peso ≥ del valore saranno mostrate e monitorate per alert.' :
-                      '(0=Not important, 5=Critical) - Filter entities by importance. Only entities with weight ≥ value will be shown and monitored for alerts.'
-                    }
-                  </span>
-                </label>
-                <div class="weight-slider-row">
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="5" 
-                    step="1" 
-                    .value=${this.minWeight}
-                    @input=${(e) => this._saveMinWeightFilter(e.target.value)}
-                    class="weight-slider large"
-                    title="${isItalian ? 'Peso minimo' : 'Minimum weight'}: ${this.minWeight}"
-                  />
-                  <span class="weight-display large">${this.minWeight}</span>
+                <div class="weight-main-section">
+                  <label class="weight-filter-label">
+                    ${isItalian ? 'Filtro Peso Minimo' : 'Minimum Weight Filter'}
+                  </label>
+                  <div class="weight-slider-row">
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="5" 
+                      step="1" 
+                      .value=${this.minWeight}
+                      @input=${(e) => this._saveMinWeightFilter(e.target.value)}
+                      class="weight-slider large"
+                      title="${isItalian ? 'Peso minimo' : 'Minimum weight'}: ${this.minWeight}"
+                    />
+                    <span class="weight-display large">${this.minWeight}</span>
+                  </div>
                 </div>
-                <div class="weight-intervals-info">
-                  <small style="color: #666; font-style: italic;">
+                <div class="weight-info-section">
+                  <div class="weight-help-text">
                     ${isItalian ? 
-                      '⏱️ Intervalli di controllo: peso 5: 30 secondi, peso 4: 1 minuto, peso 3: 5 minuti, peso 2: 15 minuti, peso 1: 30 minuti' :
-                      '⏱️ Check intervals: weight 5: 30 seconds, weight 4: 1 minute, weight 3: 5 minutes, weight 2: 15 minutes, weight 1: 30 minutes'
+                      '(0=Non importante, 5=Critico) - Solo entità con peso ≥ del valore saranno mostrate e monitorate.' :
+                      '(0=Not important, 5=Critical) - Only entities with weight ≥ value will be shown and monitored.'
                     }
-                  </small>
+                  </div>
+                  <div class="weight-intervals-info">
+                    <small style="color: #666; font-style: italic;">
+                      ${isItalian ? 
+                        '⏱️ Intervalli: peso 5: 30s, peso 4: 1min, peso 3: 5min, peso 2: 15min, peso 1: 30min' :
+                        '⏱️ Intervals: weight 5: 30s, weight 4: 1min, weight 3: 5min, weight 2: 15min, weight 1: 30min'
+                      }
+                    </small>
+                  </div>
                 </div>
               </div>
               ${Object.keys(this.entities).length > 0 ? html`
@@ -3942,17 +3925,19 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       /* New large weight filter styles */
       .weight-filter-container {
         display: flex;
-        flex-direction: column;
-        gap: 12px;
+        flex-direction: row;
+        align-items: center;
+        gap: 20px;
         background: var(--card-background-color);
         border: 3px solid #ff4444;
-        border-radius: 12px;
-        padding: 24px;
+        border-radius: 8px;
+        padding: 16px 32px;
         margin: 12px 0;
         box-shadow: 0 2px 8px rgba(255, 68, 68, 0.15);
         position: relative;
         width: 100%;
         max-width: none;
+        min-height: auto;
       }
       
       .weight-filter-container::before {
@@ -3970,13 +3955,32 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         letter-spacing: 0.5px;
       }
       
+      .weight-main-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 0 0 auto;
+        min-width: 200px;
+      }
+      
+      .weight-info-section {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1;
+        font-size: 12px;
+      }
+      
+      .weight-help-text {
+        color: var(--secondary-text-color);
+        line-height: 1.3;
+        font-style: italic;
+      }
+      
       .weight-filter-label {
         font-weight: 600;
         font-size: 14px;
         color: var(--primary-text-color);
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
       }
       
       .weight-help {
@@ -4551,9 +4555,12 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
           ` : ''}
 
           <div class="alert-example">
-            <h4>${isItalian ? '📝 Esempio di Messaggio Alert' : '📝 Alert Message Example'}</h4>
+            <h4>${isItalian ? '📝 Contenuto Attuale Alert' : '📝 Current Alert Content'}</h4>
             <div class="example-message">
-              ${this._generateAlertMessageExample()}
+              ${this.alertStatus.input_text_exists ? 
+                this.alertStatus.input_text_value || (isItalian ? 'Nessun contenuto' : 'No content') :
+                (isItalian ? 'Entità non disponibile' : 'Entity not available')
+              }
             </div>
           </div>
         </div>

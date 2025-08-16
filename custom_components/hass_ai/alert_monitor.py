@@ -275,8 +275,9 @@ input_text:
         thresholds = custom_thresholds or default_thresholds
         
         if not thresholds:
-            # Auto-generate thresholds based on current state
-            thresholds = await self._auto_generate_thresholds(entity_id, entity_data)
+            # Skip entities without specified thresholds - don't auto-generate
+            _LOGGER.debug(f"Skipping {entity_id} - no thresholds specified")
+            return
             
         self.monitored_entities[entity_id] = {
             "weight": entity_data.get("overall_weight", 3),
@@ -395,6 +396,11 @@ input_text:
         
         for entity_id, config in self.monitored_entities.items():
             if not config.get("enabled", True):
+                continue
+                
+            # Skip entities without valid thresholds
+            thresholds = config.get("thresholds", {})
+            if not thresholds or not any(thresholds.values()):
                 continue
                 
             # Calculate check interval based on weight
@@ -621,6 +627,17 @@ FORMAT: [emoji] [critical status] + [main detail] + [recommended action]"""
                     alert_entities[entity_id] = data
                 else:
                     _LOGGER.debug(f"Entity {entity_id} has ALERTS category but is not suitable for monitoring (text/variable values)")
+        
+        # Remove entities without valid thresholds from monitored_entities
+        entities_to_remove = []
+        for entity_id, config in self.monitored_entities.items():
+            thresholds = config.get("thresholds", {})
+            if not thresholds or not any(thresholds.values()):
+                entities_to_remove.append(entity_id)
+                
+        for entity_id in entities_to_remove:
+            del self.monitored_entities[entity_id]
+            _LOGGER.debug(f"Removed {entity_id} from monitoring - no valid thresholds")
                 
         # Configure new alert entities
         for entity_id, data in alert_entities.items():
