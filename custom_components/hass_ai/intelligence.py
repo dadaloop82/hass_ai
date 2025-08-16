@@ -745,7 +745,8 @@ async def get_entities_importance_batched(
     msg_id: str = None,
     conversation_agent: str = None,
     language: str = "en",  # Add language parameter
-    analysis_type: str = "importance"  # Add analysis type parameter
+    analysis_type: str = "importance",  # Add analysis type parameter
+    cancellation_check: callable = None  # Function to check if operation is cancelled
 ) -> list[dict]:
     """Calculate the importance of multiple entities using external AI providers in batches with dynamic size reduction.
     
@@ -800,12 +801,10 @@ async def get_entities_importance_batched(
     
     hass_id = id(hass)
     while remaining_states:
-        # STOP: controllo se l'operazione è stata cancellata
-        if hasattr(hass, 'data') and 'hass_ai' in hass.data:
-            active_ops = hass.data['hass_ai'].get('_active_operations')
-            if active_ops and hass_id in active_ops and active_ops[hass_id].get('cancelled'):
-                _LOGGER.info("Batch analysis STOPPED by user request (immediate)")
-                break
+        # STOP: Check if operation was cancelled using the provided callback
+        if cancellation_check and cancellation_check():
+            _LOGGER.info("🛑 Batch analysis STOPPED by user request (immediate)")
+            break
         overall_batch_num += 1
         
         # Take entities for current batch
@@ -831,7 +830,7 @@ async def get_entities_importance_batched(
         
         success, batch_stats = await _process_single_batch(
             hass, batch_states, overall_batch_num, ai_provider, 
-            connection, msg_id, conversation_agent, all_results, language, use_compact_mode, analysis_type
+            connection, msg_id, conversation_agent, all_results, language, use_compact_mode, analysis_type, cancellation_check
         )
         
         # Accumulate token statistics
@@ -960,9 +959,15 @@ async def _process_single_batch(
     all_results: list,
     language: str = "en",  # Add language parameter
     use_compact_prompt: bool = False,  # Add compact mode flag
-    analysis_type: str = "importance"  # Add analysis type parameter
+    analysis_type: str = "importance",  # Add analysis type parameter
+    cancellation_check: callable = None  # Function to check if operation is cancelled
 ) -> tuple[bool, dict]:
     """Process a single batch and return success status and token statistics."""
+    
+    # Check for cancellation before processing
+    if cancellation_check and cancellation_check():
+        _LOGGER.info(f"Batch {batch_num} cancelled before processing")
+        return False, {"prompt_tokens": 0, "response_tokens": 0, "total_tokens": 0}
     
     # Create detailed entity information for AI analysis
     entity_details = []
@@ -1085,12 +1090,12 @@ async def _process_single_batch(
                     rating = int(item["rating"])
                     if 0 <= rating <= 5:
                         # Get category - can be string or array
-                        category = item.get("category", ["UNKNOWN"])
+                        category = item.get("category", ["DATA"])  # Default to DATA instead of UNKNOWN
                         if isinstance(category, str):
                             # Convert single category to array
                             category = [category]
                         elif not isinstance(category, list):
-                            category = ["UNKNOWN"]
+                            category = ["DATA"]  # Default to DATA instead of UNKNOWN
                         
                         # Validate all categories (now includes SERVICE)
                         valid_categories = ["DATA", "CONTROL", "ALERTS", "SERVICE"]
@@ -1257,7 +1262,7 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
     # Use auto-categorization if state is available, otherwise fallback to domain-based
     if state:
         categories, management_type = _auto_categorize_entity(state)
-        category = categories[0] if categories else "DATA"  # Use first category for compatibility
+        category = categories if categories else ["DATA"]  # Use all categories, not just the first one
     else:
         # Fallback domain-based categorization: GENERIC, sempre almeno DATA
         entity_lower = entity_id.lower()
@@ -1442,7 +1447,7 @@ async def _query_local_agent(hass: HomeAssistant, prompt: str, conversation_agen
         _LOGGER.error(f"💡 Check Settings > Voice Assistants > Conversation Agent")
         # Return a simple structured response as fallback
         return """[
-{"entity_id": "fallback", "rating": 2, "reason": "Servizio conversazione non disponibile - verifica configurazione agente in Impostazioni > Assistenti vocali"}
+{"entity_id": "fallback", "rating": 2, "reason": "Servizio conversazione non disponibile - verifica configurazione agente in Impostazioni > Assistenti vocali", "category": ["DATA"], "management_type": "USER"}
 ]"""
 
 
@@ -1478,7 +1483,7 @@ async def find_entity_correlations(hass: HomeAssistant, target_entity: dict, all
     try:
         target_id = target_entity["entity_id"]
         target_weight = target_entity["ai_weight"]
-        target_category = target_entity.get("category", "UNKNOWN")
+        target_category = target_entity.get("category", ["DATA"])  # Default to DATA instead of UNKNOWN
         target_domain = target_id.split('.')[0]
         
         # Smart candidate filtering based on target entity type

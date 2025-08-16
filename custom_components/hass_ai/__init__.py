@@ -181,7 +181,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Schedule periodic scan
     async def periodic_scan(now):
         _LOGGER.debug("Performing periodic HASS AI scan")
-        # TODO: Implement automatic background scanning if needed
+        # Periodic scanning can be implemented in future versions if needed
         pass
 
     entry.async_on_unload(event.async_track_time_interval(hass, periodic_scan, scan_interval))
@@ -191,8 +191,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info(f"HASS AI integration loaded successfully with scan interval: {scan_interval_days} days")
     
-    _LOGGER.info("🏠 HASS AI v1.9.5 - Unknown Entities Styling + Incremental Scanning")
-    _LOGGER.info("� Gray out unknown/unavailable entities, incremental scans for new entities")
+    _LOGGER.info("🏠 HASS AI v1.9.37 - Fixed Entity Categorization + Multi-Category Support")
+    _LOGGER.info("🔧 Fixed UNKNOWN entities issue, all entities now get proper multiple categories")
     
     return True
 
@@ -316,9 +316,16 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
         language = msg.get("language", "en")
         _LOGGER.info(f"Using language: {language}")
         
+        # Create cancellation check function
+        def is_cancelled():
+            cancelled = hass_id in _active_operations and _active_operations[hass_id].get("cancelled", False)
+            if cancelled:
+                _LOGGER.info(f"🛑 Cancellation detected for hass_id {hass_id}")
+            return cancelled
+        
         # Get importance for all entities in batches
         importance_results = await get_entities_importance_batched(
-            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"], conversation_agent, language, analysis_type
+            hass, filtered_states, 10, ai_provider, api_key, connection, msg["id"], conversation_agent, language, analysis_type, is_cancelled
         )
 
         # Send each result as it's processed
@@ -792,18 +799,18 @@ async def handle_stop_operation(hass: HomeAssistant, connection, msg):
         hass_id = id(hass)
         
         if hass_id in _active_operations:
-            # Cancel the active operation
+            # Mark the active operation as cancelled
             operation_info = _active_operations[hass_id]
             operation_info["cancelled"] = True
             
-            # If there's a task handle, cancel it
+            _LOGGER.info(f"🛑 Marking operation as cancelled: {operation_info.get('type', 'unknown')}")
+            
+            # If there's a task handle, cancel it (but keep the operation info for checking)
             if "task" in operation_info:
                 operation_info["task"].cancel()
+                _LOGGER.info("🛑 Cancelled task handle")
             
-            # Clean up the operation
-            del _active_operations[hass_id]
-            
-            _LOGGER.info(f"Stopped active operation: {operation_info.get('type', 'unknown')}")
+            # Don't delete the operation yet - let the function check the cancelled flag first
             
             connection.send_message(websocket_api.result_message(msg["id"], {
                 "success": True,

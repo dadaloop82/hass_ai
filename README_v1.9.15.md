@@ -1,6 +1,6 @@
 # HASS AI - Advanced Entity Analysis and Automation Assistant
 
-**Version 1.9.37** | *Enhanced AI-Powered Entity Management for Home Assistant*
+**Version 1.9.15** | *Enhanced AI-Powered Entity Management for Home Assistant*
 
 HASS AI is a sophisticated Home Assistant custom component that leverages artificial intelligence to analyze, categorize, and optimize entity management across your smart home ecosystem.
 

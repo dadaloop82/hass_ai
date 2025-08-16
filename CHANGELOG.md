@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.37] - 2025-08-16
+
+### 🔧 **Entity Categorization Fixes** 
+- **Fixed UNKNOWN entities issue**: All entities now receive proper multiple categories instead of being marked as "unknown"
+- **Multi-category support enhanced**: Entities can now properly have multiple categories (e.g., `["DATA", "ALERTS"]`)
+- **Improved fallback system**: When AI response fails, entities get proper domain-based categorization
+- **Battery sensors fixed**: Now correctly assigned `["DATA", "ALERTS"]` instead of single category
+- **Conversation agents fixed**: Properly categorized as `["CONTROL"]` with `SERVICE` management
+
+#### Technical Improvements
+- Fixed `_create_fallback_result()` to use all categories instead of just the first one
+- Removed invalid `"UNKNOWN"` category - now defaults to `["DATA"]`
+- Enhanced conversation agent fallback response with proper JSON structure
+- Fixed correlation analysis to handle multiple categories correctly
+
+#### Categories Now Working Properly
+- **Battery sensors**: `["DATA", "ALERTS"]` with `USER` management
+- **Temperature sensors**: `["DATA", "ALERTS"]` with `USER` management  
+- **Lights/Switches**: `["CONTROL"]` with `USER` management
+- **Conversation agents**: `["CONTROL"]` with `SERVICE` management
+- **Update entities**: `["DATA", "ALERTS", "SERVICE"]` with `SERVICE` management
+- **Health sensors**: `["DATA", "ALERTS"]` with `USER` management
+
 ## [1.9.2] - 2025-08-12
 
 ### 🎨 UI Improvements & Localization Fixes

@@ -1,4 +1,4 @@
-// HASS AI Panel v1.9.30 - Updated 2025-08-13T17:00:00Z - CACHE BUSTER
+// HASS AI Panel v1.9.37 - Updated 2025-08-16T15:30:00Z - FIXED ENTITY CATEGORIZATION
 // Features: Auto-save correlations + Load correlations on startup + Progress tracking + ALERTS Category + Real-time Token Tracking + Enhanced Analysis + Alert Thresholds + Stop Operation
 // Force reload timestamp: 1723572000000
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
@@ -63,7 +63,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.15 loaded - Enhanced correlations + auto-save + ALERTS monitoring + Real-time Token Tracking + Enhanced Analysis!');
+    console.log('🚀 HASS AI Panel v1.9.37 loaded - Fixed entity categorization! All entities now get proper multiple categories instead of UNKNOWN');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
     this._loadCategoryFilter();
@@ -957,7 +957,7 @@ class HassAiPanel extends LitElement {
     // Translations based on browser language or HA language
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     const t = isItalian ? {
-  title: "Pannello di Controllo HASS AI v1.9.36",
+  title: "Pannello di Controllo HASS AI v1.9.37",
       description: "Analizza le tue entità, insegna all'IA e personalizza i pesi per ottimizzare la tua domotica. L'AI provider è configurato nelle impostazioni dell'integrazione.",
       scan_button: "Avvia Nuova Scansione",
       scanning_button: "Scansione in corso...",
@@ -969,7 +969,7 @@ class HassAiPanel extends LitElement {
       your_weight: "Tuo Peso",
       weight_legend: "(0=Ignora, 5=Critico)"
     } : {
-      title: "HASS AI Control Panel v1.9.26",
+      title: "HASS AI Control Panel v1.9.37",
       description: "Analyze your entities, teach the AI, and customize weights to optimize your smart home. AI provider is configured in integration settings.",
       scan_button: "Start New Scan",
       scanning_button: "Scanning...",
