@@ -997,61 +997,9 @@ class HassAiPanel extends LitElement {
       weight_legend: "(0=Ignore, 5=Critical)"
     };
 
-    // Function to get category info with localization - supports multiple categories
+    // Function to get category info with localization - now handles single categories better
     const getCategoryInfo = (category) => {
-      // Handle multiple categories
-      if (Array.isArray(category)) {
-        if (category.length === 0) {
-          return { 
-            icon: 'mdi:help-circle', 
-            color: '#9E9E9E', 
-            label: isItalian ? 'Sconosciuto' : 'Unknown' 
-          };
-        }
-        
-        // For multiple categories, show them as combined label
-        const categoryLabels = category.map(cat => {
-          switch (cat) {
-            case 'DATA': return isItalian ? 'Dati' : 'Data';
-            case 'CONTROL': return isItalian ? 'Controllo' : 'Control';
-            case 'ALERTS': return isItalian ? 'Allerte' : 'Alerts';
-            case 'SERVICE': return isItalian ? 'Servizio' : 'Service';
-            default: return cat;
-          }
-        });
-        
-        // Use icon of first category, combine labels
-        const firstCategory = category[0];
-        let icon = 'mdi:help-circle';
-        let color = '#9E9E9E';
-        
-        switch (firstCategory) {
-          case 'DATA':
-            icon = 'mdi:chart-line';
-            color = '#2196F3';
-            break;
-          case 'CONTROL':
-            icon = 'mdi:tune';
-            color = '#4CAF50';
-            break;
-          case 'ALERTS':
-            icon = 'mdi:alert-circle';
-            color = '#FF9800';
-            break;
-          case 'SERVICE':
-            icon = 'mdi:cog';
-            color = '#9C27B0';
-            break;
-        }
-        
-        return {
-          icon: icon,
-          color: color,
-          label: categoryLabels.join(' + ')
-        };
-      }
-      
-      // Handle single category (legacy support)
+      // Handle single category (most common case now)
       switch (category) {
         case 'DATA':
           return { 
@@ -1341,9 +1289,24 @@ class HassAiPanel extends LitElement {
                         </div>
                       </td>
                       <td>
-                        <div class="category-badge" style="color: ${categoryInfo.color}">
-                          <ha-icon icon="${categoryInfo.icon}"></ha-icon>
-                          <span>${categoryInfo.label}</span>
+                        <div class="category-badges">
+                          ${Array.isArray(entity.category) ? 
+                            entity.category.map(cat => {
+                              const catInfo = getCategoryInfo(cat);
+                              return html`
+                                <div class="category-badge" style="color: ${catInfo.color}">
+                                  <ha-icon icon="${catInfo.icon}"></ha-icon>
+                                  <span>${catInfo.label}</span>
+                                </div>
+                              `;
+                            }) :
+                            html`
+                              <div class="category-badge" style="color: ${categoryInfo.color}">
+                                <ha-icon icon="${categoryInfo.icon}"></ha-icon>
+                                <span>${categoryInfo.label}</span>
+                              </div>
+                            `
+                          }
                         </div>
                       </td>
                       <td><span class="weight-badge weight-${entity.overall_weight}">${entity.overall_weight}</span></td>
@@ -1752,6 +1715,13 @@ class HassAiPanel extends LitElement {
         color: white;
       }
       
+      .category-badges {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: flex-start;
+      }
+      
       .category-badge {
         display: flex;
         align-items: center;
@@ -1759,6 +1729,10 @@ class HassAiPanel extends LitElement {
         font-size: 12px;
         font-weight: 500;
         white-space: nowrap;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
       }
       
       .category-badge ha-icon {
