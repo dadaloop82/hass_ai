@@ -359,6 +359,22 @@ input_text:
             
         self.is_monitoring = True
         self._monitor_task = asyncio.create_task(self._monitoring_loop())
+        _LOGGER.info("🔔 Alert monitoring started")
+        
+    async def _stop_monitoring(self):
+        """Stop the monitoring loop"""
+        if not self.is_monitoring:
+            return
+            
+        self.is_monitoring = False
+        if self._monitor_task:
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
+            self._monitor_task = None
+        _LOGGER.info("🔔 Alert monitoring stopped")
         
     async def _monitoring_loop(self):
         """Main monitoring loop"""

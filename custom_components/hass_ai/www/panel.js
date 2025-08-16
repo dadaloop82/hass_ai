@@ -73,7 +73,7 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.37 loaded - Fixed entity categorization! All entities now get proper multiple categories instead of UNKNOWN');
+    console.log('🚀 HASS AI Panel v1.9.39 loaded - Real-Time Filtered Alert Monitoring! Alerts now sync with frontend filters in real-time');
     this.language = this.hass.language || 'en';
     this._loadMinWeightFilter();
     this._loadCategoryFilter();
@@ -152,6 +152,32 @@ class HassAiPanel extends LitElement {
       level: 'MEDIUM',
       customized: false
     };
+  }
+
+  _getEntityThreshold(entityId, level) {
+    // Get threshold value for specific level (WARNING, ALERT, CRITICAL)
+    // First check if entity is in alertStatus.active_alerts with thresholds
+    const alertStatus = this.alertStatus.active_alerts?.[entityId];
+    if (alertStatus?.thresholds?.[level] !== undefined) {
+      return alertStatus.thresholds[level];
+    }
+    
+    // Check entities data for thresholds
+    const entity = this.entities[entityId];
+    if (entity?.thresholds?.[level] !== undefined) {
+      return entity.thresholds[level];
+    }
+    
+    // Check auto_thresholds
+    if (entity?.auto_thresholds?.thresholds) {
+      const levelMap = { 'WARNING': 'LOW', 'ALERT': 'MEDIUM', 'CRITICAL': 'HIGH' };
+      const autoLevel = levelMap[level];
+      if (entity.auto_thresholds.thresholds[autoLevel]) {
+        return entity.auto_thresholds.thresholds[autoLevel].condition;
+      }
+    }
+    
+    return null; // Will show "Auto" in UI
   }
 
   async _loadAlertStatus() {
@@ -1294,7 +1320,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     // Translations based on browser language or HA language
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     const t = isItalian ? {
-  title: "Pannello di Controllo HASS AI v1.9.37",
+  title: "Pannello di Controllo HASS AI v1.9.39",
       description: "Analizza le tue entità, insegna all'IA e personalizza i pesi per ottimizzare la tua domotica. L'AI provider è configurato nelle impostazioni dell'integrazione.",
       scan_button: "Avvia Nuova Scansione",
       scanning_button: "Scansione in corso...",
@@ -1306,7 +1332,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       your_weight: "Tuo Peso",
       weight_legend: "(0=Ignora, 5=Critico)"
     } : {
-      title: "HASS AI Control Panel v1.9.37",
+      title: "HASS AI Control Panel v1.9.39",
       description: "Analyze your entities, teach the AI, and customize weights to optimize your smart home. AI provider is configured in integration settings.",
       scan_button: "Start New Scan",
       scanning_button: "Scanning...",
@@ -1528,17 +1554,30 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                 <option value="SERVICE">${isItalian ? 'Servizio' : 'Service'}</option>
                 <option value="ENHANCED">${isItalian ? 'Miglioramenti' : 'Enhanced'}</option>
               </select>
-              <input 
-                type="range" 
-                min="0" 
-                max="5" 
-                step="1" 
-                .value=${this.minWeight}
-                @input=${(e) => this._saveMinWeightFilter(e.target.value)}
-                class="weight-slider compact"
-                title="${isItalian ? 'Peso minimo' : 'Minimum weight'}: ${this.minWeight}"
-              />
-              <span class="weight-display">${this.minWeight}</span>
+              <div class="weight-filter-container">
+                <label class="weight-filter-label">
+                  ${isItalian ? 'Filtro Peso Minimo' : 'Minimum Weight Filter'}
+                  <span class="weight-help">
+                    ${isItalian ? 
+                      '(0=Non importante, 5=Critico) - Filtra entità per importanza. Solo le entità con peso ≥ del valore saranno mostrate e monitorate per alert.' :
+                      '(0=Not important, 5=Critical) - Filter entities by importance. Only entities with weight ≥ value will be shown and monitored for alerts.'
+                    }
+                  </span>
+                </label>
+                <div class="weight-slider-row">
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="5" 
+                    step="1" 
+                    .value=${this.minWeight}
+                    @input=${(e) => this._saveMinWeightFilter(e.target.value)}
+                    class="weight-slider large"
+                    title="${isItalian ? 'Peso minimo' : 'Minimum weight'}: ${this.minWeight}"
+                  />
+                  <span class="weight-display large">${this.minWeight}</span>
+                </div>
+              </div>
               ${Object.keys(this.entities).length > 0 ? html`
                 <mwc-button 
                   outlined
@@ -1577,6 +1616,11 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                     <th>${t.ai_weight}</th>
                     <th>${t.reason}</th>
                     <th>${t.your_weight} <span class="legend">${t.weight_legend}</span></th>
+                    ${this.categoryFilter === 'ALERTS' ? html`
+                      <th class="alert-threshold-header">⚠️ WARNING</th>
+                      <th class="alert-threshold-header">🚨 ALERT</th>
+                      <th class="alert-threshold-header">🔥 CRITICAL</th>
+                    ` : ''}
                   </tr>
                 </thead>
                 <tbody>
@@ -1745,6 +1789,27 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                           `)}
                         </ha-select>
                       </td>
+                      ${this.categoryFilter === 'ALERTS' && (Array.isArray(entity.category) ? entity.category.includes('ALERTS') : entity.category === 'ALERTS') ? html`
+                        <td class="alert-threshold-cell warning">
+                          <span class="threshold-value">
+                            ${this._getEntityThreshold(entity.entity_id, 'WARNING') || 'Auto'}
+                          </span>
+                        </td>
+                        <td class="alert-threshold-cell alert">
+                          <span class="threshold-value">
+                            ${this._getEntityThreshold(entity.entity_id, 'ALERT') || 'Auto'}
+                          </span>
+                        </td>
+                        <td class="alert-threshold-cell critical">
+                          <span class="threshold-value">
+                            ${this._getEntityThreshold(entity.entity_id, 'CRITICAL') || 'Auto'}
+                          </span>
+                        </td>
+                      ` : this.categoryFilter === 'ALERTS' ? html`
+                        <td class="alert-threshold-cell disabled" colspan="3">
+                          <span class="threshold-na">${isItalian ? 'Non applicabile' : 'Not applicable'}</span>
+                        </td>
+                      ` : ''}
                     </tr>
                     `;
                   })}
@@ -1956,7 +2021,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         border: 1px solid var(--divider-color, #e0e0e0);
         border-radius: 6px;
         padding: 12px;
-        margin: 16px 0;
+        margin: 0;
         font-size: 14px;
         color: var(--secondary-text-color);
       }
@@ -3283,6 +3348,47 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         height: 4px;
       }
       
+      /* New large weight filter styles */
+      .weight-filter-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 12px;
+        margin: 8px 0;
+      }
+      
+      .weight-filter-label {
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--primary-text-color);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      
+      .weight-help {
+        font-weight: 400;
+        font-size: 11px;
+        color: var(--secondary-text-color);
+        line-height: 1.3;
+        font-style: italic;
+      }
+      
+      .weight-slider-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      .weight-slider.large {
+        flex: 1;
+        height: 8px;
+        min-width: 150px;
+      }
+      
       .weight-display {
         display: inline-flex;
         align-items: center;
@@ -3294,6 +3400,60 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         border-radius: 50%;
         font-weight: 600;
         font-size: 12px;
+      }
+      
+      .weight-display.large {
+        min-width: 32px;
+        height: 32px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      
+      /* Alert threshold columns */
+      .alert-threshold-header {
+        text-align: center;
+        font-size: 12px;
+        padding: 8px 4px;
+        min-width: 80px;
+        background: var(--secondary-background-color);
+      }
+      
+      .alert-threshold-cell {
+        text-align: center;
+        padding: 8px 4px;
+        font-size: 11px;
+        border-left: 2px solid transparent;
+      }
+      
+      .alert-threshold-cell.warning {
+        border-left-color: #ff9800;
+        background: rgba(255, 152, 0, 0.1);
+      }
+      
+      .alert-threshold-cell.alert {
+        border-left-color: #f44336;
+        background: rgba(244, 67, 54, 0.1);
+      }
+      
+      .alert-threshold-cell.critical {
+        border-left-color: #d32f2f;
+        background: rgba(211, 47, 47, 0.1);
+      }
+      
+      .alert-threshold-cell.disabled {
+        background: var(--disabled-color);
+        color: var(--secondary-text-color);
+        font-style: italic;
+      }
+      
+      .threshold-value {
+        font-weight: 600;
+        font-family: monospace;
+      }
+      
+      .threshold-na {
+        font-size: 10px;
+        opacity: 0.7;
       }
       
       .reset-button.compact {
@@ -3505,39 +3665,6 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
               </span>
             </div>
           </div>
-        </div>
-
-        <!-- Debug Section for ALERTS entities -->
-        <div class="debug-section">
-          <h3>${isItalian ? '🐛 Debug: Entità ALERTS Visibili (Filtrate)' : '🐛 Debug: Visible ALERTS Entities (Filtered)'}</h3>
-          ${alertEntities.length > 0 ? html`
-            <div class="debug-info">
-              <p>${isItalian ? 
-                `Trovate ${alertEntities.length} entità ALERTS visibili con filtro peso ≥ ${this.minWeight} e categoria "${this.categoryFilter}":` : 
-                `Found ${alertEntities.length} visible ALERTS entities with weight ≥ ${this.minWeight} and category "${this.categoryFilter}":`
-              }</p>
-              <ul class="debug-list">
-                ${alertEntities.map(([entityId, entity]) => html`
-                  <li>
-                    <strong>${entityId}</strong> 
-                    (${isItalian ? 'Peso' : 'Weight'}: ${entity.overall_weight || 'N/A'}, 
-                     ${isItalian ? 'Stato' : 'State'}: ${this.hass.states[entityId]?.state || 'unknown'})
-                  </li>
-                `)}
-              </ul>
-            </div>
-          ` : html`
-            <div class="debug-warning">
-              <p>⚠️ ${isItalian ? 
-                `Nessuna entità ALERTS visibile con peso ≥ ${this.minWeight} e categoria "${this.categoryFilter}".` : 
-                `No ALERTS entities visible with weight ≥ ${this.minWeight} and category "${this.categoryFilter}".`
-              }</p>
-              <p>${isItalian ? 
-                'Prova a ridurre il peso minimo o cambiare il filtro di categoria, oppure esegui una nuova analisi AI.' : 
-                'Try reducing the minimum weight or changing the category filter, or run a new AI analysis.'
-              }</p>
-            </div>
-          `}
         </div>
 
         <div class="notification-config">

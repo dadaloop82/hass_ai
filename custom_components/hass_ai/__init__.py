@@ -956,6 +956,7 @@ async def handle_get_alert_status(hass: HomeAssistant, connection: websocket_api
     vol.Optional("use_input_text"): bool,
     vol.Optional("input_text_entity"): str,
     vol.Optional("entity_thresholds"): dict,
+    vol.Optional("monitoring_enabled"): bool,
 })
 @websocket_api.async_response
 async def handle_configure_alert_service(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
@@ -975,6 +976,13 @@ async def handle_configure_alert_service(hass: HomeAssistant, connection: websoc
                 
             if "input_text_entity" in msg:
                 alert_monitor.input_text_entity = msg["input_text_entity"]
+            
+            # Handle monitoring enable/disable
+            if "monitoring_enabled" in msg:
+                if msg["monitoring_enabled"]:
+                    await alert_monitor._start_monitoring()
+                else:
+                    await alert_monitor._stop_monitoring()
             
             # Ensure input_text entity if using that mode
             if alert_monitor.use_input_text:
