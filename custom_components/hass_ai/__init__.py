@@ -163,6 +163,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_load_alert_thresholds)
     websocket_api.async_register_command(hass, handle_get_alert_status)
     websocket_api.async_register_command(hass, handle_configure_alert_service)
+    websocket_api.async_register_command(hass, handle_update_filtered_alerts)
     websocket_api.async_register_command(hass, handle_clear_storage)
     websocket_api.async_register_command(hass, handle_stop_operation)
 
@@ -848,6 +849,77 @@ async def handle_stop_operation(hass: HomeAssistant, connection, msg):
         _LOGGER.error(f"Error stopping operation: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "stop_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/update_filtered_alerts",
+    vol.Required("min_weight"): int,
+    vol.Required("category_filter"): str,
+})
+@websocket_api.async_response
+async def handle_update_filtered_alerts(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle updating monitored entities based on filtered entities from frontend."""
+    try:
+        min_weight = msg["min_weight"]
+        category_filter = msg["category_filter"]
+        
+        # Load current AI results
+        ai_results = await _load_ai_results(hass)
+        
+        if not ai_results:
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "success": False,
+                "message": "No AI results available"
+            }))
+            return
+        
+        # Filter entities based on criteria
+        filtered_entities = []
+        
+        for entity_id, data in ai_results.items():
+            if isinstance(data, dict):
+                # Apply weight filter
+                overall_weight = data.get("overall_weight", 0)
+                if overall_weight < min_weight:
+                    continue
+                
+                # Apply category filter
+                category = data.get("category", "").upper()
+                if category_filter != "ALL" and category != category_filter:
+                    continue
+                
+                # Only include ALERTS category entities for monitoring
+                if category == "ALERTS":
+                    filtered_entities.append({
+                        "entity_id": entity_id,
+                        "category": category,
+                        "overall_weight": overall_weight,
+                        "analysis": data.get("analysis", ""),
+                        "threshold": data.get("threshold", "NORMAL")
+                    })
+        
+        # Update alert monitor with filtered entities
+        entry_id = next(iter(hass.data[DOMAIN]))
+        alert_monitor = hass.data[DOMAIN][entry_id].get("alert_monitor")
+        
+        if alert_monitor:
+            # Create a results dict in the format expected by update_monitored_entities
+            results_dict = {entity["entity_id"]: entity for entity in filtered_entities}
+            await alert_monitor.update_monitored_entities(results_dict)
+            
+            _LOGGER.info(f"🔔 Updated alert monitoring with {len(filtered_entities)} filtered entities (weight ≥ {min_weight}, category: {category_filter})")
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {
+            "success": True,
+            "filtered_count": len(filtered_entities),
+            "message": f"Updated monitoring with {len(filtered_entities)} entities"
+        }))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error updating filtered alerts: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "update_error", str(e)
         ))
 
 

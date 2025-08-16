@@ -164,6 +164,105 @@ input_text:
         except Exception as e:
             _LOGGER.error(f"Error updating input_text: {e}")
             
+    def is_valid_alert_entity(self, entity_id: str, entity_data: Dict) -> bool:
+        """
+        Determine if an entity is suitable for alert monitoring.
+        Only numeric, boolean, or predefined value entities are valid.
+        """
+        domain = entity_id.split('.')[0]
+        state = self.hass.states.get(entity_id)
+        
+        if not state:
+            return False
+            
+        current_state = state.state
+        attributes = state.attributes or {}
+        
+        # Skip unavailable or unknown states
+        if current_state in [STATE_UNKNOWN, STATE_UNAVAILABLE, None]:
+            return False
+            
+        # Domain-based validation
+        if domain == "sensor":
+            # Numeric sensors with units are good candidates
+            unit = attributes.get("unit_of_measurement")
+            device_class = attributes.get("device_class")
+            
+            # Battery sensors - always valid
+            if device_class == "battery" or "battery" in entity_id.lower():
+                return True
+                
+            # Temperature, humidity, pressure sensors
+            if device_class in ["temperature", "humidity", "pressure", "illuminance", "power", "energy"]:
+                return True
+                
+            # Numeric values with units
+            if unit and self._is_numeric_state(current_state):
+                return True
+                
+            # CO2, AQI, and other measurable values
+            if any(keyword in entity_id.lower() for keyword in ["co2", "aqi", "pm", "noise", "signal"]):
+                return self._is_numeric_state(current_state)
+                
+            # Avoid text-based sensors
+            if any(keyword in entity_id.lower() for keyword in ["status", "mode", "text", "message", "name"]):
+                return False
+                
+            # Health monitoring sensors
+            if any(keyword in entity_id.lower() for keyword in ["heart", "oxygen", "blood", "steps"]):
+                return self._is_numeric_state(current_state)
+                
+            return False
+            
+        elif domain == "binary_sensor":
+            # Most binary sensors are valid for alerts
+            device_class = attributes.get("device_class")
+            
+            # Security and safety sensors
+            if device_class in ["door", "window", "motion", "smoke", "gas", "moisture", "safety"]:
+                return True
+                
+            # Connectivity and update sensors  
+            if device_class in ["connectivity", "update", "problem"]:
+                return True
+                
+            # Generic binary sensors with meaningful names
+            if any(keyword in entity_id.lower() for keyword in ["open", "closed", "detected", "alarm", "alert"]):
+                return True
+                
+            return False
+            
+        elif domain == "switch":
+            # Only security/safety switches
+            if any(keyword in entity_id.lower() for keyword in ["security", "alarm", "emergency", "safety"]):
+                return True
+            return False
+            
+        elif domain == "light":
+            # Only emergency/indicator lights
+            if any(keyword in entity_id.lower() for keyword in ["emergency", "alarm", "indicator", "warning"]):
+                return True
+            return False
+            
+        elif domain == "device_tracker":
+            # Presence can be an alert (person not home)
+            return True
+            
+        elif domain == "person":
+            # Person presence/location
+            return True
+            
+        # Default: reject text-based or highly variable entities
+        return False
+        
+    def _is_numeric_state(self, state_value: str) -> bool:
+        """Check if a state value is numeric"""
+        try:
+            float(state_value)
+            return True
+        except (ValueError, TypeError):
+            return False
+            
     async def configure_entity_alerts(self, entity_id: str, entity_data: Dict, custom_thresholds: Optional[Dict] = None):
         """Configure alert thresholds for an entity"""
         domain = entity_id.split('.')[0]
@@ -512,14 +611,26 @@ FORMAT: [emoji] [critical status] + [main detail] + [recommended action]"""
                 categories = [categories]
                 
             if "ALERTS" in categories:
-                alert_entities[entity_id] = data
+                # Validate if entity is suitable for alert monitoring
+                if self.is_valid_alert_entity(entity_id, data):
+                    alert_entities[entity_id] = data
+                else:
+                    _LOGGER.debug(f"Entity {entity_id} has ALERTS category but is not suitable for monitoring (text/variable values)")
                 
         # Configure new alert entities
         for entity_id, data in alert_entities.items():
             if entity_id not in self.monitored_entities:
                 await self.configure_entity_alerts(entity_id, data)
                 
-        _LOGGER.info(f"Updated {len(alert_entities)} alert entities for monitoring")
+        _LOGGER.info(f"Updated {len(alert_entities)} valid alert entities for monitoring")
+        
+        # Log which entities were filtered out
+        filtered_count = len([entity_id for entity_id, entity_data in entities_data.items() 
+                            if "ALERTS" in (entity_data.get("category", []) if isinstance(entity_data.get("category", []), list) 
+                                          else [entity_data.get("category", "")]) 
+                            and not self.is_valid_alert_entity(entity_id, entity_data)])
+        if filtered_count > 0:
+            _LOGGER.info(f"Filtered out {filtered_count} text/variable entities from alert monitoring")
         
     async def get_alert_status(self) -> Dict:
         """Get current alert monitoring status"""

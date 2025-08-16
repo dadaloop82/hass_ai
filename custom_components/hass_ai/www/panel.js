@@ -252,18 +252,48 @@ class HassAiPanel extends LitElement {
   _generateAlertMessageExample() {
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     
-    if (isItalian) {
-      return `🔥 2 CRITICAL e 1 ALERT rilevati! 
-• Temperatura soggiorno: 35°C (CRITICAL)
-• Batteria sensore movimento: 3% (CRITICAL) 
-• Finestra bagno aperta: 2h (ALERT)
-Controlla immediatamente la tua casa.`;
+    // Trova entità reali per l'esempio
+    const alertEntities = Object.entries(this.entities).filter(([entityId, entity]) => 
+      entity.categories && entity.categories.includes('ALERTS')
+    );
+    
+    if (alertEntities.length > 0) {
+      // Usa entità reali per l'esempio
+      const sampleEntity = alertEntities[0];
+      const entityId = sampleEntity[0];
+      const state = this.hass.states[entityId];
+      const friendlyName = state?.attributes?.friendly_name || entityId;
+      const currentValue = state?.state || 'N/A';
+      const unit = state?.attributes?.unit_of_measurement || '';
+      
+      if (isItalian) {
+        return `🚨 Ehi, c'è qualcosa che non va! Ho controllato ${friendlyName} e il valore attuale è ${currentValue}${unit}. 
+        
+Potrebbe essere il momento di dare un'occhiata... Non è urgentissimo, ma meglio non aspettare troppo! 😊
+
+Comunque tranquillo, ti tengo d'occhio tutto io! 👀`;
+      } else {
+        return `🚨 Hey, something's up! I checked ${friendlyName} and the current value is ${currentValue}${unit}.
+        
+Might be time to take a look... Not super urgent, but better not wait too long! 😊
+
+Don't worry though, I'm keeping an eye on everything for you! 👀`;
+      }
     } else {
-      return `🔥 2 CRITICAL and 1 ALERT detected!
-• Living room temperature: 35°C (CRITICAL)
-• Motion sensor battery: 3% (CRITICAL)
-• Bathroom window open: 2h (ALERT)
-Check your home immediately.`;
+      // Esempio generico se non ci sono entità
+      if (isItalian) {
+        return `� Ehi, ho notato qualcosa di strano! La batteria del sensore in cucina è al 5% - forse è ora di cambiarla? 🔋
+        
+E poi... la temperatura in salotto è a 32°C, fa un po' caldino, no? 🌡️
+
+Niente di drammatico, ma meglio dare un'occhiata quando hai un minuto! 😉`;
+      } else {
+        return `🚨 Hey, I spotted something! The kitchen sensor battery is at 5% - maybe time for a change? 🔋
+        
+Also... living room temperature is at 32°C, getting a bit toasty, isn't it? 🌡️
+
+Nothing dramatic, but worth checking when you have a minute! 😉`;
+      }
     }
   }
 
@@ -295,6 +325,104 @@ Check your home immediately.`;
     
     // Reload status to update UI
     await this._loadAlertStatus();
+  }
+
+  async _toggleAlertMonitoring() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    try {
+      await this._configureAlertService({
+        monitoring_enabled: !this.alertStatus.monitoring_enabled
+      });
+      
+      const status = this.alertStatus.monitoring_enabled ? 
+        (isItalian ? 'attivato' : 'enabled') : 
+        (isItalian ? 'disattivato' : 'disabled');
+      
+      this._showSimpleNotification(
+        isItalian ? `🔔 Monitoraggio alert ${status}` : `🔔 Alert monitoring ${status}`, 
+        'success'
+      );
+      
+      // Reload status to update UI
+      await this._loadAlertStatus();
+    } catch (error) {
+      console.error(isItalian ? 'Errore nel toggle monitoraggio:' : 'Error toggling monitoring:', error);
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore nel cambiare stato monitoraggio' : '❌ Error changing monitoring status', 
+        'error'
+      );
+    }
+  }
+
+  async _createInputTextEntity() {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    try {
+      // Crea l'entità input_text tramite Home Assistant
+      await this.hass.callService('input_text', 'reload');
+      
+      // Prova a creare l'entità usando l'helper input_text
+      const entityConfig = {
+        name: 'HASS AI Alerts',
+        min: 0,
+        max: 1000,
+        icon: 'mdi:alert-circle',
+        initial: isItalian ? 'Nessun alert attivo' : 'No active alerts'
+      };
+      
+      // Usa il servizio per creare l'helper (se disponibile)
+      try {
+        await this.hass.callService('input_text', 'set_value', {
+          entity_id: 'input_text.hass_ai_alerts',
+          value: entityConfig.initial
+        });
+        
+        // Se il servizio funziona, l'entità esiste già
+        this._showSimpleNotification(
+          isItalian ? '✅ Entità input_text già esistente!' : '✅ Input_text entity already exists!', 
+          'success'
+        );
+      } catch (setError) {
+        // L'entità non esiste, proviamo a crearla tramite storage
+        try {
+          await this.hass.callWS({
+            type: 'config/input_text/create',
+            name: 'HASS AI Alerts',
+            icon: 'mdi:alert-circle',
+            min: 0,
+            max: 1000,
+            initial: entityConfig.initial
+          });
+          
+          this._showSimpleNotification(
+            isItalian ? '✅ Entità input_text creata con successo!' : '✅ Input_text entity created successfully!', 
+            'success'
+          );
+          
+          // Configura automaticamente l'entità creata
+          await this._configureAlertService({
+            input_text_entity: 'input_text.hass_ai_alerts',
+            use_input_text: true
+          });
+          
+        } catch (createError) {
+          console.error('Failed to create input_text entity:', createError);
+          this._showSimpleNotification(
+            isItalian ? '⚠️ Non posso creare l\'entità automaticamente. Usa la configurazione manuale.' : '⚠️ Cannot create entity automatically. Use manual configuration.', 
+            'warning'
+          );
+        }
+      }
+      
+      // Ricarica lo status per aggiornare l'UI
+      setTimeout(() => this._loadAlertStatus(), 1000);
+      
+    } catch (error) {
+      console.error('Error in createInputTextEntity:', error);
+      this._showSimpleNotification(
+        isItalian ? '❌ Errore nella creazione dell\'entità' : '❌ Error creating entity', 
+        'error'
+      );
+    }
   }
 
   async _updateInputTextEntity(entityId) {
@@ -389,6 +517,9 @@ Check your home immediately.`;
           
           console.log(`📂 ${isItalian ? 'Caricati' : 'Loaded'} ${Object.keys(this.entities).length} ${isItalian ? 'risultati di analisi AI salvati' : 'saved AI analysis results'}`);
           this.requestUpdate();
+          
+          // Update alert monitoring with current filter settings
+          await this._updateFilteredAlerts();
         }
       }
     } catch (error) {
@@ -413,6 +544,9 @@ Check your home immediately.`;
     this.minWeight = parseInt(value);
     localStorage.setItem('hass_ai_min_weight', this.minWeight.toString());
     this.requestUpdate();
+    
+    // Update alert monitoring with filtered entities in real-time
+    await this._updateFilteredAlerts();
   }
 
   async _saveCategoryFilter(value) {
@@ -420,6 +554,9 @@ Check your home immediately.`;
     this.categoryFilter = value;
     localStorage.setItem('hass_ai_category_filter', this.categoryFilter);
     this.requestUpdate();
+    
+    // Update alert monitoring with filtered entities in real-time
+    await this._updateFilteredAlerts();
   }
 
   _getFilteredEntities() {
@@ -439,6 +576,23 @@ Check your home immediately.`;
       
       return matchesWeight && matchesSearch && matchesCategory;
     }).map(([entityId, entity]) => entity); // Return just the entity objects, not tuples
+  }
+
+  async _updateFilteredAlerts() {
+    // Update alert monitoring with currently filtered entities in real-time
+    try {
+      await this.hass.callWS({
+        type: "hass_ai/update_filtered_alerts",
+        min_weight: this.minWeight,
+        category_filter: this.categoryFilter
+      });
+      
+      // Reload alert status to reflect changes
+      await this._loadAlertStatus();
+      
+    } catch (error) {
+      console.error('Failed to update filtered alerts:', error);
+    }
   }
 
   _isEntityUnavailable(entityId) {
@@ -1270,55 +1424,59 @@ Check your home immediately.`;
             </div>
           ` : ''}
           
-          <div class="analysis-steps">
-            <!-- Analysis Type Selection -->
-            <div class="step-item ${Object.keys(this.entities).length === 0 ? 'active' : 'completed'}">
-              <span class="step-number">1</span>
-              <ha-button 
-                raised 
-                @click=${this._runScan} 
-                .disabled=${this.loading || (this.scanProgress.show && !this.scanProgress.isComplete)}
-                class="step-button"
-              >
-                ${this._getScanButtonText()}
-              </ha-button>
-            </div>
-            
-            <div class="step-arrow ${Object.keys(this.entities).length > 0 ? 'visible' : ''}">→</div>
-            
-            <div class="step-item ${Object.keys(this.entities).length > 0 ? 'active' : 'disabled'}">
-              <span class="step-number">2</span>
-              <ha-button 
-                outlined 
-                @click=${this._findCorrelations} 
-                .disabled=${this.loading || this.scanProgress.show || Object.keys(this.entities).length === 0}
-                class="step-button correlations-btn"
-              >
-                ${isItalian ? '🔍 Cerca Correlazioni' : '🔍 Find Correlations'}
-              </ha-button>
-            </div>
-            
-            ${this.isOperationActive ? html`
-              <div class="step-item stop-operation">
+          <div class="main-controls-container">
+            <div class="analysis-steps">
+              <!-- Analysis Type Selection -->
+              <div class="step-item ${Object.keys(this.entities).length === 0 ? 'active' : 'completed'}">
+                <span class="step-number">1</span>
                 <ha-button 
-                  raised
-                  @click=${this._stopOperation} 
-                  class="step-button stop-btn"
+                  raised 
+                  @click=${this._runScan} 
+                  .disabled=${this.loading || (this.scanProgress.show && !this.scanProgress.isComplete)}
+                  class="step-button"
                 >
-                  ${isItalian ? '🛑 Ferma' : '🛑 Stop'}
+                  ${this._getScanButtonText()}
                 </ha-button>
+              </div>
+              
+              <div class="step-arrow ${Object.keys(this.entities).length > 0 ? 'visible' : ''}">→</div>
+              
+              <div class="step-item ${Object.keys(this.entities).length > 0 ? 'active' : 'disabled'}">
+                <span class="step-number">2</span>
+                <ha-button 
+                  outlined 
+                  @click=${this._findCorrelations} 
+                  .disabled=${this.loading || this.scanProgress.show || Object.keys(this.entities).length === 0}
+                  class="step-button correlations-btn"
+                >
+                  ${isItalian ? '🔍 Cerca Correlazioni' : '🔍 Find Correlations'}
+                </ha-button>
+              </div>
+              
+              ${this.isOperationActive ? html`
+                <div class="step-item stop-operation">
+                  <ha-button 
+                    raised
+                    @click=${this._stopOperation} 
+                    class="step-button stop-btn"
+                  >
+                    ${isItalian ? '🛑 Ferma' : '🛑 Stop'}
+                  </ha-button>
+                </div>
+              ` : ''}
+            </div>
+            
+            ${this.lastScanInfo.entityCount > 0 ? html`
+              <div class="last-scan-info">
+                <div class="scan-stats">
+                  ${isItalian ? '📊 Ultima scansione:' : '📊 Last scan:'} ${this.lastScanInfo.entityCount} ${isItalian ? 'entità' : 'entities'}
+                  ${this.lastScanInfo.timestamp ? html`
+                    <br><small>🕐 ${new Date(this.lastScanInfo.timestamp).toLocaleString()}</small>
+                  ` : ''}
+                </div>
               </div>
             ` : ''}
           </div>
-          
-          ${this.lastScanInfo.entityCount > 0 ? html`
-            <div class="last-scan-info">
-              ${isItalian ? '📊 Ultima scansione:' : '📊 Last scan:'} ${this.lastScanInfo.entityCount} ${isItalian ? 'entità analizzate' : 'entities analyzed'}
-              ${this.lastScanInfo.timestamp ? html`
-                <br><small>🕐 ${new Date(this.lastScanInfo.timestamp).toLocaleString()}</small>
-              ` : ''}
-            </div>
-          ` : ''}
           
           <!-- Alert Configuration Panel -->
           ${Object.keys(this.entities).length > 0 ? html`
@@ -1339,88 +1497,57 @@ Check your home immediately.`;
 
         <!-- Smart Filter Panel - Only show after scan completed -->
         ${Object.keys(this.entities).length > 0 ? html`
-          <div class="smart-filter-panel">
-            <div class="filter-header">
-              <ha-icon icon="mdi:filter"></ha-icon>
-              <span>${isItalian ? '🎛️ Filtro e Ricerca' : '🎛️ Filter & Search'}</span>
+          <!-- Compact Filter Controls above table -->
+          <div class="table-filter-controls">
+            <div class="filter-left">
+              <input 
+                type="text" 
+                placeholder="${isItalian ? 'Cerca entità...' : 'Search entities...'}"
+                .value=${this.searchTerm}
+                @input=${(e) => { this.searchTerm = e.target.value; this.requestUpdate(); }}
+                class="search-input compact"
+              />
+              ${this.searchTerm ? html`
+                <ha-icon 
+                  icon="mdi:close" 
+                  @click=${() => { this.searchTerm = ''; this.requestUpdate(); }}
+                  class="clear-search"
+                ></ha-icon>
+              ` : ''}
             </div>
-            <div class="filter-controls">
-              <!-- Search box -->
-              <div class="filter-row">
-                <label for="search-filter">${isItalian ? 'Cerca:' : 'Search:'}</label>
-                <input 
-                  id="search-filter" 
-                  type="text" 
-                  placeholder="${isItalian ? 'Cerca entità...' : 'Search entities...'}"
-                  .value=${this.searchTerm}
-                  @input=${(e) => { this.searchTerm = e.target.value; this.requestUpdate(); }}
-                  class="search-input"
-                />
-                ${this.searchTerm ? html`
-                  <ha-icon 
-                    icon="mdi:close" 
-                    @click=${() => { this.searchTerm = ''; this.requestUpdate(); }}
-                    class="clear-search"
-                  ></ha-icon>
-                ` : ''}
-              </div>
-              
-              <!-- Weight filter -->
-              <div class="filter-row">
-                <label for="weight-filter">${isItalian ? 'Peso Minimo:' : 'Minimum Weight:'}</label>
-                <input 
-                  id="weight-filter" 
-                  type="range" 
-                  min="0" 
-                  max="5" 
-                  step="1" 
-                  .value=${this.minWeight}
-                  @input=${(e) => this._saveMinWeightFilter(e.target.value)}
-                  class="weight-slider"
-                />
-                <span class="weight-value">${this.minWeight}</span>
-              </div>
-              
-              <!-- Category filter -->
-              <div class="filter-row">
-                <label for="category-filter">${isItalian ? 'Categoria:' : 'Category:'}</label>
-                <select 
-                  id="category-filter" 
-                  .value=${this.categoryFilter}
-                  @change=${(e) => this._saveCategoryFilter(e.target.value)}
-                  class="category-select"
-                >
-                  <option value="ALL">${isItalian ? 'Tutte' : 'All'}</option>
-                  <option value="DATA">${isItalian ? 'Dati' : 'Data'}</option>
-                  <option value="CONTROL">${isItalian ? 'Controllo' : 'Control'}</option>
-                  <option value="ALERTS">${isItalian ? 'Allerte' : 'Alerts'}</option>
-                  <option value="SERVICE">${isItalian ? 'Servizio' : 'Service'}</option>
-                  <option value="ENHANCED">${isItalian ? 'Miglioramenti' : 'Enhanced'}</option>
-                </select>
-              </div>
-              
-              <div class="filter-stats">
-                ${(() => {
-                  const filteredEntities = this._getFilteredEntities();
-                  const totalEntities = Object.keys(this.entities).length;
-                  return html`
-                    📊 ${isItalian ? 'Saranno prese in considerazione' : 'Will be considered'} <strong>${filteredEntities.length}</strong> ${isItalian ? 'entità su' : 'entities out of'} <strong>${totalEntities}</strong>
-                  `;
-                })()}
-              </div>
-              
-              <!-- Reset Button -->
+            <div class="filter-right">
+              <select 
+                .value=${this.categoryFilter}
+                @change=${(e) => this._saveCategoryFilter(e.target.value)}
+                class="category-select compact"
+              >
+                <option value="ALL">${isItalian ? 'Tutte le categorie' : 'All categories'}</option>
+                <option value="DATA">${isItalian ? 'Dati' : 'Data'}</option>
+                <option value="CONTROL">${isItalian ? 'Controllo' : 'Control'}</option>
+                <option value="ALERTS">${isItalian ? 'Allerte' : 'Alerts'}</option>
+                <option value="SERVICE">${isItalian ? 'Servizio' : 'Service'}</option>
+                <option value="ENHANCED">${isItalian ? 'Miglioramenti' : 'Enhanced'}</option>
+              </select>
+              <input 
+                type="range" 
+                min="0" 
+                max="5" 
+                step="1" 
+                .value=${this.minWeight}
+                @input=${(e) => this._saveMinWeightFilter(e.target.value)}
+                class="weight-slider compact"
+                title="${isItalian ? 'Peso minimo' : 'Minimum weight'}: ${this.minWeight}"
+              />
+              <span class="weight-display">${this.minWeight}</span>
               ${Object.keys(this.entities).length > 0 ? html`
-                <div class="filter-row reset-section">
-                  <mwc-button 
-                    outlined
-                    @click=${(e) => this._confirmResetAll(e)}
-                    class="reset-button"
-                    ?disabled=${this.loading}
-                  >
-                    🗑️ ${isItalian ? 'Cancella Tutto' : 'Clear All'}
-                  </mwc-button>
-                </div>
+                <mwc-button 
+                  outlined
+                  @click=${(e) => this._confirmResetAll(e)}
+                  class="reset-button compact"
+                  ?disabled=${this.loading}
+                >
+                  🗑️
+                </mwc-button>
               ` : ''}
             </div>
           </div>
@@ -2986,6 +3113,216 @@ Check your home immediately.`;
       .config-row input[type="radio"] {
         margin: 0;
       }
+      
+      /* Auto-config styles */
+      .auto-config-section {
+        margin-top: 16px;
+        padding: 12px;
+        background: rgba(76, 175, 80, 0.1);
+        border-radius: 6px;
+        border-left: 4px solid var(--success-color, #4caf50);
+      }
+      
+      .auto-config-button {
+        padding: 8px 16px;
+        background: var(--primary-color, #2196F3);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+        margin-right: 8px;
+      }
+      
+      .auto-config-button:hover {
+        background: var(--primary-color-dark, #1976D2);
+        transform: translateY(-1px);
+      }
+      
+      .auto-config-button:disabled {
+        background: var(--disabled-color, #cccccc);
+        cursor: not-allowed;
+        transform: none;
+      }
+      
+      .auto-config-status {
+        display: inline-block;
+        margin-left: 8px;
+        font-size: 12px;
+        color: var(--success-color, #4caf50);
+      }
+      
+      /* Debug section styles */
+      .debug-section {
+        margin: 16px 0;
+        padding: 12px;
+        background: rgba(255, 152, 0, 0.1);
+        border-radius: 6px;
+        border-left: 4px solid var(--warning-color, #ff9800);
+      }
+      
+      .debug-section h3 {
+        margin: 0 0 8px 0;
+        font-size: 14px;
+        color: var(--primary-text-color);
+      }
+      
+      .debug-info p {
+        margin: 4px 0;
+        font-size: 12px;
+        color: var(--secondary-text-color);
+      }
+      
+      .debug-list {
+        list-style: none;
+        padding: 0;
+        margin: 8px 0;
+      }
+      
+      .debug-list li {
+        padding: 4px 8px;
+        margin: 2px 0;
+        background: var(--card-background-color);
+        border-radius: 4px;
+        font-size: 11px;
+        font-family: monospace;
+      }
+      
+      .debug-warning {
+        padding: 8px;
+        background: rgba(244, 67, 54, 0.1);
+        border-radius: 4px;
+        border: 1px solid var(--error-color, #f44336);
+      }
+      
+      .debug-warning p {
+        margin: 4px 0;
+        font-size: 12px;
+        color: var(--error-color, #f44336);
+      }
+      
+      /* Main Controls Container - Side by side layout */
+      .main-controls-container {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 16px;
+      }
+      
+      .analysis-steps {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+        background: var(--card-background-color);
+        border-radius: 8px;
+        border: 1px solid var(--divider-color);
+      }
+      
+      .last-scan-info {
+        flex: 0 0 200px;
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        padding: 12px;
+        font-size: 14px;
+        color: var(--secondary-text-color);
+        text-align: center;
+      }
+      
+      .scan-stats {
+        line-height: 1.4;
+      }
+      
+      /* Table Filter Controls - Compact horizontal layout */
+      .table-filter-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 16px;
+        background: var(--primary-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        margin-bottom: 8px;
+      }
+      
+      .filter-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        max-width: 300px;
+      }
+      
+      .filter-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 0 0 auto;
+      }
+      
+      .search-input.compact {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 14px;
+        width: 100%;
+      }
+      
+      .category-select.compact {
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        min-width: 140px;
+      }
+      
+      .weight-slider.compact {
+        width: 80px;
+        height: 4px;
+      }
+      
+      .weight-display {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 24px;
+        background: var(--primary-color);
+        color: white;
+        border-radius: 50%;
+        font-weight: 600;
+        font-size: 12px;
+      }
+      
+      .reset-button.compact {
+        --mdc-button-horizontal-padding: 8px;
+        --mdc-typography-button-font-size: 12px;
+        min-width: auto;
+        --mdc-theme-primary: var(--error-color);
+      }
+      
+      /* Monitoring Toggle Controls */
+      .monitoring-toggle .monitoring-control {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      .monitoring-btn {
+        --mdc-button-horizontal-padding: 12px;
+        --mdc-typography-button-font-size: 12px;
+        min-width: auto;
+      }
+      
+      .monitoring-btn.start {
+        --mdc-theme-primary: var(--success-color);
+      }
+      
+      .monitoring-btn.stop {
+        --mdc-theme-primary: var(--error-color);
+      }
     `;
   }
 
@@ -3113,10 +3450,20 @@ Check your home immediately.`;
   }
 
   _renderAlertConfigPanel(isItalian) {
+    // Get only ALERTS entities that are currently visible in the filter
     const alertEntities = Object.entries(this.entities)
       .filter(([entityId, entity]) => {
         const categories = Array.isArray(entity.category) ? entity.category : [entity.category];
-        return categories.includes('ALERTS');
+        if (!categories.includes('ALERTS')) return false;
+        
+        // Apply the same filtering logic as the main table
+        const weight = this.overrides[entityId]?.overall_weight ?? entity.overall_weight;
+        const matchesWeight = weight >= this.minWeight;
+        
+        // Category filter - if not showing ALL, only show entities that match current category filter
+        const matchesCategory = this.categoryFilter === 'ALL' || categories.includes(this.categoryFilter);
+        
+        return matchesWeight && matchesCategory;
       });
 
     const availableServices = this._getAvailableNotificationServices();
@@ -3126,14 +3473,26 @@ Check your home immediately.`;
         <div class="alert-status">
           <h3>${isItalian ? '📊 Stato Monitoraggio Alert' : '📊 Alert Monitoring Status'}</h3>
           <div class="status-grid">
-            <div class="status-item">
+            <div class="status-item monitoring-toggle">
               <span class="status-label">${isItalian ? 'Monitoraggio:' : 'Monitoring:'}</span>
-              <span class="status-value ${this.alertStatus.monitoring_enabled ? 'enabled' : 'disabled'}">
-                ${this.alertStatus.monitoring_enabled ? 
-                  (isItalian ? '✅ Attivo' : '✅ Active') : 
-                  (isItalian ? '❌ Inattivo' : '❌ Inactive')
-                }
-              </span>
+              <div class="monitoring-control">
+                <span class="status-value ${this.alertStatus.monitoring_enabled ? 'enabled' : 'disabled'}">
+                  ${this.alertStatus.monitoring_enabled ? 
+                    (isItalian ? '✅ Attivo' : '✅ Active') : 
+                    (isItalian ? '❌ Inattivo' : '❌ Inactive')
+                  }
+                </span>
+                <ha-button
+                  outlined
+                  @click=${() => this._toggleAlertMonitoring()}
+                  class="monitoring-btn ${this.alertStatus.monitoring_enabled ? 'stop' : 'start'}"
+                >
+                  ${this.alertStatus.monitoring_enabled ? 
+                    (isItalian ? '🛑 Disattiva' : '🛑 Disable') :
+                    (isItalian ? '▶️ Attiva' : '▶️ Enable')
+                  }
+                </ha-button>
+              </div>
             </div>
             <div class="status-item">
               <span class="status-label">${isItalian ? 'Entità monitorate:' : 'Monitored entities:'}</span>
@@ -3146,6 +3505,39 @@ Check your home immediately.`;
               </span>
             </div>
           </div>
+        </div>
+
+        <!-- Debug Section for ALERTS entities -->
+        <div class="debug-section">
+          <h3>${isItalian ? '🐛 Debug: Entità ALERTS Visibili (Filtrate)' : '🐛 Debug: Visible ALERTS Entities (Filtered)'}</h3>
+          ${alertEntities.length > 0 ? html`
+            <div class="debug-info">
+              <p>${isItalian ? 
+                `Trovate ${alertEntities.length} entità ALERTS visibili con filtro peso ≥ ${this.minWeight} e categoria "${this.categoryFilter}":` : 
+                `Found ${alertEntities.length} visible ALERTS entities with weight ≥ ${this.minWeight} and category "${this.categoryFilter}":`
+              }</p>
+              <ul class="debug-list">
+                ${alertEntities.map(([entityId, entity]) => html`
+                  <li>
+                    <strong>${entityId}</strong> 
+                    (${isItalian ? 'Peso' : 'Weight'}: ${entity.overall_weight || 'N/A'}, 
+                     ${isItalian ? 'Stato' : 'State'}: ${this.hass.states[entityId]?.state || 'unknown'})
+                  </li>
+                `)}
+              </ul>
+            </div>
+          ` : html`
+            <div class="debug-warning">
+              <p>⚠️ ${isItalian ? 
+                `Nessuna entità ALERTS visibile con peso ≥ ${this.minWeight} e categoria "${this.categoryFilter}".` : 
+                `No ALERTS entities visible with weight ≥ ${this.minWeight} and category "${this.categoryFilter}".`
+              }</p>
+              <p>${isItalian ? 
+                'Prova a ridurre il peso minimo o cambiare il filtro di categoria, oppure esegui una nuova analisi AI.' : 
+                'Try reducing the minimum weight or changing the category filter, or run a new AI analysis.'
+              }</p>
+            </div>
+          `}
         </div>
 
         <div class="notification-config">
@@ -3229,15 +3621,28 @@ Check your home immediately.`;
             
             ${!this.alertStatus.input_text_exists ? html`
               <div class="config-help">
-                <h4>${isItalian ? '📝 Configurazione Richiesta' : '📝 Required Configuration'}</h4>
-                <p>${isItalian ? 'Aggiungi al tuo configuration.yaml:' : 'Add to your configuration.yaml:'}</p>
-                <pre><code>input_text:
+                <h4>${isItalian ? '📝 Configurazione Automatica' : '📝 Automatic Setup'}</h4>
+                <p>${isItalian ? 'Posso creare automaticamente l\'entità input_text per te!' : 'I can create the input_text entity automatically for you!'}</p>
+                <div class="auto-config-actions">
+                  <ha-button 
+                    raised
+                    @click=${this._createInputTextEntity}
+                    class="create-entity-btn"
+                  >
+                    ${isItalian ? '✨ Crea Entità Automaticamente' : '✨ Create Entity Automatically'}
+                  </ha-button>
+                </div>
+                <details class="manual-config">
+                  <summary>${isItalian ? 'Configurazione manuale (se preferisci)' : 'Manual configuration (if you prefer)'}</summary>
+                  <p>${isItalian ? 'Aggiungi al tuo configuration.yaml:' : 'Add to your configuration.yaml:'}</p>
+                  <pre><code>input_text:
   hass_ai_alerts:
     name: "HASS AI Alerts"
     max: 1000
     icon: mdi:alert-circle
     initial: "No alerts"</code></pre>
-                <p><em>${isItalian ? 'Poi riavvia Home Assistant' : 'Then restart Home Assistant'}</em></p>
+                  <p><em>${isItalian ? 'Poi riavvia Home Assistant' : 'Then restart Home Assistant'}</em></p>
+                </details>
               </div>
             ` : ''}
           ` : ''}
@@ -3249,63 +3654,6 @@ Check your home immediately.`;
             </div>
           </div>
         </div>
-
-        ${alertEntities.length > 0 ? html`
-          <div class="alert-entities">
-            <h3>${isItalian ? '⚠️ Entità con Alert Configurate' : '⚠️ Configured Alert Entities'}</h3>
-            <div class="entities-grid">
-              ${alertEntities.map(([entityId, entity]) => {
-                const activeAlert = this.alertStatus.active_alerts?.[entityId];
-                const state = this.hass.states[entityId];
-                return html`
-                  <div class="alert-entity-card ${activeAlert ? 'has-alert' : ''}">
-                    <div class="entity-header">
-                      <span class="entity-name">
-                        ${state?.attributes?.friendly_name || entityId}
-                      </span>
-                      ${activeAlert ? html`
-                        <span class="alert-badge ${activeAlert.level.toLowerCase()}">
-                          ${this._getAlertLevelConfig(activeAlert.level).icon} ${activeAlert.level}
-                        </span>
-                      ` : html`
-                        <span class="alert-badge ok">✅ OK</span>
-                      `}
-                    </div>
-                    <div class="entity-details">
-                      <div class="detail-row">
-                        <span>${isItalian ? 'Valore:' : 'Value:'}</span>
-                        <span>${state?.state || 'N/A'}${state?.attributes?.unit_of_measurement || ''}</span>
-                      </div>
-                      <div class="detail-row">
-                        <span>${isItalian ? 'Peso:' : 'Weight:'}</span>
-                        <span>${entity.overall_weight}</span>
-                      </div>
-                      ${activeAlert ? html`
-                        <div class="detail-row alert-detail">
-                          <span>${isItalian ? 'Soglie:' : 'Thresholds:'}</span>
-                          <span class="thresholds">
-                            ${Object.entries(activeAlert.thresholds || {}).map(([level, value]) => html`
-                              <span class="threshold-item ${level.toLowerCase()}">
-                                ${level}: ${value}${state?.attributes?.unit_of_measurement || ''}
-                              </span>
-                            `)}
-                          </span>
-                        </div>
-                      ` : ''}
-                    </div>
-                  </div>
-                `;
-              })}
-            </div>
-          </div>
-        ` : html`
-          <div class="no-alert-entities">
-            <p>${isItalian ? 
-              '⚠️ Nessuna entità con categoria ALERTS trovata. Esegui prima una scansione AI per identificare entità che richiedono monitoraggio.' :
-              '⚠️ No ALERTS category entities found. Run an AI scan first to identify entities that require monitoring.'
-            }</p>
-          </div>
-        `}
 
         <div class="alert-info">
           <h4>${isItalian ? 'ℹ️ Come Funziona' : 'ℹ️ How It Works'}</h4>

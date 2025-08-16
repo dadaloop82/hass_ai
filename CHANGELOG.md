@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.39] - 2025-01-16
+
+### 🎯 **Real-Time Filtered Alert Monitoring**
+- **NEW: Dynamic Alert Filtering**: Alert monitoring now respects frontend filter settings in real-time
+- **Weight-Based Alert Filtering**: Only entities with weight ≥ minimum weight threshold are monitored for alerts
+- **Category-Based Alert Filtering**: Alert monitoring considers category filter selection (ALL, ALERTS, etc.)
+- **Real-Time Synchronization**: Alert counts update instantly when user changes filters
+- **Enhanced Debug Panel**: Visual debugging section shows only currently filtered ALERTS entities
+- **Backend Integration**: New WebSocket handler `handle_update_filtered_alerts` for seamless frontend-backend sync
+
+#### Technical Improvements
+- **Smart Entity Validation**: Enhanced `is_valid_alert_entity()` function with domain-specific logic
+- **Automatic Filter Updates**: `_saveMinWeightFilter()` and `_saveCategoryFilter()` trigger alert updates
+- **Filtered Entity Display**: Debug section shows exactly which entities are being monitored
+- **User Experience**: Clear feedback on why no entities are monitored (filter settings)
+
 ## [1.9.38] - 2025-01-04
 
 ### 🔔 **Intelligent Alert Monitoring System**

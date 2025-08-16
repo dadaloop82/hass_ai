@@ -1,1 +1,0 @@
-feat: Explicitly load MWC components via extra_module_url and version bump to 1.3.0
