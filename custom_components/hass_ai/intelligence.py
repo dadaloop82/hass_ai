@@ -69,14 +69,14 @@ def _create_localized_prompt(batch_states: list[State], entity_details: list[str
         if is_italian:
             return (
                 f"Valuta {len(batch_states)} entità HA per utilità domotica. Punteggio 0-5 (0=inutile, 5=essenziale). "
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"utilità automazioni\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
-                f"REASON: utilità domotica. Entità: " + ", ".join(entity_summary[:30])
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"motivo specifico utilità\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"REASON: Spiega PERCHÉ il punteggio (es: 'controllo luci camera', 'monitoraggio temperatura', 'batteria dispositivo'). Entità: " + ", ".join(entity_summary[:30])
             )
         else:
             return (
                 f"Evaluate {len(batch_states)} HA entities for home automation utility. Score 0-5 (0=useless, 5=essential). "
-                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"automation utility\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
-                f"REASON: home automation value. Entities: " + ", ".join(entity_summary[:30])
+                f"JSON: [{{\"entity_id\":\"...\",\"rating\":0-5,\"reason\":\"specific utility reason\",\"category\":\"DATA/CONTROL/ALERTS\",\"management_type\":\"USER/SERVICE\"}}]. "
+                f"REASON: Explain WHY this score (e.g., 'bedroom light control', 'temperature monitoring', 'device battery'). Entities: " + ", ".join(entity_summary[:30])
             )
     
     # Comprehensive analysis prompt that covers all aspects
@@ -182,9 +182,10 @@ def _auto_categorize_entity(state: State) -> tuple[list[str], str]:
     
     categories = []
     
-    # Check for alerts/problems first
-    if entity_state in ['unavailable', 'unknown', 'error']:
-        return ['ALERTS'], 'SERVICE'
+    # Skip entities with invalid states - they shouldn't be analyzed
+    invalid_states = ['unavailable', 'unknown', 'error', 'null', '', 'none', 'None']
+    if entity_state is None or str(entity_state).lower() in [s.lower() for s in invalid_states]:
+        return ['DATA'], 'USER'  # Minimal fallback category for invalid entities
     
     # Battery sensors should be both DATA and ALERTS
     if 'battery' in entity_id.lower() or attributes.get('battery_level') is not None:
@@ -218,7 +219,15 @@ def _auto_categorize_entity(state: State) -> tuple[list[str], str]:
             return ['DATA', 'ALERTS'], 'USER'
         
         # Temperature sensors - data + alerts for extreme values
-        if 'temperature' in entity_lower:
+        if any(keyword in entity_lower for keyword in ['temperature', 'temp', 'temperatura']):
+            return ['DATA', 'ALERTS'], 'USER'
+        
+        # Humidity sensors - data + alerts for extreme values
+        if any(keyword in entity_lower for keyword in ['humidity', 'umidita', 'umidità', 'moisture']):
+            return ['DATA', 'ALERTS'], 'USER'
+        
+        # Average/Mean sensors for important metrics (like temperatura_media_casa)
+        if any(keyword in entity_lower for keyword in ['media', 'average', 'mean', 'avg']) and any(metric in entity_lower for metric in ['temperature', 'temp', 'humidity', 'umidita', 'energia', 'energy', 'power', 'potenza']):
             return ['DATA', 'ALERTS'], 'USER'
             
         # System diagnostic sensors
@@ -805,6 +814,31 @@ async def get_entities_importance_batched(
     if not states:
         _LOGGER.warning("No entities provided for analysis")
         return []
+    
+    # Filter out entities with invalid/unavailable states before AI analysis
+    invalid_states = ['unavailable', 'unknown', 'error', 'null', '', 'none', 'None']
+    original_count = len(states)
+    filtered_states = []
+    skipped_entities = []
+    
+    for state in states:
+        if state.state is None or str(state.state).lower() in [s.lower() for s in invalid_states]:
+            skipped_entities.append(state.entity_id)
+            # Create a fallback result for skipped entities
+            continue
+        filtered_states.append(state)
+    
+    if skipped_entities:
+        _LOGGER.info(f"⏭️ Skipped {len(skipped_entities)} entities with invalid states: {skipped_entities[:5]}{'...' if len(skipped_entities) > 5 else ''}")
+    
+    # Update states to use only filtered entities
+    states = filtered_states
+    
+    if not states:
+        _LOGGER.warning("All entities were filtered out due to invalid states")
+        return []
+    
+    _LOGGER.info(f"Filtered {original_count} entities to {len(states)} valid entities for AI analysis")
     
     _LOGGER.info(f"Starting AI analysis with provider: {ai_provider}, analysis type: {analysis_type}, API key present: {bool(api_key)}")
     
