@@ -22,6 +22,7 @@ class HassAiPanel extends LitElement {
       tokenStats: { state: true },
       alertThresholds: { state: true },
       isOperationActive: { state: true },
+      componentVersion: { state: true },
     };
   }
 
@@ -38,6 +39,7 @@ class HassAiPanel extends LitElement {
     this.correlations = {}; // Store correlations for each entity
     this.isOperationActive = false; // Track if any operation is active
     this.currentOperation = null; // Track current operation type
+    this.componentVersion = '1.9.40'; // Default fallback version
     this.scanProgress = {
       show: false,
       message: '',
@@ -73,8 +75,8 @@ class HassAiPanel extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('🚀 HASS AI Panel v1.9.39 loaded - Real-Time Filtered Alert Monitoring! Alerts now sync with frontend filters in real-time');
     this.language = this.hass.language || 'en';
+    this._loadComponentVersion();
     this._loadMinWeightFilter();
     this._loadCategoryFilter();
     this._loadOverrides();
@@ -110,6 +112,19 @@ class HassAiPanel extends LitElement {
     } catch (error) {
       const isItalian = (this.hass.language || navigator.language).startsWith('it');
       console.error(isItalian ? 'Impossibile salvare le correlazioni:' : 'Failed to save correlations:', error);
+    }
+  }
+
+  async _loadComponentVersion() {
+    try {
+      const response = await this.hass.callWS({ type: "hass_ai/get_version" });
+      if (response.version) {
+        this.componentVersion = response.version;
+        console.log(`� HASS AI Panel v${this.componentVersion} loaded - Real-Time Filtered Alert Monitoring! Alerts now sync with frontend filters in real-time`);
+      }
+    } catch (error) {
+      console.warn('Failed to load component version, using fallback:', error);
+      console.log(`🚀 HASS AI Panel v${this.componentVersion} loaded (fallback version) - Real-Time Filtered Alert Monitoring! Alerts now sync with frontend filters in real-time`);
     }
   }
 
@@ -1814,7 +1829,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     // Translations based on browser language or HA language
     const isItalian = (this.hass.language || navigator.language).startsWith('it');
     const t = isItalian ? {
-  title: "Pannello di Controllo HASS AI v1.9.39",
+  title: `Pannello di Controllo HASS AI v${this.componentVersion}`,
       description: "Analizza le tue entità, insegna all'IA e personalizza i pesi per ottimizzare la tua domotica. L'AI provider è configurato nelle impostazioni dell'integrazione.",
       scan_button: "Avvia Nuova Scansione",
       scanning_button: "Scansione in corso...",
@@ -1826,7 +1841,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       your_weight: "Tuo Peso",
       weight_legend: "(0=Ignora, 5=Critico)"
     } : {
-      title: "HASS AI Control Panel v1.9.39",
+      title: `HASS AI Control Panel v${this.componentVersion}`,
       description: "Analyze your entities, teach the AI, and customize weights to optimize your smart home. AI provider is configured in integration settings.",
       scan_button: "Start New Scan",
       scanning_button: "Scanning...",

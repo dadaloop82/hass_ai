@@ -166,6 +166,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_load_entity_thresholds)
     websocket_api.async_register_command(hass, handle_get_alert_status)
     websocket_api.async_register_command(hass, handle_get_detailed_alert_report)
+    websocket_api.async_register_command(hass, handle_get_version)
     websocket_api.async_register_command(hass, handle_configure_alert_service)
     websocket_api.async_register_command(hass, handle_update_filtered_alerts)
     websocket_api.async_register_command(hass, handle_clear_storage)
@@ -1222,6 +1223,45 @@ async def handle_get_detailed_alert_report(hass: HomeAssistant, connection: webs
         _LOGGER.error(f"Error getting detailed alert report: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "report_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/get_version",
+})
+@websocket_api.async_response
+async def handle_get_version(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle getting component version from manifest."""
+    try:
+        # Get version from first config entry
+        entry_id = next(iter(hass.data[DOMAIN]))
+        config_entry = hass.config_entries.async_get_entry(entry_id)
+        
+        if config_entry:
+            # Read manifest.json to get version
+            import json
+            import os
+            manifest_path = os.path.join(os.path.dirname(__file__), "manifest.json")
+            
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+                version = manifest.get("version", "unknown")
+                
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "version": version,
+                "name": manifest.get("name", "HASS AI"),
+                "domain": manifest.get("domain", "hass_ai")
+            }))
+        else:
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "version": "unknown",
+                "error": "No config entry found"
+            }))
+            
+    except Exception as e:
+        _LOGGER.error(f"Error getting version: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "version_error", str(e)
         ))
 
 
