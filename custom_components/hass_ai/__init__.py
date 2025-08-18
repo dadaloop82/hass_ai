@@ -165,6 +165,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_save_entity_threshold)
     websocket_api.async_register_command(hass, handle_load_entity_thresholds)
     websocket_api.async_register_command(hass, handle_get_alert_status)
+    websocket_api.async_register_command(hass, handle_get_detailed_alert_report)
     websocket_api.async_register_command(hass, handle_configure_alert_service)
     websocket_api.async_register_command(hass, handle_update_filtered_alerts)
     websocket_api.async_register_command(hass, handle_clear_storage)
@@ -430,7 +431,12 @@ async def handle_generate_thresholds(hass: HomeAssistant, connection: websocket_
         
         # Get conversation agent
         try:
-            agent = await async_get_agent(hass, config_entry.data.get(CONF_CONVERSATION_AGENT))
+            agent_id = config_entry.data.get(CONF_CONVERSATION_AGENT)
+            if agent_id:
+                agent = await async_get_agent(hass, agent_id)
+            else:
+                # Try to get default agent
+                agent = await async_get_agent(hass, None)
         except Exception as e:
             _LOGGER.warning(f"Failed to get conversation agent: {e}")
             agent = None
@@ -1190,6 +1196,32 @@ async def handle_get_alert_status(hass: HomeAssistant, connection: websocket_api
         _LOGGER.error(f"Error getting alert status: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "status_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "hass_ai/get_detailed_alert_report",
+})
+@websocket_api.async_response
+async def handle_get_detailed_alert_report(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle getting detailed alert report."""
+    try:
+        # Get alert monitor from first entry
+        entry_id = next(iter(hass.data[DOMAIN]))
+        alert_monitor = hass.data[DOMAIN][entry_id].get("alert_monitor")
+        
+        if alert_monitor:
+            report = await alert_monitor.get_detailed_alert_report()
+            connection.send_message(websocket_api.result_message(msg["id"], report))
+        else:
+            connection.send_message(websocket_api.result_message(msg["id"], {
+                "error": "Alert monitor not initialized"
+            }))
+            
+    except Exception as e:
+        _LOGGER.error(f"Error getting detailed alert report: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "report_error", str(e)
         ))
 
 

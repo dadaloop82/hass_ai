@@ -1,0 +1,42 @@
+🔔 v1.9.38: Intelligent Alert Monitoring System
+
+✨ NEW FEATURES:
+• Advanced Alert Engine with AI-powered notifications
+• Weight-based monitoring intervals (30s-30min)
+• Three-tier alert system (WARNING/ALERT/CRITICAL)
+• Flexible notification options (services + input_text)
+• Real-time dashboard with color-coded indicators
+• Intelligent throttling to prevent notification spam
+
+🧠 AI ENHANCEMENTS:
+• Context-aware alert message generation
+• Automatic threshold detection based on entity patterns
+• Multilingual support (Italian/English) for all AI prompts
+• Smart entity categorization for alert monitoring
+
+🎨 UI IMPROVEMENTS:
+• Complete alert configuration panel
+• Visual status indicators and entity cards
+• Input text mode for dashboard integration
+• Localized interface with dynamic language detection
+
+🔧 TECHNICAL UPDATES:
+• New AlertMonitor class with comprehensive monitoring logic
+• Enhanced WebSocket API for alert management
+• Persistent storage for configurations and monitored entities
+• Full localization support across all components
+
+📚 DOCUMENTATION:
+• Updated README.md with alert system features
+• Enhanced FEATURES.md for v1.9.38
+• Comprehensive CHANGELOG.md entry
+• New ALERT_MONITORING_SYSTEM.md technical guide
+• Complete LOCALIZATION_REPORT.md verification
+
+🌍 LOCALIZATION:
+• All UI elements properly localized (IT/EN)
+• AI-generated messages in user's preferred language
+• Console messages and notifications localized
+• Complete translation verification performed
+
+This release transforms HASS AI into a comprehensive monitoring solution with intelligent, AI-powered alert capabilities for proactive home automation management.

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers import storage
 from homeassistant.util import dt as dt_util
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
 import json
@@ -76,7 +77,7 @@ class AlertMonitor:
         """Load alert configuration from storage"""
         try:
             from . import DOMAIN
-            store = self.hass.helpers.storage.Store(1, f"{DOMAIN}_alert_config")
+            store = storage.Store(self.hass, 1, f"{DOMAIN}_alert_config")
             config = await store.async_load() or {}
             
             self.notification_service = config.get("notification_service", "notify.notify")
@@ -97,7 +98,7 @@ class AlertMonitor:
         """Save alert configuration to storage"""
         try:
             from . import DOMAIN
-            store = self.hass.helpers.storage.Store(1, f"{DOMAIN}_alert_config")
+            store = storage.Store(self.hass, 1, f"{DOMAIN}_alert_config")
             config = {
                 "notification_service": self.notification_service,
                 "use_input_text": self.use_input_text,
@@ -657,26 +658,108 @@ FORMAT: [emoji] [critical status] + [main detail] + [recommended action]"""
     async def get_alert_status(self) -> Dict:
         """Get current alert monitoring status"""
         active_alerts = {}
+        all_alert_entities = {}
         total_monitored = len(self.monitored_entities)
         
         for entity_id, config in self.monitored_entities.items():
             alert_level = await self._check_entity_alert(entity_id, config)
+            state = self.hass.states.get(entity_id)
+            
+            # Get entity info
+            friendly_name = state.attributes.get("friendly_name", entity_id) if state else entity_id
+            current_value = state.state if state else "unknown"
+            unit = state.attributes.get("unit_of_measurement", "") if state else ""
+            device_class = state.attributes.get("device_class", "") if state else ""
+            
+            # Add to all entities list
+            all_alert_entities[entity_id] = {
+                "friendly_name": friendly_name,
+                "current_value": current_value,
+                "unit": unit,
+                "device_class": device_class,
+                "weight": config.get("weight", 3),
+                "thresholds": config.get("thresholds", {}),
+                "entity_type": config.get("entity_type", "unknown"),
+                "last_check": config.get("last_check"),
+                "enabled": config.get("enabled", True),
+                "is_alert": alert_level is not None,
+                "alert_level": alert_level
+            }
+            
+            # Add to active alerts if in alert state
             if alert_level:
-                state = self.hass.states.get(entity_id)
                 active_alerts[entity_id] = {
                     "level": alert_level,
-                    "value": state.state if state else "unknown",
+                    "value": current_value,
                     "weight": config.get("weight", 3),
-                    "thresholds": config.get("thresholds", {})
+                    "thresholds": config.get("thresholds", {}),
+                    "friendly_name": friendly_name,
+                    "unit": unit
                 }
                 
         return {
             "monitoring_enabled": self.is_monitoring,
             "total_monitored": total_monitored,
             "active_alerts": active_alerts,
+            "all_alert_entities": all_alert_entities,
             "notification_service": self.notification_service,
             "use_input_text": self.use_input_text,
             "input_text_entity": self.input_text_entity,
             "input_text_exists": self.hass.states.get(self.input_text_entity) is not None,
             "last_check": dt_util.utcnow().isoformat()
         }
+        
+    async def get_detailed_alert_report(self) -> Dict:
+        """Get detailed report of all alert entities and their states"""
+        report = {
+            "timestamp": dt_util.utcnow().isoformat(),
+            "monitoring_enabled": self.is_monitoring,
+            "monitored_entities": {},
+            "alert_summary": {
+                "total_entities": 0,
+                "enabled_entities": 0,
+                "active_alerts": 0,
+                "critical_alerts": 0,
+                "alert_alerts": 0,
+                "warning_alerts": 0
+            }
+        }
+        
+        for entity_id, config in self.monitored_entities.items():
+            state = self.hass.states.get(entity_id)
+            alert_level = await self._check_entity_alert(entity_id, config)
+            
+            entity_info = {
+                "entity_id": entity_id,
+                "friendly_name": state.attributes.get("friendly_name", entity_id) if state else entity_id,
+                "domain": entity_id.split('.')[0],
+                "current_state": state.state if state else "unavailable",
+                "unit": state.attributes.get("unit_of_measurement", "") if state else "",
+                "device_class": state.attributes.get("device_class", "") if state else "",
+                "weight": config.get("weight", 3),
+                "entity_type": config.get("entity_type", "unknown"),
+                "thresholds": config.get("thresholds", {}),
+                "enabled": config.get("enabled", True),
+                "last_check": config.get("last_check"),
+                "current_alert_level": alert_level,
+                "is_valid_state": state is not None and state.state not in [STATE_UNKNOWN, STATE_UNAVAILABLE],
+                "state_attributes": dict(state.attributes) if state else {}
+            }
+            
+            report["monitored_entities"][entity_id] = entity_info
+            
+            # Update summary
+            report["alert_summary"]["total_entities"] += 1
+            if config.get("enabled", True):
+                report["alert_summary"]["enabled_entities"] += 1
+            
+            if alert_level:
+                report["alert_summary"]["active_alerts"] += 1
+                if alert_level == "CRITICAL":
+                    report["alert_summary"]["critical_alerts"] += 1
+                elif alert_level == "ALERT":
+                    report["alert_summary"]["alert_alerts"] += 1
+                elif alert_level == "WARNING":
+                    report["alert_summary"]["warning_alerts"] += 1
+        
+        return report
