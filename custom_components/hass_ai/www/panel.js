@@ -3930,19 +3930,6 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         color: var(--error-color, #f44336);
       }
       
-      .current-value {
-        padding: 8px 12px;
-        background: var(--secondary-background-color);
-        border: 1px solid var(--divider-color);
-        border-radius: 4px;
-        font-family: monospace;
-        color: var(--primary-text-color);
-        font-size: 14px;
-        word-break: break-all;
-        max-height: 100px;
-        overflow-y: auto;
-      }
-      
       .clear-button {
         padding: 8px 16px;
         background: var(--error-color, #f44336);

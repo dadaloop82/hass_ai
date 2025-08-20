@@ -397,79 +397,104 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
             _LOGGER.debug(f"  📐 State class: {state_class}")
             _LOGGER.debug(f"  🎯 Icon: {icon}")
             
-            # Check if this entity warrants alert thresholds - use strict criteria
+            # Check if this entity warrants alert thresholds - use dynamic analysis
             needs_thresholds = False
             entity_lower = entity_id.lower()
             
-            # Exclude generic entities that shouldn't be alerts
-            excluded_entities = [
-                'input_text.hass_ai_alerts',  # Our own alert storage
-                'conversation.',              # AI conversation entities
-                'tts.',                      # Text-to-speech entities
-                'calendar.',                 # Calendar entities
-                'todo.',                     # Todo entities
-                'media_player.',             # Media players
-                'update.',                   # Update entities (usually not critical)
-                'weather.',                  # Weather entities
-                'zone.',                     # Zone entities
-                'person.',                   # Person tracking
-                'sun.',                      # Sun position
-                'switch.',                   # Switches (user controllable)
-                'light.',                    # Lights (user controllable)
-                'button.',                   # Buttons (actions)
-                'select.',                   # Select inputs
-                'number.',                   # Number inputs
-                'camera.',                   # Cameras (not direct alerts)
-                'image.',                    # Images
-                'event.',                    # Events
-            ]
+            # Dynamic analysis based on entity value and attributes
+            _LOGGER.debug(f"  🔍 Dynamic analysis for {entity_id}")
             
-            # Check if entity should be excluded
-            is_excluded = any(entity_id.startswith(prefix) for prefix in excluded_entities)
+            # 1. Check if value is NUMERIC
+            is_numeric = False
+            try:
+                numeric_value = float(current_value)
+                is_numeric = True
+                needs_thresholds = True
+                _LOGGER.debug(f"  ✅ NUMERIC value detected: {current_value} -> {numeric_value}")
+            except (ValueError, TypeError):
+                _LOGGER.debug(f"  ❌ Non-numeric value: '{current_value}'")
             
-            if not is_excluded:
-                # For binary_sensor, only those with meaningful device classes
-                if domain == 'binary_sensor':
-                    alert_device_classes = [
-                        'battery', 'battery_charging', 'cold', 'connectivity', 'door', 'garage_door',
-                        'gas', 'heat', 'light', 'lock', 'moisture', 'motion', 'moving', 'occupancy',
-                        'opening', 'plug', 'power', 'presence', 'problem', 'running', 'safety',
-                        'smoke', 'sound', 'tamper', 'update', 'vibration', 'window'
-                    ]
-                    if device_class in alert_device_classes or 'battery' in entity_lower or 'problem' in entity_lower:
-                        needs_thresholds = True
-                        
-                # For sensor, only those with numeric values or meaningful enums
-                elif domain == 'sensor':
-                    # Must have numeric state OR be an enum with meaningful options OR keyword-based
-                    is_numeric = False
-                    try:
-                        float(current_value)
-                        is_numeric = True
-                        needs_thresholds = True  # Numeric sensors can have thresholds
-                        _LOGGER.debug(f"  ✅ Numeric sensor {entity_id}: {current_value}")
-                    except (ValueError, TypeError):
-                        _LOGGER.debug(f"  ❌ Non-numeric sensor {entity_id}: {current_value}")
-                        # Non-numeric - check if it's a meaningful enum
-                        if options and device_class == 'enum':
-                            # Only if options suggest problematic states
-                            problematic_keywords = ['error', 'fail', 'block', 'offline', 'disconnect', 'low', 'empty', 'full']
-                            if any(keyword in str(options).lower() for keyword in problematic_keywords):
+            # 2. Check if value is BOOLEAN (binary_sensor or boolean states)
+            if not is_numeric:
+                boolean_values = ['on', 'off', 'true', 'false', 'open', 'closed', 'home', 'away', 
+                                'detected', 'clear', 'active', 'inactive', 'connected', 'disconnected']
+                if str(current_value).lower() in boolean_values:
+                    needs_thresholds = True
+                    _LOGGER.debug(f"  ✅ BOOLEAN value detected: '{current_value}'")
+            
+            # 3. Check if has DEFINED OPTIONS (enum with limited states)
+            if not is_numeric and not needs_thresholds:
+                if options and isinstance(options, list) and len(options) > 1:
+                    needs_thresholds = True
+                    _LOGGER.debug(f"  ✅ ENUM with options detected: {options}")
+                elif hasattr(state, 'attributes'):
+                    # Look for other attributes that suggest predefined states
+                    attr_keys = state.attributes.keys()
+                    for key in ['options', 'source_list', 'preset_modes', 'swing_modes', 'supported_features']:
+                        if key in attr_keys and state.attributes[key]:
+                            attr_value = state.attributes[key]
+                            if isinstance(attr_value, list) and len(attr_value) > 1:
                                 needs_thresholds = True
-                                _LOGGER.debug(f"  ✅ Enum sensor with problematic options {entity_id}: {options}")
-                    
-                    # Keyword-based inclusion for important sensor types (even if parsing fails)
-                    if not is_numeric and any(keyword in entity_lower for keyword in ['battery', 'temperature', 'humidity', 'pressure', 'signal', 'cpu', 'memory', 'disk', 'ink', 'level']):
+                                _LOGGER.debug(f"  ✅ PREDEFINED options in '{key}': {attr_value}")
+                                break
+            
+            # 4. Additional context analysis - look for alert-worthy characteristics
+            if not needs_thresholds:
+                # Check device_class for meaningful categories
+                if device_class:
+                    # Device classes that typically provide measurable/alertable values
+                    alertable_classes = [
+                        'battery', 'temperature', 'humidity', 'pressure', 'signal_strength',
+                        'power', 'energy', 'voltage', 'current', 'frequency', 'speed',
+                        'illuminance', 'moisture', 'ph', 'pm25', 'pm10', 'co2', 'co',
+                        'problem', 'safety', 'connectivity', 'door', 'window', 'motion',
+                        'occupancy', 'presence', 'opening', 'lock', 'garage_door'
+                    ]
+                    if device_class in alertable_classes:
                         needs_thresholds = True
-                        _LOGGER.debug(f"  ✅ Keyword-based sensor {entity_id}: matched important sensor type")
+                        _LOGGER.debug(f"  ✅ ALERTABLE device_class: '{device_class}'")
                 
-                # Climate entities (temperature issues)
-                elif domain == 'climate':
-                    needs_thresholds = True
-                    
-                # Device tracker (presence/connectivity)
-                elif domain == 'device_tracker':
-                    needs_thresholds = True
+                # Check unit_of_measurement for measurable quantities
+                if not needs_thresholds and unit:
+                    # Units suggest measurable values worth monitoring
+                    measurable_units = [
+                        '°C', '°F', 'K',  # temperature
+                        '%', 'lx', 'dB',  # percentage, light, sound
+                        'V', 'A', 'W', 'kWh', 'Wh',  # electrical
+                        'Pa', 'hPa', 'bar', 'psi',  # pressure
+                        'ppm', 'µg/m³', 'mg/m³',  # air quality
+                        'm/s', 'km/h', 'mph',  # speed
+                        'mm', 'cm', 'm', 'km',  # distance/size
+                        'MB', 'GB', 'TB'  # data
+                    ]
+                    if unit in measurable_units:
+                        needs_thresholds = True
+                        _LOGGER.debug(f"  ✅ MEASURABLE unit: '{unit}'")
+            
+            # 5. Final exclusion for entities that are clearly not alertable
+            if needs_thresholds:
+                # Exclude entities that are clearly informational only
+                informational_patterns = [
+                    'last_', 'next_', 'current_time', 'uptime', 'version', 
+                    'ip_address', 'mac_', 'id', 'name', 'friendly_name',
+                    'attribution', 'integration', 'device_id'
+                ]
+                
+                # Exclude domains that are user-controllable (not alert sources)
+                controllable_domains = [
+                    'switch', 'light', 'fan', 'cover', 'climate', 'media_player',
+                    'input_number', 'input_select', 'input_text', 'input_boolean',
+                    'button', 'scene', 'script', 'automation', 'timer',
+                    'conversation', 'tts', 'calendar', 'todo', 'camera',
+                    'weather', 'sun', 'zone', 'person', 'device_tracker'
+                ]
+                
+                if (domain in controllable_domains or 
+                    any(pattern in entity_lower for pattern in informational_patterns)):
+                    needs_thresholds = False
+                    _LOGGER.debug(f"  ❌ EXCLUDED: controllable domain '{domain}' or informational pattern")
+            
+            _LOGGER.debug(f"  🎯 Final decision for {entity_id}: needs_thresholds={needs_thresholds}")
             
             if needs_thresholds:
                 _LOGGER.info(f"🎯 Entity {entity_id} QUALIFIES for AI threshold generation")
@@ -591,7 +616,7 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                 except Exception as e:
                     _LOGGER.warning(f"❌ AI threshold generation failed for {entity_id}: {e}")
         else:
-            _LOGGER.debug(f"🚫 Entity {entity_id} does not qualify for AI thresholds - domain: {domain}, excluded: {is_excluded}")
+            _LOGGER.debug(f"🚫 Entity {entity_id} does not qualify for AI thresholds - domain: {domain}")
         
         # If AI succeeded above, it would have returned. If we're here, AI failed or is unavailable.
         # Only provide minimal fallback for critical battery sensors when no AI available
