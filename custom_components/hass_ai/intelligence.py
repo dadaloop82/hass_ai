@@ -286,29 +286,32 @@ async def _extract_entity_area(hass: HomeAssistant, entity_id: str, state: State
     try:
         _LOGGER.debug(f"🔍 Extracting area for entity: {entity_id}")
         
+        # Alternative approach - use registry helpers from hass instance
+        from homeassistant.helpers import entity_registry as er, device_registry as dr, area_registry as ar
+        
         # Try to get from entity registry first
-        entity_registry = hass.helpers.entity_registry.async_get(hass)
-        entity_entry = entity_registry.async_get(entity_id)
+        ent_reg = er.async_get(hass)
+        entity_entry = ent_reg.async_get(entity_id)
         
         if entity_entry:
             _LOGGER.debug(f"  📝 Found entity registry entry for {entity_id}")
             
             # Direct area assignment
-            if entity_entry.area_id:
-                area_registry = hass.helpers.area_registry.async_get(hass)
-                area = area_registry.async_get_area(entity_entry.area_id)
+            if hasattr(entity_entry, 'area_id') and entity_entry.area_id:
+                area_reg = ar.async_get(hass)
+                area = area_reg.async_get_area(entity_entry.area_id)
                 if area:
                     _LOGGER.debug(f"  ✅ Found direct area assignment: {area.name}")
                     return area.name
                     
             # Try through device
-            if entity_entry.device_id:
+            if hasattr(entity_entry, 'device_id') and entity_entry.device_id:
                 _LOGGER.debug(f"  🔗 Checking device {entity_entry.device_id} for area")
-                device_registry = hass.helpers.device_registry.async_get(hass)
-                device_entry = device_registry.async_get(entity_entry.device_id)
-                if device_entry and device_entry.area_id:
-                    area_registry = hass.helpers.area_registry.async_get(hass)
-                    area = area_registry.async_get_area(device_entry.area_id)
+                dev_reg = dr.async_get(hass)
+                device_entry = dev_reg.async_get(entity_entry.device_id)
+                if device_entry and hasattr(device_entry, 'area_id') and device_entry.area_id:
+                    area_reg = ar.async_get(hass)
+                    area = area_reg.async_get_area(device_entry.area_id)
                     if area:
                         _LOGGER.debug(f"  ✅ Found area through device: {area.name}")
                         return area.name
@@ -378,6 +381,21 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
             
             # Extract entity area for context
             entity_area = await _extract_entity_area(hass, entity_id, state)
+            
+            # Get additional context from attributes
+            options = attributes.get('options', [])
+            state_class = attributes.get('state_class', '')
+            icon = attributes.get('icon', '')
+            
+            # Log detailed entity context for debugging
+            _LOGGER.debug(f"🔍 Entity context for {entity_id}:")
+            _LOGGER.debug(f"  📍 Area: {entity_area}")
+            _LOGGER.debug(f"  📊 Current value: {current_value}")
+            _LOGGER.debug(f"  🏷️ Device class: {device_class}")
+            _LOGGER.debug(f"  🔧 Unit: {unit}")
+            _LOGGER.debug(f"  📋 Options: {options}")
+            _LOGGER.debug(f"  📐 State class: {state_class}")
+            _LOGGER.debug(f"  🎯 Icon: {icon}")
             
             # Check if this entity warrants alert thresholds - be completely inclusive for all alert entities
             needs_thresholds = False
@@ -453,7 +471,7 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                         f"2. Quali valori indicano problemi?\n"
                         f"3. Usa l'operatore corretto per il problema\n\n"
                         f"⚡ FORMATO JSON RICHIESTO:\n"
-                        f"{{\"LOW\":{{\"value\":numero,\"operator\":\"simbolo\",\"description\":\"descrizione\"}},\"MEDIUM\":{{\"value\":numero,\"operator\":\"simbolo\",\"description\":\"descrizione\"}},\"HIGH\":{{\"value\":numero,\"operator\":\"simbolo\",\"description\":\"descrizione\"}}}}\n\n"
+                        f"{{\"LOW\":{{\"value\":numero_o_stringa,\"operator\":\"simbolo\",\"description\":\"descrizione\"}},\"MEDIUM\":{{\"value\":numero_o_stringa,\"operator\":\"simbolo\",\"description\":\"descrizione\"}},\"HIGH\":{{\"value\":numero_o_stringa,\"operator\":\"simbolo\",\"description\":\"descrizione\"}}}}\n\n"
                         f"🎯 OPERATORI:\n"
                         f"• \"<\" per problemi con valori BASSI (batterie, temperature fredde, segnali deboli)\n"
                         f"• \">\" per problemi con valori ALTI (temperature calde, CPU alto, umidità alta)\n"
@@ -473,6 +491,8 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                     # Send to AI for threshold generation with enhanced logging
                     _LOGGER.info(f"🤖 Generating AI thresholds for {entity_id} (domain: {domain}, device_class: {device_class})")
                     _LOGGER.info(f"🏠 Entity context: Area='{entity_area}', Value='{current_value} {unit}', Name='{friendly_name}'")
+                    if options:
+                        _LOGGER.info(f"📋 Options available: {options}")
                     
                     ai_response = await conversation_agent.async_process(threshold_prompt, None, None)
                     

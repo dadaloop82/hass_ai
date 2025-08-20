@@ -1662,7 +1662,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       };
       
       // Update final token statistics if available
-      if (message.data.token_stats) {
+      if (message.data && message.data.token_stats) {
         this.tokenStats = {
           totalTokens: message.data.token_stats.total_tokens || this.tokenStats.totalTokens,
           averageTokensPerEntity: message.data.token_stats.average_tokens_per_entity || this.tokenStats.averageTokensPerEntity,
