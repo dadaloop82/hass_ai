@@ -1119,7 +1119,34 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       return state.attributes.area_id;
     }
     
-    // Fallback to extracting from entity name using the same logic as intelligence.py
+    // Try to get area from device registry via device_id
+    if (state?.attributes?.device_id) {
+      const deviceId = state.attributes.device_id;
+      // Look for device in device registry 
+      if (this.hass.devices && this.hass.devices[deviceId]) {
+        const device = this.hass.devices[deviceId];
+        if (device.area_id && this.hass.areas && this.hass.areas[device.area_id]) {
+          return this.hass.areas[device.area_id].name;
+        }
+      }
+    }
+    
+    // Try to extract from entity registry
+    if (this.hass.entities && this.hass.entities[entityId]) {
+      const entityReg = this.hass.entities[entityId];
+      if (entityReg.area_id && this.hass.areas && this.hass.areas[entityReg.area_id]) {
+        return this.hass.areas[entityReg.area_id].name;
+      }
+      // If entity has device_id, try to get area from device
+      if (entityReg.device_id && this.hass.devices && this.hass.devices[entityReg.device_id]) {
+        const device = this.hass.devices[entityReg.device_id];
+        if (device.area_id && this.hass.areas && this.hass.areas[device.area_id]) {
+          return this.hass.areas[device.area_id].name;
+        }
+      }
+    }
+    
+    // Fallback to extracting from entity name using patterns
     const entity_lower = entityId.toLowerCase();
     
     // Check for general/average sensors first
@@ -1157,7 +1184,8 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     const areas = new Set(['ALL']);
     
     Object.keys(this.entities).forEach(entityId => {
-      const area = this._extractEntityArea(entityId);
+      const entity = this.entities[entityId];
+      const area = entity.area || this._extractEntityArea(entityId);
       if (area && area !== 'Altro') {
         areas.add(area);
       }
@@ -1165,7 +1193,8 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     
     // Add "Altro" at the end if there are entities without identified areas
     const hasOtherEntities = Object.keys(this.entities).some(entityId => {
-      const area = this._extractEntityArea(entityId);
+      const entity = this.entities[entityId];
+      const area = entity.area || this._extractEntityArea(entityId);
       return !area || area === 'Altro';
     });
     
@@ -1192,7 +1221,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       const matchesCategory = this.categoryFilter === 'ALL' || entityCategories.includes(this.categoryFilter);
       
       // Area filter
-      const entityArea = this._extractEntityArea(entityId);
+      const entityArea = entity.area || this._extractEntityArea(entityId);
       const matchesArea = this.areaFilter === 'ALL' || entityArea === this.areaFilter;
       
       return matchesWeight && matchesSearch && matchesCategory && matchesArea;
@@ -2386,7 +2415,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                                             Device Class: ${this.hass.states[entity.entity_id]?.attributes?.device_class || 'none'} - 
                                             Unit: ${this.hass.states[entity.entity_id]?.attributes?.unit_of_measurement || 'none'} - 
                                             Value: ${this.hass.states[entity.entity_id]?.state || 'unknown'} - 
-                                            Area: ${this._extractEntityArea(entity.entity_id)}
+                                            Area: ${entity.area || this._extractEntityArea(entity.entity_id)}
                                           </small>
                                         ` : ''}
                                       </div>
@@ -4650,7 +4679,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
               // Calculate area statistics
               const areaStats = {};
               alertEntities.forEach(([entityId, entity]) => {
-                const area = this._extractEntityArea(entityId);
+                const area = entity.area || this._extractEntityArea(entityId);
                 areaStats[area] = (areaStats[area] || 0) + 1;
               });
               

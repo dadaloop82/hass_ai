@@ -281,6 +281,65 @@ ALERT_SEVERITY_LEVELS = {
 }
 
 # Auto-threshold generation for different entity types
+async def _extract_entity_area(hass: HomeAssistant, entity_id: str, state: State) -> str:
+    """Extract the area of an entity from device/entity registry."""
+    try:
+        # Try to get from entity registry first
+        entity_registry = hass.helpers.entity_registry.async_get(hass)
+        entity_entry = entity_registry.async_get(entity_id)
+        
+        if entity_entry:
+            # Direct area assignment
+            if entity_entry.area_id:
+                area_registry = hass.helpers.area_registry.async_get(hass)
+                area = area_registry.async_get_area(entity_entry.area_id)
+                if area:
+                    return area.name
+            
+            # Try through device
+            if entity_entry.device_id:
+                device_registry = hass.helpers.device_registry.async_get(hass)
+                device_entry = device_registry.async_get(entity_entry.device_id)
+                if device_entry and device_entry.area_id:
+                    area_registry = hass.helpers.area_registry.async_get(hass)
+                    area = area_registry.async_get_area(device_entry.area_id)
+                    if area:
+                        return area.name
+        
+        # Fallback to name-based detection
+        entity_lower = entity_id.lower()
+        
+        # Check for general/average sensors first
+        if any(keyword in entity_lower for keyword in ['media', 'average', 'mean', 'avg']):
+            return 'Casa (Media)'
+        
+        # Common room patterns
+        room_patterns = {
+            'soggiorno': ['soggiorno', 'living', 'salotto'],
+            'cucina': ['cucina', 'kitchen'], 
+            'camera da letto': ['camera', 'bedroom', 'letto'],
+            'bagno': ['bagno', 'bathroom', 'toilet'],
+            'ingresso': ['ingresso', 'entrance', 'entrata'],
+            'corridoio': ['corridoio', 'hallway', 'corridor'],
+            'studio': ['studio', 'office', 'ufficio'],
+            'lavanderia': ['lavanderia', 'laundry'],
+            'garage': ['garage'],
+            'cantina': ['cantina', 'basement'],
+            'terrazza': ['terrazza', 'terrace', 'balcone', 'balcony'],
+            'giardino': ['giardino', 'garden'],
+            'taverna': ['taverna'],
+            'mansarda': ['mansarda', 'attic']
+        }
+        
+        for area_name, patterns in room_patterns.items():
+            if any(pattern in entity_lower for pattern in patterns):
+                return area_name
+                
+    except Exception as e:
+        _LOGGER.warning(f"Error extracting area for {entity_id}: {e}")
+    
+    return 'Altro'
+
 async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: State) -> dict:
     """Generate automatic thresholds for an entity using AI evaluation."""
     domain = state.domain
@@ -301,6 +360,10 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
             # Create AI prompt for threshold generation
             unit = attributes.get('unit_of_measurement', '')
             device_class = attributes.get('device_class', '')
+            friendly_name = attributes.get('friendly_name', entity_id.split('.')[-1])
+            
+            # Extract entity area for context
+            entity_area = await _extract_entity_area(hass, entity_id, state)
             
             # Check if this entity warrants alert thresholds - be completely inclusive for all alert entities
             needs_thresholds = False
@@ -323,29 +386,45 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                 needs_thresholds = True  # Include other common alertable domains
             
             if needs_thresholds:
-                # Enhanced AI-generated thresholds prompt with binary sensor support
+                # Enhanced AI-generated thresholds prompt with context-aware analysis
                 if domain == 'binary_sensor':
                     threshold_prompt = (
-                        f"Analizza il sensore binario: {entity_id}\n"
-                        f"Stato attuale: {current_value}\n"
+                        f"🚨 ANALISI SOGLIE PER SENSORE BINARIO\n\n"
+                        f"Abbiamo un'entità che si chiama '{entity_id}' (nome: {friendly_name}) "
+                        f"posizionata in '{entity_area}' e che attualmente ha valore '{current_value}'.\n\n"
                         f"Tipo dispositivo: {device_class}\n"
                         f"Dominio: {domain}\n\n"
-                        f"Per sensori binari, determina quale stato rappresenta un PROBLEMA/PERICOLO:\n\n"
-                        f"ESEMPI:\n"
-                        f"• Batteria scarica: 'on' = problema (LOW)\n"
-                        f"• Problema/errore: 'on' = problema (MEDIUM)\n"
-                        f"• Fumo/gas: 'on' = pericolo (HIGH)\n"
-                        f"• Porta/finestra: 'on' = aperta (context-dependent)\n"
-                        f"• Connettività: 'off' = disconnesso (problema)\n\n"
+                        f"🎯 OBIETTIVO: Definisci quale stato di questo sensore binario rappresenta una condizione che richiede attenzione.\n\n"
+                        f"ESEMPI CONTESTUALI:\n"
+                        f"• Sensore batteria scarica: 'on' = problema (MEDIUM)\n"
+                        f"• Sensore fumo/gas: 'on' = pericolo (HIGH)\n"
+                        f"• Sensore porta/finestra: dipende dal contesto\n"
+                        f"• Sensore connettività: 'off' = disconnesso (LOW)\n"
+                        f"• Sensore movimento: di solito 'on' = normale\n\n"
                         f"Rispondi in JSON: {{\"alert_state\":\"on/off\",\"severity\":\"LOW/MEDIUM/HIGH\",\"description\":\"descrizione problema\"}}"
                     )
                 else:
                     threshold_prompt = (
                         f"🎯 ANALISI SOGLIE INTELLIGENTI per: {entity_id}\n"
-                        f"📊 Valore attuale: {current_value} {unit}\n"
+                        f"� Nome descrittivo: {friendly_name}\n"
+                        f"🏠 Area/Stanza: {entity_area}\n"
+                        f"�📊 Valore attuale: {current_value} {unit}\n"
                         f"🏷️ Tipo dispositivo: {device_class}\n"
                         f"🔧 Dominio: {domain}\n\n"
                         f"🚨 Analizza questa entità e genera 3 soglie di allerta (LOW, MEDIUM, HIGH) appropriate.\n\n"
+                        f"🧠 CONTESTO IMPORTANTE:\n"
+                        f"- Nome entità: {entity_id} può contenere indizi sul tipo di sensore\n"
+                        f"- Area: {entity_area} può dare contesto sulla posizione\n"
+                        f"- Nome descrittivo: {friendly_name} può essere più chiaro dell'ID\n"
+                        f"- Valore attuale: {current_value} {unit} come riferimento\n\n"
+                        f"🔍 ESEMPI SPECIFICI PER ANALISI:\n"
+                        f"• hp_deskjet_4100_series_tri_color_ink → Livello inchiostro stampante (LOW=30, MEDIUM=20, HIGH=10)\n"
+                        f"• battery_level → Livello batteria dispositivo (LOW=30, MEDIUM=20, HIGH=10)\n"
+                        f"• cpu_percent → Utilizzo CPU sistema (LOW=70, MEDIUM=85, HIGH=95)\n"
+                        f"• temperature → Temperatura ambiente (dipende da contesto caldo/freddo)\n"
+                        f"• humidity → Umidità ambiente (LOW=30 secco, HIGH=80 umido)\n"
+                        f"• signal_strength_dbm → Forza segnale (LOW=-70, MEDIUM=-80, HIGH=-90)\n"
+                        f"• disk_use_percent → Utilizzo disco (LOW=80, MEDIUM=90, HIGH=95)\n\n"
                         f"📋 ESEMPI GENERICI PER TIPO:\n"
                         f"• 🔋 Energia/Batterie: problemi con valori bassi (< operator)\n"
                         f"• 🌡️ Temperature: problemi con valori troppo alti O troppo bassi\n"
@@ -758,7 +837,7 @@ async def get_entities_importance_batched(
         # Use fallback for all entities if no API key
         all_results = []
         for state in states:
-            all_results.append(_create_fallback_result(state.entity_id, 0, "no_api_key", state))
+            all_results.append(await _create_fallback_result(hass, state.entity_id, 0, "no_api_key", state))
         return all_results
     
     all_results = []
@@ -862,7 +941,7 @@ async def get_entities_importance_batched(
                     
                     # Send fallback results to frontend immediately
                     for state in remaining_states:
-                        fallback_result = _create_fallback_result(state.entity_id, overall_batch_num, "token_limit_exceeded", state)
+                        fallback_result = await _create_fallback_result(hass, state.entity_id, overall_batch_num, "token_limit_exceeded", state)
                         all_results.append(fallback_result)
                         
                         # Send each fallback result to frontend
@@ -902,7 +981,7 @@ async def get_entities_importance_batched(
     processed_entity_ids = {res["entity_id"] for res in all_results}
     for state in states:
         if state.entity_id not in processed_entity_ids:
-            all_results.append(_create_fallback_result(state.entity_id, 0, "missing_result", state))
+            all_results.append(await _create_fallback_result(hass, state.entity_id, 0, "missing_result", state))
 
     # Send scan completion message to frontend with token statistics
     if connection and msg_id:
@@ -1038,7 +1117,7 @@ async def _process_single_batch(
                 }))
             # Use fallback for all entities in this batch
             for state in batch_states:
-                fallback_result = _create_fallback_result(state.entity_id, batch_num, "unsupported_provider", state)
+                fallback_result = await _create_fallback_result(hass, state.entity_id, batch_num, "unsupported_provider", state)
                 all_results.append(fallback_result)
                 
                 # Send fallback result to frontend
@@ -1087,6 +1166,10 @@ async def _process_single_batch(
                         else:
                             management_type = management_type.lower()
                             
+                        # Find the corresponding state
+                        state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
+                        entity_area = await _extract_entity_area(hass, item["entity_id"], state) if state else 'Altro'
+                            
                         result = {
                             "entity_id": item["entity_id"],
                             "overall_weight": rating,
@@ -1095,6 +1178,7 @@ async def _process_single_batch(
                             "management_type": management_type,
                             "analysis_method": "ai_conversation",
                             "batch_number": batch_num,
+                            "area": entity_area,
                         }
                         
                         # Generate auto-thresholds for relevant entities (more inclusive approach)
@@ -1128,7 +1212,7 @@ async def _process_single_batch(
                         _LOGGER.warning(f"Invalid rating {rating} for entity {item['entity_id']}, using fallback")
                         # Find the corresponding state
                         entity_state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
-                        fallback_result = _create_fallback_result(item["entity_id"], batch_num, "invalid_rating", entity_state)
+                        fallback_result = await _create_fallback_result(hass, item["entity_id"], batch_num, "invalid_rating", entity_state)
                         all_results.append(fallback_result)
                         
                         # Send fallback result to frontend
@@ -1143,7 +1227,7 @@ async def _process_single_batch(
             _LOGGER.warning(f"AI response is not a list, using fallback for batch {batch_num}")
             # Use fallback for all entities in this batch
             for state in batch_states:
-                fallback_result = _create_fallback_result(state.entity_id, batch_num, "invalid_response", state)
+                fallback_result = await _create_fallback_result(hass, state.entity_id, batch_num, "invalid_response", state)
                 all_results.append(fallback_result)
                 
                 # Send fallback result to frontend
@@ -1168,7 +1252,7 @@ async def _process_single_batch(
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
         for state in batch_states:
-            fallback_result = _create_fallback_result(state.entity_id, batch_num, "json_decode_error", state)
+            fallback_result = await _create_fallback_result(hass, state.entity_id, batch_num, "json_decode_error", state)
             all_results.append(fallback_result)
             
             # Send fallback result to frontend
@@ -1192,7 +1276,7 @@ async def _process_single_batch(
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
         for state in batch_states:
-            fallback_result = _create_fallback_result(state.entity_id, batch_num, "processing_error", state)
+            fallback_result = await _create_fallback_result(hass, state.entity_id, batch_num, "processing_error", state)
             all_results.append(fallback_result)
             
             # Send fallback result to frontend
@@ -1229,7 +1313,7 @@ def _check_token_limit_exceeded(response_text: str) -> bool:
     return False
 
 
-def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domain_fallback", state: State = None) -> dict:
+async def _create_fallback_result(hass: HomeAssistant, entity_id: str, batch_num: int, reason: str = "domain_fallback", state: State = None) -> dict:
     """Create a fallback result when AI analysis fails."""
     domain = entity_id.split(".")[0]
     
@@ -1312,6 +1396,9 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
             fallback_reason = f"{reason_map[importance]} - basic domain-based evaluation"
         analysis_method = "domain_based_categorization"
     
+    # Extract entity area
+    entity_area = await _extract_entity_area(hass, entity_id, state) if state else 'Altro'
+    
     result = {
         "entity_id": entity_id,
         "overall_weight": importance,
@@ -1320,6 +1407,7 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         "management_type": management_type,
         "analysis_method": analysis_method,
         "batch_number": batch_num,
+        "area": entity_area,
     }
     
     # Generate basic auto-thresholds for ALERTS entities in fallback
