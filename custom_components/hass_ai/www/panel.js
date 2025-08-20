@@ -2283,7 +2283,13 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                           <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
                           ${(() => {
                             const area = entity.area || this._extractEntityArea(entity.entity_id);
-                            return area && area !== 'Altro' ? html`<br><small class="entity-area">📍 ${area}</small>` : '';
+                            if (entity.area) {
+                              // Area dal backend
+                              return area && area !== 'Altro' ? html`<br><small class="entity-area">📍 ${area}</small>` : '';
+                            } else {
+                              // Fallback frontend (da rimuovere quando backend funziona)
+                              return area && area !== 'Altro' ? html`<br><small class="entity-area">📍 ${area} (fallback)</small>` : '';
+                            }
                           })()}
                           ${(() => {
                             const currentState = this.hass.states[entity.entity_id];
@@ -3742,9 +3748,10 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       }
       
       .current-value {
-        color: var(--primary-color);
-        font-weight: 500;
-        font-size: 11px;
+        color: var(--secondary-text-color);
+        font-weight: normal;
+        font-size: 10px;
+        opacity: 0.8;
       }
       
       .area-stats {

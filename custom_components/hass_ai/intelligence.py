@@ -441,19 +441,27 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                         
                 # For sensor, only those with numeric values or meaningful enums
                 elif domain == 'sensor':
-                    # Must have numeric state OR be an enum with meaningful options
+                    # Must have numeric state OR be an enum with meaningful options OR keyword-based
+                    is_numeric = False
                     try:
                         float(current_value)
+                        is_numeric = True
                         needs_thresholds = True  # Numeric sensors can have thresholds
+                        _LOGGER.debug(f"  ✅ Numeric sensor {entity_id}: {current_value}")
                     except (ValueError, TypeError):
+                        _LOGGER.debug(f"  ❌ Non-numeric sensor {entity_id}: {current_value}")
                         # Non-numeric - check if it's a meaningful enum
                         if options and device_class == 'enum':
                             # Only if options suggest problematic states
                             problematic_keywords = ['error', 'fail', 'block', 'offline', 'disconnect', 'low', 'empty', 'full']
                             if any(keyword in str(options).lower() for keyword in problematic_keywords):
                                 needs_thresholds = True
-                        elif any(keyword in entity_lower for keyword in ['battery', 'temperature', 'humidity', 'pressure', 'signal', 'cpu', 'memory', 'disk', 'ink', 'level']):
-                            needs_thresholds = True
+                                _LOGGER.debug(f"  ✅ Enum sensor with problematic options {entity_id}: {options}")
+                    
+                    # Keyword-based inclusion for important sensor types (even if parsing fails)
+                    if not is_numeric and any(keyword in entity_lower for keyword in ['battery', 'temperature', 'humidity', 'pressure', 'signal', 'cpu', 'memory', 'disk', 'ink', 'level']):
+                        needs_thresholds = True
+                        _LOGGER.debug(f"  ✅ Keyword-based sensor {entity_id}: matched important sensor type")
                 
                 # Climate entities (temperature issues)
                 elif domain == 'climate':
@@ -464,6 +472,7 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                     needs_thresholds = True
             
             if needs_thresholds:
+                _LOGGER.info(f"🎯 Entity {entity_id} QUALIFIES for AI threshold generation")
                 # Enhanced AI-generated thresholds prompt with context-aware analysis
                 if domain == 'binary_sensor':
                     threshold_prompt = (
@@ -581,6 +590,8 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                             
                 except Exception as e:
                     _LOGGER.warning(f"❌ AI threshold generation failed for {entity_id}: {e}")
+        else:
+            _LOGGER.debug(f"🚫 Entity {entity_id} does not qualify for AI thresholds - domain: {domain}, excluded: {is_excluded}")
         
         # If AI succeeded above, it would have returned. If we're here, AI failed or is unavailable.
         # Only provide minimal fallback for critical battery sensors when no AI available
