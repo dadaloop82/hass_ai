@@ -284,29 +284,39 @@ ALERT_SEVERITY_LEVELS = {
 async def _extract_entity_area(hass: HomeAssistant, entity_id: str, state: State) -> str:
     """Extract the area of an entity from device/entity registry."""
     try:
+        _LOGGER.debug(f"🔍 Extracting area for entity: {entity_id}")
+        
         # Try to get from entity registry first
         entity_registry = hass.helpers.entity_registry.async_get(hass)
         entity_entry = entity_registry.async_get(entity_id)
         
         if entity_entry:
+            _LOGGER.debug(f"  📝 Found entity registry entry for {entity_id}")
+            
             # Direct area assignment
             if entity_entry.area_id:
                 area_registry = hass.helpers.area_registry.async_get(hass)
                 area = area_registry.async_get_area(entity_entry.area_id)
                 if area:
+                    _LOGGER.debug(f"  ✅ Found direct area assignment: {area.name}")
                     return area.name
-            
+                    
             # Try through device
             if entity_entry.device_id:
+                _LOGGER.debug(f"  🔗 Checking device {entity_entry.device_id} for area")
                 device_registry = hass.helpers.device_registry.async_get(hass)
                 device_entry = device_registry.async_get(entity_entry.device_id)
                 if device_entry and device_entry.area_id:
                     area_registry = hass.helpers.area_registry.async_get(hass)
                     area = area_registry.async_get_area(device_entry.area_id)
                     if area:
+                        _LOGGER.debug(f"  ✅ Found area through device: {area.name}")
                         return area.name
+        else:
+            _LOGGER.debug(f"  ❌ No entity registry entry found for {entity_id}")
         
         # Fallback to name-based detection
+        _LOGGER.debug(f"  🔄 Falling back to name-based area detection for {entity_id}")
         entity_lower = entity_id.lower()
         
         # Check for general/average sensors first
@@ -333,11 +343,15 @@ async def _extract_entity_area(hass: HomeAssistant, entity_id: str, state: State
         
         for area_name, patterns in room_patterns.items():
             if any(pattern in entity_lower for pattern in patterns):
+                _LOGGER.debug(f"  ✅ Found area by name pattern: {area_name} (matched pattern in {entity_id})")
                 return area_name
+        
+        _LOGGER.debug(f"  🔄 No pattern matched, returning 'Altro' for {entity_id}")
                 
     except Exception as e:
         _LOGGER.warning(f"Error extracting area for {entity_id}: {e}")
     
+    _LOGGER.debug(f"  📍 Final result for {entity_id}: 'Altro'")
     return 'Altro'
 
 async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: State) -> dict:
@@ -458,6 +472,8 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                 try:
                     # Send to AI for threshold generation with enhanced logging
                     _LOGGER.info(f"🤖 Generating AI thresholds for {entity_id} (domain: {domain}, device_class: {device_class})")
+                    _LOGGER.info(f"🏠 Entity context: Area='{entity_area}', Value='{current_value} {unit}', Name='{friendly_name}'")
+                    
                     ai_response = await conversation_agent.async_process(threshold_prompt, None, None)
                     
                     if ai_response and hasattr(ai_response, 'response') and ai_response.response:
@@ -868,6 +884,12 @@ async def get_entities_importance_batched(
         
         _LOGGER.info(f"📦 Processing batch {overall_batch_num} with {len(batch_states)} entities (batch size: {current_batch_size}, retry: {token_limit_retries}, compact: {use_compact_mode})")
         
+        # Log detailed info for each entity in the batch
+        for i, state in enumerate(batch_states):
+            entity_area = await _extract_entity_area(hass, state.entity_id, state)
+            friendly_name = state.attributes.get('friendly_name', state.entity_id.split('.')[-1])
+            _LOGGER.info(f"  🏷️  Entity {i+1}: {state.entity_id} | Area: '{entity_area}' | Value: '{state.state}' | Name: '{friendly_name}'")
+        
         # Send batch info to frontend
         if connection and msg_id:
             connection.send_message(websocket_api.event_message(msg_id, {
@@ -1169,6 +1191,8 @@ async def _process_single_batch(
                         # Find the corresponding state
                         state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
                         entity_area = await _extract_entity_area(hass, item["entity_id"], state) if state else 'Altro'
+                        
+                        _LOGGER.info(f"📋 Result for {item['entity_id']}: Weight={rating}, Area='{entity_area}', Categories={category}")
                             
                         result = {
                             "entity_id": item["entity_id"],
