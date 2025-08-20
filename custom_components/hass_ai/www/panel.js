@@ -19,6 +19,7 @@ class HassAiPanel extends LitElement {
       minWeight: { state: true },
       searchTerm: { state: true },
       categoryFilter: { state: true },
+      areaFilter: { state: true },
       tokenStats: { state: true },
       alertThresholds: { state: true },
       isOperationActive: { state: true },
@@ -36,6 +37,7 @@ class HassAiPanel extends LitElement {
     this.minWeight = 3; // Filter: minimum weight to show entities (default 3)
     this.searchTerm = ''; // Search filter
     this.categoryFilter = 'ALL'; // Category filter: ALL, DATA, CONTROL, ALERTS, ENHANCED, ENHANCED
+    this.areaFilter = 'ALL'; // Area filter: ALL, or specific area name
     this.correlations = {}; // Store correlations for each entity
     this.isOperationActive = false; // Track if any operation is active
     this.currentOperation = null; // Track current operation type
@@ -79,6 +81,7 @@ class HassAiPanel extends LitElement {
     this._loadComponentVersion();
     this._loadMinWeightFilter();
     this._loadCategoryFilter();
+    this._loadAreaFilter();
     this._loadOverrides();
     this._loadAiResults();
     this._loadCorrelations();
@@ -1094,8 +1097,87 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     await this._updateFilteredAlerts();
   }
 
+  async _loadAreaFilter() {
+    const saved = localStorage.getItem('hass_ai_area_filter');
+    this.areaFilter = saved || 'ALL'; // Default to ALL
+  }
+
+  async _saveAreaFilter(value) {
+    // Save area filter to localStorage
+    this.areaFilter = value;
+    localStorage.setItem('hass_ai_area_filter', value);
+    this.requestUpdate();
+    
+    // Update alert monitoring with filtered entities in real-time
+    await this._updateFilteredAlerts();
+  }
+
+  _extractEntityArea(entityId) {
+    // Try to get area from device registry first
+    const state = this.hass.states[entityId];
+    if (state?.attributes?.area_id) {
+      return state.attributes.area_id;
+    }
+    
+    // Fallback to extracting from entity name using the same logic as intelligence.py
+    const entity_lower = entityId.toLowerCase();
+    
+    // Check for general/average sensors first
+    if (entity_lower.includes('media') || entity_lower.includes('average') || entity_lower.includes('mean') || entity_lower.includes('avg')) {
+      return 'Casa (Media)'; // General house average
+    }
+    
+    // Common room patterns in Italian and English
+    const room_patterns = [
+      'soggiorno', 'living', 'salotto',
+      'cucina', 'kitchen', 
+      'camera', 'bedroom', 'letto',
+      'bagno', 'bathroom', 'toilet',
+      'ingresso', 'entrance', 'entrata',
+      'corridoio', 'hallway', 'corridor',
+      'studio', 'office', 'ufficio',
+      'lavanderia', 'laundry',
+      'garage', 'cantina', 'basement',
+      'terrazza', 'terrace', 'balcone', 'balcony',
+      'giardino', 'garden',
+      'taverna', 'mansarda', 'attic',
+      'casa', 'home', 'house'
+    ];
+    
+    for (const room of room_patterns) {
+      if (entity_lower.includes(room)) {
+        return room;
+      }
+    }
+    
+    return 'Altro'; // Default area for unidentified rooms
+  }
+
+  _getAvailableAreas() {
+    const areas = new Set(['ALL']);
+    
+    Object.keys(this.entities).forEach(entityId => {
+      const area = this._extractEntityArea(entityId);
+      if (area && area !== 'Altro') {
+        areas.add(area);
+      }
+    });
+    
+    // Add "Altro" at the end if there are entities without identified areas
+    const hasOtherEntities = Object.keys(this.entities).some(entityId => {
+      const area = this._extractEntityArea(entityId);
+      return !area || area === 'Altro';
+    });
+    
+    if (hasOtherEntities) {
+      areas.add('Altro');
+    }
+    
+    return Array.from(areas);
+  }
+
   _getFilteredEntities() {
-    // Filter entities by minimum weight, search term, and category
+    // Filter entities by minimum weight, search term, category, and area
     return Object.entries(this.entities).filter(([entityId, entity]) => {
       const weight = this.overrides[entityId]?.overall_weight ?? entity.overall_weight;
       const matchesWeight = weight >= this.minWeight;
@@ -1109,7 +1191,11 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       const entityCategories = Array.isArray(entity.category) ? entity.category : [entity.category];
       const matchesCategory = this.categoryFilter === 'ALL' || entityCategories.includes(this.categoryFilter);
       
-      return matchesWeight && matchesSearch && matchesCategory;
+      // Area filter
+      const entityArea = this._extractEntityArea(entityId);
+      const matchesArea = this.areaFilter === 'ALL' || entityArea === this.areaFilter;
+      
+      return matchesWeight && matchesSearch && matchesCategory && matchesArea;
     }).map(([entityId, entity]) => entity); // Return just the entity objects, not tuples
   }
 
@@ -2034,39 +2120,53 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         ${Object.keys(this.entities).length > 0 ? html`
           <!-- Compact Filter Controls above table -->
           <div class="table-filter-controls">
-            <div class="filter-left">
-              <input 
-                type="text" 
-                placeholder="${isItalian ? 'Cerca entità...' : 'Search entities...'}"
-                .value=${this.searchTerm}
-                @input=${(e) => { this.searchTerm = e.target.value; this.requestUpdate(); }}
-                class="search-input compact"
-              />
-              ${this.searchTerm ? html`
-                <ha-icon 
-                  icon="mdi:close" 
-                  @click=${() => { this.searchTerm = ''; this.requestUpdate(); }}
-                  class="clear-search"
-                ></ha-icon>
-              ` : ''}
+            <div class="filter-row">
+              <div class="filter-left">
+                <input 
+                  type="text" 
+                  placeholder="${isItalian ? 'Cerca entità...' : 'Search entities...'}"
+                  .value=${this.searchTerm}
+                  @input=${(e) => { this.searchTerm = e.target.value; this.requestUpdate(); }}
+                  class="search-input compact"
+                />
+                ${this.searchTerm ? html`
+                  <ha-icon 
+                    icon="mdi:close" 
+                    @click=${() => { this.searchTerm = ''; this.requestUpdate(); }}
+                    class="clear-search"
+                  ></ha-icon>
+                ` : ''}
+              </div>
+              <div class="filter-right">
+                <select 
+                  .value=${this.categoryFilter}
+                  @change=${(e) => this._saveCategoryFilter(e.target.value)}
+                  class="category-select compact"
+                >
+                  <option value="ALL">${isItalian ? 'Tutte le categorie' : 'All categories'}</option>
+                  <option value="DATA">${isItalian ? 'Dati' : 'Data'}</option>
+                  <option value="CONTROL">${isItalian ? 'Controllo' : 'Control'}</option>
+                  <option value="ALERTS">${isItalian ? 'Allerte' : 'Alerts'}</option>
+                  <option value="SERVICE">${isItalian ? 'Servizio' : 'Service'}</option>
+                  <option value="ENHANCED">${isItalian ? 'Miglioramenti' : 'Enhanced'}</option>
+                </select>
+                <select 
+                  .value=${this.areaFilter}
+                  @change=${(e) => this._saveAreaFilter(e.target.value)}
+                  class="area-select compact"
+                >
+                  <option value="ALL">${isItalian ? 'Tutte le aree' : 'All areas'}</option>
+                  ${this._getAvailableAreas().filter(area => area !== 'ALL').map(area => html`
+                    <option value=${area}>${area}</option>
+                  `)}
+                </select>
+              </div>
             </div>
-            <div class="filter-right">
-              <select 
-                .value=${this.categoryFilter}
-                @change=${(e) => this._saveCategoryFilter(e.target.value)}
-                class="category-select compact"
-              >
-                <option value="ALL">${isItalian ? 'Tutte le categorie' : 'All categories'}</option>
-                <option value="DATA">${isItalian ? 'Dati' : 'Data'}</option>
-                <option value="CONTROL">${isItalian ? 'Controllo' : 'Control'}</option>
-                <option value="ALERTS">${isItalian ? 'Allerte' : 'Alerts'}</option>
-                <option value="SERVICE">${isItalian ? 'Servizio' : 'Service'}</option>
-                <option value="ENHANCED">${isItalian ? 'Miglioramenti' : 'Enhanced'}</option>
-              </select>
+            <div class="filter-area-row">
               <div class="weight-filter-container">
                 <div class="weight-main-section">
                   <label class="weight-filter-label">
-                    ${isItalian ? 'Filtro Peso Minimo' : 'Minimum Weight Filter'}
+                    ${isItalian ? 'Peso Min' : 'Min Weight'}
                   </label>
                   <div class="weight-slider-row">
                     <input 
@@ -2085,12 +2185,14 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                 <div class="weight-info-section">
                   <div class="weight-help-text">
                     ${isItalian ? 
-                      '(0=Non importante, 5=Critico) - Solo entità con peso ≥ del valore saranno mostrate e monitorate.' :
-                      '(0=Not important, 5=Critical) - Only entities with weight ≥ value will be shown and monitored.'
+                      '(0=Non importante, 5=Critico)' :
+                      '(0=Not important, 5=Critical)'
                     }
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
               ${Object.keys(this.entities).length > 0 ? html`
                 <mwc-button 
                   outlined
@@ -2150,6 +2252,10 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                         <div class="entity-info ${isUnavailable ? 'unavailable' : ''}">
                           <strong>${entity.entity_id}</strong>
                           <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
+                          ${(() => {
+                            const area = this._extractEntityArea(entity.entity_id);
+                            return area && area !== 'Altro' ? html`<br><small class="entity-area">📍 ${area}</small>` : '';
+                          })()}
                         </div>
                       </td>
                       <td>
@@ -2274,6 +2380,15 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                                           `💡 Tipo: ${entity.auto_thresholds.entity_type || 'non determinato'}` :
                                           `💡 Type: ${entity.auto_thresholds.entity_type || 'undetermined'}`
                                         }</small>
+                                        ${entity.entity_id.includes('umidita') || entity.entity_id.includes('temperatura') ? html`
+                                          <br><small style="color: var(--warning-color);">
+                                            ${isItalian ? '🔍 Debug: ' : '🔍 Debug: '}${entity.entity_id} - 
+                                            Device Class: ${this.hass.states[entity.entity_id]?.attributes?.device_class || 'none'} - 
+                                            Unit: ${this.hass.states[entity.entity_id]?.attributes?.unit_of_measurement || 'none'} - 
+                                            Value: ${this.hass.states[entity.entity_id]?.state || 'unknown'} - 
+                                            Area: ${this._extractEntityArea(entity.entity_id)}
+                                          </small>
+                                        ` : ''}
                                       </div>
                                     </div>
                                   </div>
@@ -3583,6 +3698,56 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         font-size: 14px;
       }
       
+      .entity-area {
+        color: var(--secondary-text-color);
+        font-style: italic;
+        font-size: 11px;
+      }
+      
+      .area-stats {
+        margin-top: 12px;
+        padding: 8px;
+        background: var(--card-background-color);
+        border-radius: 6px;
+        border: 1px solid var(--divider-color);
+      }
+      
+      .area-stats h4 {
+        margin: 0 0 8px 0;
+        font-size: 13px;
+        color: var(--primary-text-color);
+      }
+      
+      .area-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 6px;
+      }
+      
+      .area-stat-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 8px;
+        background: var(--primary-background-color);
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      
+      .area-name {
+        font-weight: 500;
+        color: var(--primary-text-color);
+      }
+      
+      .area-count {
+        background: var(--primary-color);
+        color: var(--text-primary-color);
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      
       .alert-badge {
         padding: 2px 8px;
         border-radius: 12px;
@@ -3913,132 +4078,151 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       /* Table Filter Controls - Compact horizontal layout */
       .table-filter-controls {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 16px;
-        padding: 12px 16px;
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px 12px;
         background: var(--primary-background-color);
         border: 1px solid var(--divider-color);
-        border-radius: 8px;
+        border-radius: 6px;
         margin-bottom: 8px;
+        font-size: 13px;
+      }
+      
+      .filter-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       
       .filter-left {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         flex: 1;
-        max-width: 300px;
+        min-width: 200px;
       }
       
       .filter-right {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
         flex: 0 0 auto;
+        flex-wrap: wrap;
+      }
+      
+      .filter-area-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 4px;
       }
       
       .search-input.compact {
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-size: 14px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 13px;
         width: 100%;
+        min-width: 150px;
+        max-width: 200px;
       }
       
       .category-select.compact {
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-size: 13px;
-        min-width: 140px;
+        padding: 4px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        min-width: 120px;
+      }
+      
+      .area-select.compact {
+        padding: 4px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        min-width: 100px;
       }
       
       .weight-slider.compact {
-        width: 80px;
-        height: 4px;
+        width: 60px;
+        height: 3px;
       }
       
-      /* New large weight filter styles */
+      /* New compact weight filter styles */
       .weight-filter-container {
         display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 20px;
+        flex-direction: column;
+        gap: 6px;
         background: var(--card-background-color);
-        border: 3px solid #ff4444;
-        border-radius: 8px;
-        padding: 16px 32px;
-        margin: 12px 0;
-        box-shadow: 0 2px 8px rgba(255, 68, 68, 0.15);
+        border: 2px solid #ff4444;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin: 6px 0;
+        box-shadow: 0 1px 4px rgba(255, 68, 68, 0.15);
         position: relative;
-        width: 100%;
-        max-width: none;
-        min-height: auto;
+        font-size: 12px;
       }
       
       .weight-filter-container::before {
-        content: "⚠️ IMPORTANTE";
+        content: "⚠️";
         position: absolute;
-        top: -12px;
-        left: 16px;
+        top: -8px;
+        left: 8px;
         background: #ff4444;
         color: white;
-        padding: 4px 12px;
-        border-radius: 8px;
-        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
         font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
       }
       
       .weight-main-section {
         display: flex;
-        flex-direction: column;
+        align-items: center;
         gap: 8px;
-        flex: 0 0 auto;
-        min-width: 200px;
+        flex: 1;
       }
       
       .weight-info-section {
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        flex: 1;
-        font-size: 12px;
+        gap: 2px;
+        font-size: 10px;
       }
       
       .weight-help-text {
         color: var(--secondary-text-color);
-        line-height: 1.3;
+        line-height: 1.2;
         font-style: italic;
       }
       
       .weight-filter-label {
         font-weight: 600;
-        font-size: 14px;
+        font-size: 12px;
         color: var(--primary-text-color);
+        white-space: nowrap;
       }
       
       .weight-help {
         font-weight: 400;
-        font-size: 11px;
+        font-size: 10px;
         color: var(--secondary-text-color);
-        line-height: 1.3;
+        line-height: 1.2;
         font-style: italic;
       }
       
       .weight-slider-row {
         display: flex;
         align-items: center;
-        gap: 16px;
-        width: 100%;
+        gap: 8px;
+        flex: 1;
       }
       
       .weight-slider.large {
         flex: 1;
-        height: 20px;
-        min-width: 500px;
-        width: 100%;
-        max-width: 800px;
+        height: 16px;
+        min-width: 150px;
+        max-width: 250px;
       }
       
       .weight-display {
@@ -4377,6 +4561,10 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         // Category filter - if not showing ALL, only show entities that match current category filter
         const matchesCategory = this.categoryFilter === 'ALL' || categories.includes(this.categoryFilter);
         
+        // Area filter
+        const entityArea = this._extractEntityArea(entityId);
+        const matchesArea = this.areaFilter === 'ALL' || entityArea === this.areaFilter;
+        
         // Filter out entities with invalid/non-evaluable states
         const state = this.hass.states[entityId];
         const currentValue = state?.state;
@@ -4384,7 +4572,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
           !['unknown', 'unavailable', 'none', 'null', ''].includes(currentValue.toLowerCase()) &&
           currentValue !== 'N/A';
         
-        return matchesWeight && matchesCategory && isValidState;
+        return matchesWeight && matchesCategory && matchesArea && isValidState;
       });
 
     // Get ALL monitorable ALERTS entities (regardless of UI filters) for accurate monitoring count
@@ -4458,6 +4646,28 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                 `📊 Monitoring ${allMonitorableAlerts.length} valid ALERT entities (regardless of weight filter). Shown in table: ${alertEntities.length}`
               }
             </p>
+            ${(() => {
+              // Calculate area statistics
+              const areaStats = {};
+              alertEntities.forEach(([entityId, entity]) => {
+                const area = this._extractEntityArea(entityId);
+                areaStats[area] = (areaStats[area] || 0) + 1;
+              });
+              
+              return Object.keys(areaStats).length > 1 ? html`
+                <div class="area-stats">
+                  <h4>${isItalian ? '📍 Distribuzione per Area:' : '📍 Distribution by Area:'}</h4>
+                  <div class="area-stats-grid">
+                    ${Object.entries(areaStats).map(([area, count]) => html`
+                      <div class="area-stat-item">
+                        <span class="area-name">${area}</span>
+                        <span class="area-count">${count}</span>
+                      </div>
+                    `)}
+                  </div>
+                </div>
+              ` : '';
+            })()}
           </div>
         </div>
 
@@ -4617,6 +4827,45 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         </div>
       </div>
     `;
+  }
+
+  async _testSingleEntityThreshold(entityId) {
+    const isItalian = (this.hass.language || navigator.language).startsWith('it');
+    
+    try {
+      this._showSimpleNotification(
+        isItalian ? `🔄 Test soglie per ${entityId}...` : `🔄 Testing thresholds for ${entityId}...`,
+        'info'
+      );
+
+      // Call the service to regenerate thresholds for a single entity
+      const response = await this.hass.callWS({
+        type: "hass_ai/generate_thresholds",
+        entity_id: entityId,
+        force_regenerate: true
+      });
+
+      if (response && response.success) {
+        this._showSimpleNotification(
+          isItalian ? `✅ Test completato per ${entityId}` : `✅ Test completed for ${entityId}`,
+          'success'
+        );
+        
+        // Reload entities to see the new thresholds
+        await this._loadEntities();
+      } else {
+        this._showSimpleNotification(
+          isItalian ? `❌ Test fallito per ${entityId}` : `❌ Test failed for ${entityId}`,
+          'error'
+        );
+      }
+    } catch (error) {
+      console.error('Error testing single entity threshold:', error);
+      this._showSimpleNotification(
+        isItalian ? `❌ Errore nel test: ${error.message}` : `❌ Test error: ${error.message}`,
+        'error'
+      );
+    }
   }
 }
 

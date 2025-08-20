@@ -302,32 +302,25 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
             unit = attributes.get('unit_of_measurement', '')
             device_class = attributes.get('device_class', '')
             
-            # Check if this entity warrants alert thresholds - be more inclusive
+            # Check if this entity warrants alert thresholds - be completely inclusive for all alert entities
             needs_thresholds = False
             entity_lower = entity_id.lower()
             
+            # For ANY binary_sensor, consider it for alert thresholds
             if domain == 'binary_sensor':
-                device_class = attributes.get('device_class', '')
-                if (device_class in ['battery', 'problem', 'safety', 'smoke', 'gas', 'moisture', 'update'] or
-                    any(keyword in entity_lower for keyword in ['battery', 'update', 'problem', 'error', 'warning', 'alert'])):
-                    needs_thresholds = True
+                needs_thresholds = True  # All binary sensors can have alert states
                     
+            # For ANY sensor, consider it for alert thresholds  
             elif domain == 'sensor':
-                try:
-                    num_value = float(current_value)
-                    # Much more inclusive criteria for sensors that need thresholds
-                    if (any(keyword in entity_lower for keyword in ['battery', 'temperature', 'humidity', 'wind', 'cpu', 'memory', 'disk', 'signal', 'rssi', 'heart_rate', 'blood', 'weight', 'calories', 'steps']) or
-                        device_class in ['battery', 'temperature', 'humidity', 'signal_strength', 'power'] or
-                        'update' in entity_lower or 'health' in entity_lower):
-                        needs_thresholds = True
-                except (ValueError, TypeError):
-                    # Even non-numeric sensors might need thresholds if they're alert-related
-                    if any(keyword in entity_lower for keyword in ['battery', 'update', 'status', 'state', 'error', 'warning']):
-                        needs_thresholds = True
+                needs_thresholds = True  # All sensors can potentially need monitoring thresholds
             
+            # For ANY update entity
             elif domain == 'update':
-                # Update entities should always have thresholds
-                needs_thresholds = True
+                needs_thresholds = True  # All update entities should have thresholds
+            
+            # For ANY other domain that could be an alert entity
+            elif domain in ['alarm_control_panel', 'device_tracker', 'climate', 'switch', 'light', 'cover', 'lock', 'camera']:
+                needs_thresholds = True  # Include other common alertable domains
             
             if needs_thresholds:
                 # Enhanced AI-generated thresholds prompt with binary sensor support
@@ -352,28 +345,35 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                         f"📊 Valore attuale: {current_value} {unit}\n"
                         f"🏷️ Tipo dispositivo: {device_class}\n"
                         f"🔧 Dominio: {domain}\n\n"
-                        f"🚨 Genera 3 soglie di allerta (LOW, MEDIUM, HIGH) specifiche per questa entità:\n\n"
-                        f"📋 ESEMPI PER CATEGORIA:\n"
-                        f"• 🔋 Batterie: LOW=30, MEDIUM=20, HIGH=10 (valori percentuali)\n"
-                        f"• 🌡️ Temperature casa: LOW=15, MEDIUM=10, HIGH=5 (freddo) o LOW=28, MEDIUM=32, HIGH=35 (caldo)\n"
-                        f"• 💧 Umidità: LOW=30, MEDIUM=25, HIGH=20 (secco) o LOW=70, MEDIUM=80, HIGH=90 (umido)\n"
-                        f"• 💨 Vento: LOW=20, MEDIUM=40, HIGH=60\n"
-                        f"• 💻 CPU/Sistema: LOW=70, MEDIUM=85, HIGH=95\n"
-                        f"• ❤️ Battiti cardiaci: LOW=50, MEDIUM=40, HIGH=35 (basso) o LOW=100, MEDIUM=120, HIGH=140 (alto)\n"
-                        f"• 📦 Update: disponibilità aggiornamenti\n\n"
-                        f"🔥 OBBLIGATORIO: TUTTE E 3 LE SOGLIE (LOW, MEDIUM, HIGH)!\n\n"
-                        f"⚡ FORMATO RICHIESTO - SOGLIE VALUTABILI DALL'AI:\n"
-                        f"{{\"LOW\":{{\"value\":numero,\"operator\":\"<\",\"description\":\"problema lieve\"}},\"MEDIUM\":{{\"value\":numero,\"operator\":\"<\",\"description\":\"problema medio\"}},\"HIGH\":{{\"value\":numero,\"operator\":\"<\",\"description\":\"problema grave\"}}}}\n\n"
-                        f"🎯 OPERATORI DISPONIBILI:\n"
-                        f"• \"<\" per valori sotto soglia (batterie, temperature basse)\n"
-                        f"• \">\" per valori sopra soglia (temperature alte, CPU)\n"
-                        f"• \"==\" per valori esatti (stati, stringhe)\n"
-                        f"• \"!=\" per valori diversi\n\n"
-                        f"🚨 IMPORTANTE: \n"
-                        f"- value deve essere SOLO NUMERO (senza unità)\n"
-                        f"- operator deve essere uno dei 4 simboli sopra\n"
-                        f"- description breve e chiara del problema\n\n"
-                        f"🚨 NON dimenticare nessuna delle 3 soglie!"
+                        f"🚨 Analizza questa entità e genera 3 soglie di allerta (LOW, MEDIUM, HIGH) appropriate.\n\n"
+                        f"📋 ESEMPI GENERICI PER TIPO:\n"
+                        f"• 🔋 Energia/Batterie: problemi con valori bassi (< operator)\n"
+                        f"• 🌡️ Temperature: problemi con valori troppo alti O troppo bassi\n"
+                        f"• 💧 Umidità: problemi con valori troppo secchi O troppo umidi\n"
+                        f"• �️ Sistema (CPU/Memoria): LOW=70, MEDIUM=85, HIGH=95 (> per sovraccarico)\n"
+                        f"• � Segnale: LOW=-70, MEDIUM=-80, HIGH=-90 (< per segnale debole in dBm)\n"
+                        f"• 🌪️ Vento/Velocità: LOW=20, MEDIUM=40, HIGH=60 (> per valori alti)\n"
+                        f"• ❤️ Salute (battiti, pressione): analizza range normale per l'entità\n"
+                        f"• 📦 Update/Stato: usa == o != per stati specifici\n\n"
+                        f"🧠 ANALIZZA L'ENTITÀ:\n"
+                        f"1. Che tipo di valore misura?\n"
+                        f"2. Quali valori indicano problemi?\n"
+                        f"3. Usa l'operatore corretto per il problema\n\n"
+                        f"⚡ FORMATO JSON RICHIESTO:\n"
+                        f"{{\"LOW\":{{\"value\":numero,\"operator\":\"simbolo\",\"description\":\"descrizione\"}},\"MEDIUM\":{{\"value\":numero,\"operator\":\"simbolo\",\"description\":\"descrizione\"}},\"HIGH\":{{\"value\":numero,\"operator\":\"simbolo\",\"description\":\"descrizione\"}}}}\n\n"
+                        f"🎯 OPERATORI:\n"
+                        f"• \"<\" per problemi con valori BASSI (batterie, temperature fredde, segnali deboli)\n"
+                        f"• \">\" per problemi con valori ALTI (temperature calde, CPU alto, umidità alta)\n"
+                        f"• \"==\" per stati specifici problematici\n"
+                        f"• \"!=\" per stati che dovrebbero essere diversi\n\n"
+                        f"🚨 REGOLE CRITICHE:\n"
+                        f"- value = SOLO numero (senza unità, %, °C, etc.)\n"
+                        f"- description = breve e chiara\n"
+                        f"- TUTTE E 3 le soglie sono OBBLIGATORIE\n"
+                        f"- Scegli operator basato su QUANDO c'è un problema\n\n"
+                        f"� ESEMPIO UMIDITÀ MEDIA CASA:\n"
+                        f"Se il valore attuale è 45%, genera soglie per umidità troppo bassa E troppo alta:\n"
+                        f"{{\"LOW\":{{\"value\":30,\"operator\":\"<\",\"description\":\"Aria troppo secca\"}},\"MEDIUM\":{{\"value\":75,\"operator\":\">\",\"description\":\"Umidità elevata\"}},\"HIGH\":{{\"value\":85,\"operator\":\">\",\"description\":\"Umidità eccessiva\"}}}}"
                     )
                 
                 try:
@@ -421,134 +421,28 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                 except Exception as e:
                     _LOGGER.warning(f"❌ AI threshold generation failed for {entity_id}: {e}")
         
-        # Fallback to basic thresholds for obvious cases
-        if domain == 'binary_sensor':
-            device_class = attributes.get('device_class', '')
+        # If AI succeeded above, it would have returned. If we're here, AI failed or is unavailable.
+        # Only provide minimal fallback for critical battery sensors when no AI available
+        if not conversation_agent and domain == 'sensor':
             entity_lower = entity_id.lower()
-            
-            # Identify what should trigger alerts for binary sensors
-            if (device_class in ['battery', 'problem', 'safety', 'smoke', 'gas', 'moisture', 'motion', 'door', 'window', 'connectivity', 'update'] or
-                any(keyword in entity_lower for keyword in ['battery', 'problem', 'error', 'offline', 'disconnected', 'fault', 'alarm', 'warning', 'update', 'maintenance'])):
-                
-                # Determine what state is "alerting" based on device class and name patterns
-                alert_state = 'on'  # Default
-                alert_description = "Sensor activated"
-                
-                if device_class == 'battery' or 'battery' in entity_lower:
-                    alert_state = 'on'  # Battery low = on
-                    alert_description = "Battery is low"
-                elif device_class in ['problem', 'safety', 'smoke', 'gas'] or any(word in entity_lower for word in ['problem', 'error', 'fault', 'smoke', 'gas']):
-                    alert_state = 'on'  # Problem detected = on
-                    alert_description = "Problem detected"
-                elif device_class == 'connectivity' or any(word in entity_lower for word in ['offline', 'disconnected', 'connection']):
-                    alert_state = 'off'  # Disconnected = off
-                    alert_description = "Device disconnected"
-                elif device_class == 'update' or 'update' in entity_lower:
-                    alert_state = 'on'  # Update available = on
-                    alert_description = "Update available"
-                elif device_class in ['door', 'window'] or any(word in entity_lower for word in ['door', 'window']):
-                    alert_state = 'on'  # Open = on (may be alerting depending on context)
-                    alert_description = "Opening detected"
-                
-                result.update({
-                    "entity_type": "binary_alert",
-                    "alert_state": alert_state,
-                    "thresholds": {
-                        "LOW": {"condition": f"state == '{alert_state}'", "description": f"{alert_description}"},
-                        "MEDIUM": {"condition": f"state == '{alert_state}' for > 5 minutes", "description": f"Persistent: {alert_description.lower()}"},
-                        "HIGH": {"condition": f"state == '{alert_state}' for > 30 minutes", "description": f"Long-term: {alert_description.lower()}"}
-                    }
-                })
-            return result
-            
-        # Numeric sensors - enhanced fallback thresholds
-        elif domain == 'sensor':
-            try:
-                num_value = float(current_value)
-                unit = attributes.get('unit_of_measurement', '')
-                device_class = attributes.get('device_class', '')
-                entity_lower = entity_id.lower()
-                
-                # Battery percentage - only generate if clearly a battery sensor
-                if (device_class == 'battery' or 'battery_level' in entity_lower) and 0 <= num_value <= 100:
-                    result.update({
-                        "entity_type": "battery_percent",
-                        "thresholds": {
-                            "LOW": {"value": 30, "condition": "< 30%", "description": "Battery getting low"},
-                            "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low"},
-                            "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical"}
-                        }
-                    })
-                
-                # Temperature sensors (°C)
-                elif (device_class == 'temperature' or 'temperature' in entity_lower) and unit in ['°C', 'C']:
-                    if 5 <= num_value <= 40:  # Reasonable indoor range
+            if 'battery' in entity_lower:
+                try:
+                    # Try to parse as battery percentage
+                    clean_value = current_value.replace('%', '').replace(' ', '')
+                    battery_value = float(clean_value)
+                    if 0 <= battery_value <= 100:
+                        _LOGGER.info(f"🔋 Minimal battery fallback for {entity_id} (no AI available)")
                         result.update({
-                            "entity_type": "temperature_indoor",
+                            "entity_type": "battery_fallback",
                             "thresholds": {
-                                "LOW": {"value": 15, "condition": "< 15°C", "description": "Temperature too cold"},
-                                "MEDIUM": {"value": 10, "condition": "< 10°C", "description": "Temperature very cold"},
-                                "HIGH": {"value": 5, "condition": "< 5°C", "description": "Temperature critically cold"}
+                                "LOW": {"condition": "< 30", "description": "Battery getting low"},
+                                "MEDIUM": {"condition": "< 20", "description": "Battery low"}, 
+                                "HIGH": {"condition": "< 10", "description": "Battery critical"}
                             }
                         })
-                
-                # Heart rate sensors (BPM)
-                elif any(keyword in entity_lower for keyword in ['heart_rate', 'pulse', 'bpm']) and 30 <= num_value <= 200:
-                    result.update({
-                        "entity_type": "heart_rate",
-                        "thresholds": {
-                            "LOW": {"value": 50, "condition": "< 50 BPM", "description": "Heart rate low"},
-                            "MEDIUM": {"value": 40, "condition": "< 40 BPM", "description": "Heart rate very low"},
-                            "HIGH": {"value": 35, "condition": "< 35 BPM", "description": "Heart rate critically low"}
-                        }
-                    })
-                
-                # CPU/Memory usage (percentage)
-                elif any(keyword in entity_lower for keyword in ['cpu', 'memory', 'disk']) and 0 <= num_value <= 100:
-                    result.update({
-                        "entity_type": "system_usage",
-                        "thresholds": {
-                            "LOW": {"value": 70, "condition": "> 70%", "description": "High system usage"},
-                            "MEDIUM": {"value": 85, "condition": "> 85%", "description": "Very high system usage"},
-                            "HIGH": {"value": 95, "condition": "> 95%", "description": "Critical system usage"}
-                        }
-                    })
-                
-                # Signal strength (negative dBm or positive %)
-                elif any(keyword in entity_lower for keyword in ['rssi', 'signal', 'linkquality']):
-                    if unit == 'dBm' and -100 <= num_value <= 0:
-                        result.update({
-                            "entity_type": "signal_dbm",
-                            "thresholds": {
-                                "LOW": {"value": -70, "condition": "< -70 dBm", "description": "Weak signal"},
-                                "MEDIUM": {"value": -80, "condition": "< -80 dBm", "description": "Very weak signal"},
-                                "HIGH": {"value": -90, "condition": "< -90 dBm", "description": "Signal critical"}
-                            }
-                        })
-                        
-            except (ValueError, TypeError):
-                # Non-numeric sensor - check for update sensors
-                if 'update' in entity_lower or device_class == 'update':
-                    result.update({
-                        "entity_type": "update_status",
-                        "thresholds": {
-                            "LOW": {"condition": "state != 'up-to-date'", "description": "Update available"},
-                            "MEDIUM": {"condition": "state == 'pending' for > 1 day", "description": "Update pending for a while"},
-                            "HIGH": {"condition": "state == 'pending' for > 7 days", "description": "Update overdue"}
-                        }
-                    })
-        
-        # Update domain entities
-        elif domain == 'update':
-            result.update({
-                "entity_type": "update_entity",
-                "thresholds": {
-                    "LOW": {"condition": "state == 'on'", "description": "Update available"},
-                    "MEDIUM": {"condition": "has_new_release for > 3 days", "description": "Update available for several days"},
-                    "HIGH": {"condition": "has_new_release for > 14 days", "description": "Update overdue - security risk"}
-                }
-            })
-                
+                except (ValueError, TypeError):
+                    pass
+    
     except Exception as e:
         _LOGGER.warning(f"Error generating auto-thresholds for {entity_id}: {e}")
     
