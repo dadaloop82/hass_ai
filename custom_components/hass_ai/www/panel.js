@@ -2282,8 +2282,16 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                           <strong>${entity.entity_id}</strong>
                           <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
                           ${(() => {
-                            const area = this._extractEntityArea(entity.entity_id);
+                            const area = entity.area || this._extractEntityArea(entity.entity_id);
                             return area && area !== 'Altro' ? html`<br><small class="entity-area">📍 ${area}</small>` : '';
+                          })()}
+                          ${(() => {
+                            const currentState = this.hass.states[entity.entity_id];
+                            if (currentState && currentState.state && currentState.state !== 'unavailable') {
+                              const unit = currentState.attributes?.unit_of_measurement || '';
+                              return html`<br><small class="current-value">📊 ${currentState.state}${unit}</small>`;
+                            }
+                            return '';
                           })()}
                         </div>
                       </td>
@@ -3730,6 +3738,12 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       .entity-area {
         color: var(--secondary-text-color);
         font-style: italic;
+        font-size: 11px;
+      }
+      
+      .current-value {
+        color: var(--primary-color);
+        font-weight: 500;
         font-size: 11px;
       }
       

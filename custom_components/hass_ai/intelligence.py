@@ -397,25 +397,71 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
             _LOGGER.debug(f"  📐 State class: {state_class}")
             _LOGGER.debug(f"  🎯 Icon: {icon}")
             
-            # Check if this entity warrants alert thresholds - be completely inclusive for all alert entities
+            # Check if this entity warrants alert thresholds - use strict criteria
             needs_thresholds = False
             entity_lower = entity_id.lower()
             
-            # For ANY binary_sensor, consider it for alert thresholds
-            if domain == 'binary_sensor':
-                needs_thresholds = True  # All binary sensors can have alert states
+            # Exclude generic entities that shouldn't be alerts
+            excluded_entities = [
+                'input_text.hass_ai_alerts',  # Our own alert storage
+                'conversation.',              # AI conversation entities
+                'tts.',                      # Text-to-speech entities
+                'calendar.',                 # Calendar entities
+                'todo.',                     # Todo entities
+                'media_player.',             # Media players
+                'update.',                   # Update entities (usually not critical)
+                'weather.',                  # Weather entities
+                'zone.',                     # Zone entities
+                'person.',                   # Person tracking
+                'sun.',                      # Sun position
+                'switch.',                   # Switches (user controllable)
+                'light.',                    # Lights (user controllable)
+                'button.',                   # Buttons (actions)
+                'select.',                   # Select inputs
+                'number.',                   # Number inputs
+                'camera.',                   # Cameras (not direct alerts)
+                'image.',                    # Images
+                'event.',                    # Events
+            ]
+            
+            # Check if entity should be excluded
+            is_excluded = any(entity_id.startswith(prefix) for prefix in excluded_entities)
+            
+            if not is_excluded:
+                # For binary_sensor, only those with meaningful device classes
+                if domain == 'binary_sensor':
+                    alert_device_classes = [
+                        'battery', 'battery_charging', 'cold', 'connectivity', 'door', 'garage_door',
+                        'gas', 'heat', 'light', 'lock', 'moisture', 'motion', 'moving', 'occupancy',
+                        'opening', 'plug', 'power', 'presence', 'problem', 'running', 'safety',
+                        'smoke', 'sound', 'tamper', 'update', 'vibration', 'window'
+                    ]
+                    if device_class in alert_device_classes or 'battery' in entity_lower or 'problem' in entity_lower:
+                        needs_thresholds = True
+                        
+                # For sensor, only those with numeric values or meaningful enums
+                elif domain == 'sensor':
+                    # Must have numeric state OR be an enum with meaningful options
+                    try:
+                        float(current_value)
+                        needs_thresholds = True  # Numeric sensors can have thresholds
+                    except (ValueError, TypeError):
+                        # Non-numeric - check if it's a meaningful enum
+                        if options and device_class == 'enum':
+                            # Only if options suggest problematic states
+                            problematic_keywords = ['error', 'fail', 'block', 'offline', 'disconnect', 'low', 'empty', 'full']
+                            if any(keyword in str(options).lower() for keyword in problematic_keywords):
+                                needs_thresholds = True
+                        elif any(keyword in entity_lower for keyword in ['battery', 'temperature', 'humidity', 'pressure', 'signal', 'cpu', 'memory', 'disk', 'ink', 'level']):
+                            needs_thresholds = True
+                
+                # Climate entities (temperature issues)
+                elif domain == 'climate':
+                    needs_thresholds = True
                     
-            # For ANY sensor, consider it for alert thresholds  
-            elif domain == 'sensor':
-                needs_thresholds = True  # All sensors can potentially need monitoring thresholds
-            
-            # For ANY update entity
-            elif domain == 'update':
-                needs_thresholds = True  # All update entities should have thresholds
-            
-            # For ANY other domain that could be an alert entity
-            elif domain in ['alarm_control_panel', 'device_tracker', 'climate', 'switch', 'light', 'cover', 'lock', 'camera']:
-                needs_thresholds = True  # Include other common alertable domains
+                # Device tracker (presence/connectivity)
+                elif domain == 'device_tracker':
+                    needs_thresholds = True
             
             if needs_thresholds:
                 # Enhanced AI-generated thresholds prompt with context-aware analysis
