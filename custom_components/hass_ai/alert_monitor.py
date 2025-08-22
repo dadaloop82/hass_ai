@@ -174,6 +174,39 @@ input_text:
         domain = entity_id.split('.')[0]
         state = self.hass.states.get(entity_id)
         
+        # Exclude domains that contain free text or non-deterministic values
+        EXCLUDED_DOMAINS = {
+            "input_text",           # Free text input
+            "input_datetime",       # Date/time selection
+            "input_select",         # Dropdown selection (text values)
+            "device_tracker",       # Location names (home, away, etc.)
+            "person",              # Location tracking (text based)
+            "zone",                # Geographic zones
+            "weather",             # Weather conditions (text descriptions)
+            "media_player",        # Media states (titles, artists, etc.)
+            "calendar",            # Calendar events (text descriptions)
+            "image",               # Image data
+            "camera",              # Camera streams
+            "tts",                 # Text-to-speech
+            "conversation",        # Conversation agents
+            "persistent_notification", # Notification messages
+            "automation",          # Automation states (limited utility)
+            "script",              # Script execution (limited utility)
+            "scene",               # Scene states (limited utility)
+            "group",               # Group states (aggregated, not direct)
+            "remote",              # Remote control states
+            "vacuum",              # Vacuum states (docking, cleaning, etc.)
+            "timer",               # Timer states
+            "counter",             # Counter values (might be valid but often not alertable)
+            "input_number",        # User input numbers (not sensor data)
+            "input_boolean",       # User toggles (not sensor data)
+            "sun",                 # Sun position (predictable, not alertable)
+            "updater",             # Update checker (text based)
+        }
+        
+        if domain in EXCLUDED_DOMAINS:
+            return False
+        
         if not state:
             return False
             
@@ -774,13 +807,31 @@ FORMAT: [emoji] [critical status] + [main detail] + [recommended action]"""
         # Remove entities without valid thresholds from monitored_entities
         entities_to_remove = []
         for entity_id, config in self.monitored_entities.items():
+            # Remove if entity no longer exists in Home Assistant
+            if not self.hass.states.get(entity_id):
+                entities_to_remove.append(entity_id)
+                _LOGGER.info(f"Removing {entity_id} - entity no longer exists")
+                continue
+                
+            # Remove if no valid thresholds
             thresholds = config.get("thresholds", {})
             if not thresholds or not any(thresholds.values()):
                 entities_to_remove.append(entity_id)
+                _LOGGER.debug(f"Removing {entity_id} - no valid thresholds")
+                continue
+                
+            # Remove if entity is no longer in ALERTS category
+            if entity_id not in alert_entities:
+                entities_to_remove.append(entity_id)
+                _LOGGER.info(f"Removing {entity_id} - no longer has ALERTS category")
                 
         for entity_id in entities_to_remove:
+            # Also clear from last_notifications to stop notifications completely
+            if entity_id in self.last_notifications:
+                del self.last_notifications[entity_id]
+            if entity_id in self.active_alerts:
+                del self.active_alerts[entity_id]
             del self.monitored_entities[entity_id]
-            _LOGGER.debug(f"Removed {entity_id} from monitoring - no valid thresholds")
                 
         # Configure new alert entities
         for entity_id, data in alert_entities.items():

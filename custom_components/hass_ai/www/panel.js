@@ -23,6 +23,7 @@ class HassAiPanel extends LitElement {
       tokenStats: { state: true },
       alertThresholds: { state: true },
       isOperationActive: { state: true },
+      isMonitoring: { state: true },
       componentVersion: { state: true },
     };
   }
@@ -41,7 +42,9 @@ class HassAiPanel extends LitElement {
     this.correlations = {}; // Store correlations for each entity
     this.isOperationActive = false; // Track if any operation is active
     this.currentOperation = null; // Track current operation type
-    this.componentVersion = '1.9.54'; // Default fallback version
+    this.componentVersion = '1.9.55'; // Updated version
+    this.isMonitoring = false; // Track alert monitoring status
+    this.lastMonitoringSignal = null; // Track last monitoring activity
     this.scanProgress = {
       show: false,
       message: '',
@@ -88,6 +91,36 @@ class HassAiPanel extends LitElement {
     this._loadAlertThresholds();
     this._loadEntityThresholds();
     this._loadAlertStatus();
+    this._setupMonitoringListener();
+  }
+
+  _setupMonitoringListener() {
+    // Listen for monitoring signals from alert system
+    if (this.hass) {
+      this.hass.connection.subscribeEvents((event) => {
+        if (event.event_type === 'hass_ai_monitoring_signal') {
+          this._handleMonitoringSignal(event.data);
+        }
+      }, 'hass_ai_monitoring_signal');
+    }
+  }
+
+  _handleMonitoringSignal(data) {
+    this.lastMonitoringSignal = Date.now();
+    
+    if (data.type === 'hass_ai_monitoring_start') {
+      this.isMonitoring = true;
+      // Auto-hide after expected duration based on weight intervals
+      setTimeout(() => {
+        if (this.isMonitoring) {
+          this.isMonitoring = false;
+        }
+      }, 5000); // 5 seconds max
+    } else if (data.type === 'hass_ai_monitoring_end') {
+      this.isMonitoring = false;
+      // Refresh alert status after monitoring cycle
+      setTimeout(() => this._loadAlertStatus(), 500);
+    }
   }
 
   async _saveAiResults() {
@@ -2220,16 +2253,6 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                   
                   <mwc-button 
                     outlined
-                    @click=${(e) => this._showManualThresholdsDialog(e)}
-                    class="action-button"
-                    ?disabled=${this.loading}
-                  >
-                    <ha-icon icon="mdi:tune" slot="icon"></ha-icon>
-                    ${isItalian ? 'Soglie Manuali' : 'Manual Thresholds'}
-                  </mwc-button>
-                  
-                  <mwc-button 
-                    outlined
                     @click=${(e) => this._confirmResetAll(e)}
                     class="action-button reset"
                     ?disabled=${this.loading}
@@ -2288,17 +2311,11 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                           <strong>${entity.entity_id}</strong>
                           <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
                           ${(() => {
-                            if (entity.area) {
-                              // Area dal backend - sempre corretta
+                            // Mostra area se disponibile (rimuoviamo il fallback confuso)
+                            if (entity.area && entity.area !== 'Casa') {
                               return html`<br><small class="entity-area">📍 ${entity.area}</small>`;
-                            } else {
-                              // Prova fallback solo per entità speciali
-                              const fallbackArea = this._extractEntityArea(entity.entity_id);
-                              if (fallbackArea) {
-                                return html`<br><small class="entity-area">📍 ${fallbackArea} (fallback)</small>`;
-                              }
-                              return ''; // Nessuna area da mostrare
                             }
+                            return ''; // Nessuna area da mostrare se è Casa o vuota
                           })()}
                           ${(() => {
                             const currentState = this.hass.states[entity.entity_id];
@@ -2558,6 +2575,28 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
         100% { 
           background-color: transparent;
           transform: scale(1);
+        }
+      }
+
+      /* Monitoring indicator animation */
+      .monitoring-indicator {
+        display: inline-block;
+        margin-left: 8px;
+        font-size: 0.9em;
+      }
+
+      .monitoring-indicator.pulsing {
+        animation: monitoringPulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes monitoringPulse {
+        0%, 100% { 
+          opacity: 0.4;
+          transform: scale(1);
+        }
+        50% { 
+          opacity: 1;
+          transform: scale(1.2);
         }
       }
       
@@ -4292,8 +4331,8 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       .weight-slider.large {
         flex: 1;
         height: 16px;
-        min-width: 150px;
-        max-width: 250px;
+        min-width: 250px;
+        max-width: 400px;
       }
       
       .weight-display {
@@ -4960,26 +4999,7 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
               }
             </p>
             ${(() => {
-              // Calculate area statistics
-              const areaStats = {};
-              alertEntities.forEach(([entityId, entity]) => {
-                const area = entity.area || this._extractEntityArea(entityId);
-                areaStats[area] = (areaStats[area] || 0) + 1;
-              });
-              
-              return Object.keys(areaStats).length > 1 ? html`
-                <div class="area-stats">
-                  <h4>${isItalian ? '📍 Distribuzione per Area:' : '📍 Distribution by Area:'}</h4>
-                  <div class="area-stats-grid">
-                    ${Object.entries(areaStats).map(([area, count]) => html`
-                      <div class="area-stat-item">
-                        <span class="area-name">${area}</span>
-                        <span class="area-count">${count}</span>
-                      </div>
-                    `)}
-                  </div>
-                </div>
-              ` : '';
+              return ''; // Sezione distribuzione area rimossa come richiesto
             })()}
           </div>
         </div>
@@ -5107,7 +5127,12 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
           ` : ''}
 
           <div class="alert-example">
-            <h4>${isItalian ? '📝 Contenuto Attuale Alert' : '📝 Current Alert Content'}</h4>
+            <h4>
+              ${isItalian ? '📝 Contenuto Attuale Alert' : '📝 Current Alert Content'}
+              ${this.isMonitoring ? html`
+                <span class="monitoring-indicator pulsing" title="${isItalian ? 'Controllo allerte in corso...' : 'Alert monitoring in progress...'}">🔄</span>
+              ` : ''}
+            </h4>
             <div class="example-message">
               ${this.alertStatus.input_text_exists ? 
                 this.alertStatus.input_text_value || (isItalian ? 'Nessun contenuto' : 'No content') :
