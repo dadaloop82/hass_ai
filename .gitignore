@@ -74,6 +74,8 @@ known_devices.yaml
 *.db-wal
 
 # HASS AI specific - logs directory (contains sensitive AI interactions)
+logs/
+!logs/README.md
 ai_logs/
 !ai_logs/README.md
 test_ai_logs/

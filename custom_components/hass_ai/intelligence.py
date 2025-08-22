@@ -894,6 +894,18 @@ async def get_entities_importance_batched(
     
     _LOGGER.info(f"Filtered {original_count} entities to {len(states)} valid entities for AI analysis")
     
+    # Initialize AI logger and log analysis start
+    ai_logger = _get_ai_logger(hass)
+    ai_logger.log_info(f"Starting AI analysis", {
+        "analysis_type": analysis_type,
+        "ai_provider": ai_provider,
+        "total_entities": len(states),
+        "original_entities": original_count,
+        "filtered_entities": len(skipped_entities),
+        "language": language,
+        "batch_size": batch_size
+    })
+    
     _LOGGER.info(f"Starting AI analysis with provider: {ai_provider}, analysis type: {analysis_type}, API key present: {bool(api_key)}")
     
     # Enhanced analysis doesn't require AI API
@@ -918,7 +930,7 @@ async def get_entities_importance_batched(
         # Use fallback for all entities if no API key
         all_results = []
         for state in states:
-            all_results.append(_create_fallback_result(state.entity_id, 0, "no_api_key", state))
+            all_results.append(_create_fallback_result(state.entity_id, 0, "no_api_key", state, hass))
         return all_results
     
     all_results = []
@@ -982,6 +994,15 @@ async def get_entities_importance_batched(
             use_compact_mode = False  # Reset to full mode on success
             _LOGGER.debug(f"Batch {overall_batch_num} completed successfully")
             
+            # Log successful batch completion
+            ai_logger.log_info(f"Batch {overall_batch_num} completed successfully", {
+                "batch_number": overall_batch_num,
+                "entities_processed": current_batch_size,
+                "remaining_entities": len(remaining_states),
+                "tokens_used": batch_stats.get("tokens_used", 0) if batch_stats else 0,
+                "compact_mode": use_compact_mode
+            })
+            
         else:
             # Token limit exceeded - try different strategies
             token_limit_retries += 1
@@ -1022,7 +1043,7 @@ async def get_entities_importance_batched(
                     
                     # Send fallback results to frontend immediately
                     for state in remaining_states:
-                        fallback_result = _create_fallback_result(state.entity_id, overall_batch_num, "token_limit_exceeded", state)
+                        fallback_result = _create_fallback_result(state.entity_id, overall_batch_num, "token_limit_exceeded", state, hass)
                         all_results.append(fallback_result)
                         
                         # Send each fallback result to frontend
@@ -1062,7 +1083,7 @@ async def get_entities_importance_batched(
     processed_entity_ids = {res["entity_id"] for res in all_results}
     for state in states:
         if state.entity_id not in processed_entity_ids:
-            all_results.append(_create_fallback_result(state.entity_id, 0, "missing_result", state))
+            all_results.append(_create_fallback_result(state.entity_id, 0, "missing_result", state, hass))
 
     # Send scan completion message to frontend with token statistics
     if connection and msg_id:
@@ -1083,6 +1104,19 @@ async def get_entities_importance_batched(
     _LOGGER.info(f"🏁 Completed analysis of {len(states)} entities, got {len(all_results)} results")
     _LOGGER.info(f"📊 Token usage: {total_tokens_used} total tokens ({total_prompt_chars} prompt chars, {total_response_chars} response chars)")
     _LOGGER.info(f"📈 Average: {round(total_tokens_used / len(all_results), 1) if all_results else 0} tokens per entity")
+    
+    # Log analysis completion with statistics
+    ai_logger.log_info(f"Completed AI analysis", {
+        "analysis_type": analysis_type,
+        "ai_provider": ai_provider,
+        "total_results": len(all_results),
+        "total_tokens": total_tokens_used,
+        "prompt_chars": total_prompt_chars,
+        "response_chars": total_response_chars,
+        "avg_tokens_per_entity": round(total_tokens_used / len(all_results), 1) if all_results else 0,
+        "completion_status": "success"
+    })
+    
     return all_results
         
 async def _process_single_batch(
@@ -1184,6 +1218,14 @@ async def _process_single_batch(
                 }
             }))
         
+        # Log start of batch processing
+        ai_logger.log_info(f"Starting batch {batch_num} processing", {
+            "batch_number": batch_num,
+            "entities_count": len(batch_states),
+            "compact_mode": use_compact_prompt,
+            "analysis_type": analysis_type
+        })
+        
         # Use Local Agent only
         if ai_provider == AI_PROVIDER_LOCAL:
             # Log the prompt
@@ -1267,7 +1309,7 @@ async def _process_single_batch(
                 }))
             # Use fallback for all entities in this batch
             for state in batch_states:
-                fallback_result = _create_fallback_result(state.entity_id, batch_num, "unsupported_provider", state)
+                fallback_result = _create_fallback_result(state.entity_id, batch_num, "unsupported_provider", state, hass)
                 all_results.append(fallback_result)
                 
                 # Send fallback result to frontend
@@ -1326,8 +1368,14 @@ async def _process_single_batch(
                             "batch_number": batch_num,
                         }
                         
-                        # Generate auto-thresholds for relevant entities (more inclusive approach)
+                        # Add area information to result
                         state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
+                        if state:
+                            area_name = _get_entity_area(hass, state.entity_id)
+                            if area_name and area_name != "Casa":  # Only add if not default
+                                result["area"] = area_name
+                        
+                        # Generate auto-thresholds for relevant entities (more inclusive approach)
                         if state and hass:
                             # Check if entity warrants automatic threshold generation
                             should_generate_thresholds = (
@@ -1336,6 +1384,11 @@ async def _process_single_batch(
                                 state.domain in ['binary_sensor', 'update'] or  # Binary sensors and update entities
                                 (state.domain == 'sensor' and state.attributes.get('device_class') in ['battery', 'temperature', 'humidity', 'signal_strength']) or  # Specific sensor types
                                 any(keyword in item["entity_id"].lower() for keyword in ['temperature', 'humidity', 'cpu', 'memory', 'disk', 'heart_rate', 'signal'])  # Keyword matching
+                            )
+                            
+                            # Exclude auto_update_enabled switches and other configuration entities
+                            should_generate_thresholds = should_generate_thresholds and not any(
+                                keyword in item["entity_id"].lower() for keyword in ['auto_update_enabled', '_enabled', '_config', '_setting']
                             )
                             
                             if should_generate_thresholds:
@@ -1357,7 +1410,7 @@ async def _process_single_batch(
                         _LOGGER.warning(f"Invalid rating {rating} for entity {item['entity_id']}, using fallback")
                         # Find the corresponding state
                         entity_state = next((s for s in batch_states if s.entity_id == item["entity_id"]), None)
-                        fallback_result = _create_fallback_result(item["entity_id"], batch_num, "invalid_rating", entity_state)
+                        fallback_result = _create_fallback_result(item["entity_id"], batch_num, "invalid_rating", entity_state, hass)
                         all_results.append(fallback_result)
                         
                         # Send fallback result to frontend
@@ -1372,7 +1425,7 @@ async def _process_single_batch(
             _LOGGER.warning(f"AI response is not a list, using fallback for batch {batch_num}")
             # Use fallback for all entities in this batch
             for state in batch_states:
-                fallback_result = _create_fallback_result(state.entity_id, batch_num, "invalid_response", state)
+                fallback_result = _create_fallback_result(state.entity_id, batch_num, "invalid_response", state, hass)
                 all_results.append(fallback_result)
                 
                 # Send fallback result to frontend
@@ -1404,7 +1457,7 @@ async def _process_single_batch(
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
         for state in batch_states:
-            fallback_result = _create_fallback_result(state.entity_id, batch_num, "json_decode_error", state)
+            fallback_result = _create_fallback_result(state.entity_id, batch_num, "json_decode_error", state, hass)
             all_results.append(fallback_result)
             
             # Send fallback result to frontend
@@ -1436,7 +1489,7 @@ async def _process_single_batch(
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
         for state in batch_states:
-            fallback_result = _create_fallback_result(state.entity_id, batch_num, "processing_error", state)
+            fallback_result = _create_fallback_result(state.entity_id, batch_num, "processing_error", state, hass)
             all_results.append(fallback_result)
             
             # Send fallback result to frontend
@@ -1456,6 +1509,15 @@ async def _process_single_batch(
         "total_tokens": prompt_tokens + response_tokens
     }
     
+    # Log successful batch completion
+    ai_logger.log_info(f"Batch {batch_num} completed successfully", {
+        "batch_number": batch_num,
+        "entities_processed": len(batch_states),
+        "prompt_tokens": prompt_tokens,
+        "response_tokens": response_tokens,
+        "total_tokens": batch_stats["total_tokens"]
+    })
+    
     return True, batch_stats  # Success with statistics
 
 
@@ -1473,7 +1535,45 @@ def _check_token_limit_exceeded(response_text: str) -> bool:
     return False
 
 
-def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domain_fallback", state: State = None) -> dict:
+def _get_entity_area(hass: HomeAssistant, entity_id: str) -> str:
+    """Get area name for an entity."""
+    try:
+        from homeassistant.helpers import entity_registry as er, device_registry as dr, area_registry as ar
+        
+        entity_registry = er.async_get(hass)
+        device_registry = dr.async_get(hass)
+        area_registry = ar.async_get(hass)
+        
+        if not all([entity_registry, device_registry, area_registry]):
+            return "Casa"
+            
+        # First try to get area from entity registry
+        entity_entry = entity_registry.async_get(entity_id)
+        area_id = None
+        
+        if entity_entry:
+            # Entity can have area directly
+            if entity_entry.area_id:
+                area_id = entity_entry.area_id
+            # Or get area from device
+            elif entity_entry.device_id:
+                device_entry = device_registry.async_get(entity_entry.device_id)
+                if device_entry and device_entry.area_id:
+                    area_id = device_entry.area_id
+        
+        # Convert area_id to area name
+        if area_id:
+            area_entry = area_registry.async_get_area(area_id)
+            if area_entry:
+                return area_entry.name
+                
+    except Exception as e:
+        _LOGGER.debug(f"Could not get area for {entity_id}: {e}")
+    
+    return "Casa"  # Default fallback
+
+
+def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domain_fallback", state: State = None, hass: HomeAssistant = None) -> dict:
     """Create a fallback result when AI analysis fails."""
     domain = entity_id.split(".")[0]
     
@@ -1566,6 +1666,12 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
         "batch_number": batch_num,
     }
     
+    # Add area information to fallback result if hass instance is available
+    if hass and entity_id:
+        area_name = _get_entity_area(hass, entity_id)
+        if area_name and area_name != "Casa":  # Only add if not default
+            result["area"] = area_name
+    
     # Generate basic auto-thresholds for ALERTS entities in fallback
     if ('ALERTS' in category if isinstance(category, list) else category == 'ALERTS'):
         try:
@@ -1579,7 +1685,8 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
                     "MEDIUM": {"value": 20, "condition": "< 20%", "description": "Battery low"},
                     "HIGH": {"value": 10, "condition": "< 10%", "description": "Battery critical"}
                 }
-            elif domain == 'update' or 'update' in entity_id.lower():
+            elif domain == 'update' or ('update' in entity_id.lower() and 'auto_update_enabled' not in entity_id.lower()):
+                # Only for real update entities, not auto_update_enabled switches
                 auto_thresholds["thresholds"] = {
                     "LOW": {"condition": "state == 'on'", "description": "Update available"},
                     "MEDIUM": {"condition": "update available > 3 days", "description": "Update pending"},

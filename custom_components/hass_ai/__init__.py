@@ -1332,7 +1332,8 @@ async def handle_configure_alert_service(hass: HomeAssistant, connection: websoc
 @websocket_api.websocket_command({
     "type": "hass_ai/get_ai_logs",
     vol.Optional("limit", default=100): int,
-    vol.Optional("level", default="all"): str
+    vol.Optional("level", default="all"): str,
+    vol.Optional("date"): str
 })
 @websocket_api.async_response
 async def handle_get_ai_logs(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
@@ -1343,13 +1344,17 @@ async def handle_get_ai_logs(hass: HomeAssistant, connection: websocket_api.Acti
         ai_logger = _get_ai_logger(hass)
         limit = msg.get("limit", 100)
         level = msg.get("level", "all")
+        date = msg.get("date")  # Optional date filter
         
-        logs = ai_logger.get_logs(limit=limit, level=level)
+        logs = ai_logger.get_logs(limit=limit, level=level, date=date)
+        available_dates = ai_logger.get_available_dates()
         
         connection.send_message(websocket_api.result_message(msg["id"], {
             "logs": logs,
             "total_logs": len(logs),
-            "log_directory": ai_logger.log_dir
+            "available_dates": available_dates,
+            "log_directory": ai_logger.log_dir,
+            "current_date": date or "today"
         }))
         
     except Exception as e:

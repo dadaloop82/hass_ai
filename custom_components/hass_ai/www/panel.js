@@ -41,7 +41,7 @@ class HassAiPanel extends LitElement {
     this.correlations = {}; // Store correlations for each entity
     this.isOperationActive = false; // Track if any operation is active
     this.currentOperation = null; // Track current operation type
-    this.componentVersion = '1.9.40'; // Default fallback version
+    this.componentVersion = '1.9.53'; // Default fallback version
     this.scanProgress = {
       show: false,
       message: '',
