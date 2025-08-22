@@ -86,6 +86,9 @@ class AlertMonitor:
             self.input_text_entity = config.get("input_text_entity", "input_text.hass_ai_alerts")
             self.monitored_entities = config.get("monitored_entities", {})
             
+            # CRITICAL: Clean up any invalid entities that were loaded from storage
+            await self._cleanup_invalid_monitored_entities()
+            
             # Create input_text entity if using that mode
             if self.use_input_text:
                 await self._ensure_input_text_entity()
@@ -148,6 +151,32 @@ input_text:
                     
         except Exception as e:
             _LOGGER.error(f"Error ensuring input_text entity: {e}")
+    
+    async def _cleanup_invalid_monitored_entities(self):
+        """Clean up any invalid entities from monitored_entities at startup"""
+        try:
+            entities_to_remove = []
+            for entity_id in list(self.monitored_entities.keys()):
+                if not self.is_valid_alert_entity(entity_id, {}):
+                    entities_to_remove.append(entity_id)
+                    domain = entity_id.split('.')[0]
+                    _LOGGER.warning(f"STARTUP CLEANUP: Removing {entity_id} - domain '{domain}' is excluded")
+            
+            for entity_id in entities_to_remove:
+                # Clear from all tracking dictionaries
+                if entity_id in self.monitored_entities:
+                    del self.monitored_entities[entity_id]
+                if entity_id in self.last_notifications:
+                    del self.last_notifications[entity_id]
+                if entity_id in self.active_alerts:
+                    del self.active_alerts[entity_id]
+            
+            if entities_to_remove:
+                await self._save_configuration()
+                _LOGGER.info(f"Startup cleanup: Removed {len(entities_to_remove)} invalid entities from monitoring")
+                
+        except Exception as e:
+            _LOGGER.error(f"Error during startup cleanup: {e}")
             
     async def _update_input_text(self, message: str):
         """Update the input_text entity with alert message"""
@@ -300,6 +329,13 @@ input_text:
             
     async def configure_entity_alerts(self, entity_id: str, entity_data: Dict, custom_thresholds: Optional[Dict] = None):
         """Configure alert thresholds for an entity"""
+        
+        # CRITICAL: First validate if entity is suitable for monitoring
+        if not self.is_valid_alert_entity(entity_id, entity_data):
+            domain = entity_id.split('.')[0]
+            _LOGGER.warning(f"REJECTING {entity_id} - domain '{domain}' is in excluded list or not suitable for alerts")
+            return
+            
         domain = entity_id.split('.')[0]
         entity_type = self._detect_entity_type(entity_id, entity_data)
         
@@ -792,6 +828,11 @@ FORMAT: [emoji] [critical status] + [main detail] + [recommended action]"""
         alert_entities = {}
         
         for entity_id, data in entities_data.items():
+            # CRITICAL: Never monitor our own input_text entity!
+            if entity_id == self.input_text_entity:
+                _LOGGER.debug(f"Skipping {entity_id} - this is our own alert display entity")
+                continue
+                
             # Check if entity has ALERTS category
             categories = data.get("category", [])
             if isinstance(categories, str):
@@ -807,6 +848,13 @@ FORMAT: [emoji] [critical status] + [main detail] + [recommended action]"""
         # Remove entities without valid thresholds from monitored_entities
         entities_to_remove = []
         for entity_id, config in self.monitored_entities.items():
+            # CRITICAL: Remove ALL entities that should be excluded by domain validation
+            if not self.is_valid_alert_entity(entity_id, {}):
+                entities_to_remove.append(entity_id)
+                domain = entity_id.split('.')[0]
+                _LOGGER.warning(f"FORCE REMOVING {entity_id} - domain '{domain}' should be excluded from alerts!")
+                continue
+                
             # Remove if entity no longer exists in Home Assistant
             if not self.hass.states.get(entity_id):
                 entities_to_remove.append(entity_id)

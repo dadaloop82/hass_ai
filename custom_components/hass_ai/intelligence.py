@@ -1545,7 +1545,7 @@ def _get_entity_area(hass: HomeAssistant, entity_id: str) -> str:
         area_registry = ar.async_get(hass)
         
         if not all([entity_registry, device_registry, area_registry]):
-            return "Casa"
+            return _get_area_fallback(entity_id)
             
         # First try to get area from entity registry
         entity_entry = entity_registry.async_get(entity_id)
@@ -1567,10 +1567,55 @@ def _get_entity_area(hass: HomeAssistant, entity_id: str) -> str:
             if area_entry:
                 return area_entry.name
                 
+        # If no area found, use intelligent fallback
+        return _get_area_fallback(entity_id)
+                
     except Exception as e:
-        _LOGGER.debug(f"Could not get area for {entity_id}: {e}")
+        _LOGGER.debug(f"Error getting area for {entity_id}: {e}")
+        return _get_area_fallback(entity_id)
+
+def _get_area_fallback(entity_id: str) -> str:
+    """Provide intelligent area fallback based on entity domain and name."""
+    domain = entity_id.split('.')[0]
+    entity_name = entity_id.split('.', 1)[1] if '.' in entity_id else entity_id
     
-    return "Casa"  # Default fallback
+    # Domain-based area mapping
+    domain_areas = {
+        'sun': 'Esterno',
+        'weather': 'Esterno', 
+        'person': 'Casa',
+        'device_tracker': 'Casa',
+        'zone': 'Casa',
+        'automation': 'Sistema',
+        'script': 'Sistema',
+        'input_text': 'Sistema',
+        'input_boolean': 'Sistema',
+        'input_number': 'Sistema',
+        'timer': 'Sistema',
+        'counter': 'Sistema',
+    }
+    
+    # Check domain first
+    if domain in domain_areas:
+        return domain_areas[domain]
+    
+    # Name-based area detection (Italian)
+    name_lower = entity_name.lower()
+    if any(word in name_lower for word in ['cucina', 'kitchen']):
+        return 'Cucina'
+    elif any(word in name_lower for word in ['bagno', 'bathroom', 'wc']):
+        return 'Bagno'
+    elif any(word in name_lower for word in ['camera', 'bedroom', 'letto']):
+        return 'Camera da Letto'
+    elif any(word in name_lower for word in ['salotto', 'living', 'soggiorno']):
+        return 'Salotto'
+    elif any(word in name_lower for word in ['garage', 'cantina', 'basement']):
+        return 'Garage'
+    elif any(word in name_lower for word in ['esterno', 'outdoor', 'giardino', 'balcone']):
+        return 'Esterno'
+    
+    # Default fallback
+    return 'Casa'
 
 
 def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domain_fallback", state: State = None, hass: HomeAssistant = None) -> dict:
