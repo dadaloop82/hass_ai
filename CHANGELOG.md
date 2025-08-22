@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.53] - 2025-08-22
+
+### 🔧 **Critical Bug Fixes & User Experience Improvements**
+- **FIXED: Area Display Issues**: Resolved "(fallback)" label appearing even for correctly detected areas
+- **FIXED: Auto-Threshold Generation**: Prevented incorrect update-related thresholds for configuration entities
+- **ENHANCED: Complete AI Logging Integration**: Comprehensive logging system with organized daily structure
+
+#### Technical Improvements
+- **Enhanced Result Structure**: Area information properly included in AI analysis results and fallback results
+- **Smart Entity Filtering**: Improved logic to distinguish between real update entities and configuration switches (`auto_update_enabled`, `_enabled`, `_config`, `_setting`)
+- **Robust Area Detection**: New `_get_entity_area()` function for accurate area information from Home Assistant registries
+- **WebSocket API Enhancements**: Enhanced log access with date filtering and available dates support
+- **Performance Tracking**: Detailed statistics on token usage, batch processing, and analysis completion
+
+#### User Experience
+- ✅ Clean area display: `📍 Soggiorno` instead of `📍 Soggiorno (fallback)`
+- ✅ Accurate automatic thresholds only for relevant entities (excludes configuration switches)
+- ✅ Complete AI interaction visibility through structured daily logging
+- ✅ Seamless update with no configuration changes required
+
+#### File Structure
+```
+logs/
+├── README.md                     # Comprehensive documentation
+└── YYYY-MM-DD/                  # Daily organized directories
+    ├── prompts.json             # AI prompts with full context
+    ├── responses.json           # AI responses with results
+    ├── errors.json              # Error logs with context
+    └── info.json                # Analysis tracking & statistics
+```
+
 ## [1.9.52] - 2025-08-22
 
 ### 🔍 **Comprehensive AI Logging System**

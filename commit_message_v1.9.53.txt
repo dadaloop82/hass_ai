@@ -1,0 +1,18 @@
+🔧 Fix area display and threshold generation
+
+✅ Fixed area display issues:
+- Added area information to AI analysis results and fallback results
+- Frontend will no longer show '(fallback)' when area comes from backend
+- Improved _get_entity_area() function for accurate area detection
+
+✅ Fixed auto-threshold generation:
+- Excluded auto_update_enabled switches from automatic threshold generation
+- Prevented configuration entities from getting update-related thresholds
+- Improved filtering logic for relevant alert entities
+
+🧠 Enhanced AI logging integration:
+- Added comprehensive info logging throughout analysis pipeline
+- Log analysis start, batch completion, and final statistics
+- Complete integration with organized daily logging system
+
+Version: 1.9.53
