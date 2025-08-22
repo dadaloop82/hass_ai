@@ -235,9 +235,35 @@ async def handle_load_ai_results(hass: HomeAssistant, connection: websocket_api.
         results_data = await ai_results_store.async_load()
         
         if results_data:
-            _LOGGER.info(f"Loaded AI results: {len(results_data.get('results', {}))} entities")
-            # Send the full data including metadata
-            connection.send_message(websocket_api.result_message(msg["id"], results_data))
+            # CRITICAL: Filter out excluded domains from AI results display
+            filtered_results = {}
+            excluded_domains = {
+                "input_text", "input_datetime", "input_select", "input_number", "input_boolean",
+                "device_tracker", "person", "zone", "weather", "media_player", "calendar", 
+                "image", "camera", "tts", "conversation", "persistent_notification",
+                "automation", "script", "scene", "group", "remote", "vacuum", "timer", 
+                "counter", "sun", "updater"
+            }
+            
+            original_results = results_data.get('results', {})
+            for entity_id, entity_data in original_results.items():
+                domain = entity_id.split('.')[0]
+                if domain not in excluded_domains:
+                    filtered_results[entity_id] = entity_data
+                else:
+                    _LOGGER.debug(f"Frontend filter: Excluding {entity_id} (domain: {domain})")
+            
+            filtered_count = len(original_results) - len(filtered_results)
+            if filtered_count > 0:
+                _LOGGER.info(f"Frontend filtered out {filtered_count} entities from excluded domains")
+            
+            # Send filtered results
+            filtered_data = results_data.copy()
+            filtered_data['results'] = filtered_results
+            filtered_data['total_entities'] = len(filtered_results)
+            
+            _LOGGER.info(f"Loaded AI results: {len(filtered_results)} entities (filtered from {len(original_results)})")
+            connection.send_message(websocket_api.result_message(msg["id"], filtered_data))
         else:
             _LOGGER.info("No AI results found in storage")
             # Send empty results
@@ -386,10 +412,11 @@ async def handle_scan_entities(hass: HomeAssistant, connection: websocket_api.Ac
 @websocket_api.websocket_command({
     vol.Required("type"): "hass_ai/generate_thresholds",
     vol.Optional("force_regenerate", default=False): bool,
+    vol.Optional("entity_id"): str,  # Optional: generate for specific entity
 })
 @websocket_api.async_response
 async def handle_generate_thresholds(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Handle the command to generate/regenerate AI thresholds for all entities."""
+    """Handle the command to generate/regenerate AI thresholds for all entities or a specific entity."""
     try:
         # Register this operation as active
         hass_id = id(hass)
@@ -403,6 +430,7 @@ async def handle_generate_thresholds(hass: HomeAssistant, connection: websocket_
         connection.send_message(websocket_api.result_message(msg["id"], {"status": "started"}))
         
         force_regenerate = msg.get("force_regenerate", False)
+        target_entity_id = msg.get("entity_id")  # If specified, generate only for this entity
         
         # Load existing AI results
         ai_results_store = storage.Store(hass, STORAGE_VERSION, AI_RESULTS_KEY)
@@ -415,6 +443,18 @@ async def handle_generate_thresholds(hass: HomeAssistant, connection: websocket_
             return
             
         entities = ai_data["results"]
+        
+        # Filter entities if specific entity_id requested
+        if target_entity_id:
+            if target_entity_id not in entities:
+                connection.send_message(websocket_api.error_message(
+                    msg["id"], "entity_not_found", f"Entity {target_entity_id} not found in AI results"
+                ))
+                return
+            entities = {target_entity_id: entities[target_entity_id]}
+            _LOGGER.info(f"Generating thresholds for specific entity: {target_entity_id}")
+        else:
+            _LOGGER.info(f"Generating thresholds for all {len(entities)} entities")
         
         # Get configuration
         config_entry = None
@@ -499,15 +539,25 @@ async def handle_generate_thresholds(hass: HomeAssistant, connection: websocket_
                 processed += 1
                 
         # Save updated results
-        ai_data["results"] = entities
-        ai_data["last_threshold_update"] = dt.utcnow().isoformat()
-        await ai_results_store.async_save(ai_data)
+        if target_entity_id:
+            # Update only the specific entity in the full dataset
+            original_data = await ai_results_store.async_load()
+            if original_data and "results" in original_data:
+                original_data["results"][target_entity_id] = entities[target_entity_id]
+                original_data["last_threshold_update"] = dt.utcnow().isoformat()
+                await ai_results_store.async_save(original_data)
+        else:
+            # Save all updated entities
+            ai_data["results"] = entities
+            ai_data["last_threshold_update"] = dt.utcnow().isoformat()
+            await ai_results_store.async_save(ai_data)
         
         connection.send_message(websocket_api.result_message(msg["id"], {
             "success": True,
             "total_processed": processed,
             "successful_generations": successful,
-            "message": f"Generated thresholds for {successful} out of {processed} entities"
+            "message": f"Generated thresholds for {successful} out of {processed} entities",
+            "target_entity": target_entity_id if target_entity_id else "all"
         }))
         
     except asyncio.CancelledError:

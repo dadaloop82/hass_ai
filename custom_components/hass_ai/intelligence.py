@@ -331,15 +331,26 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
             elif domain == 'sensor':
                 try:
                     num_value = float(current_value)
-                    # Much more inclusive criteria for sensors that need thresholds
-                    if (any(keyword in entity_lower for keyword in ['battery', 'temperature', 'humidity', 'wind', 'cpu', 'memory', 'disk', 'signal', 'rssi', 'heart_rate', 'blood', 'weight', 'calories', 'steps']) or
+                    # VERY inclusive criteria for sensors that need thresholds
+                    if (any(keyword in entity_lower for keyword in [
+                        'battery', 'temperature', 'humidity', 'wind', 'cpu', 'memory', 'disk', 
+                        'signal', 'rssi', 'heart_rate', 'blood', 'weight', 'calories', 'steps',
+                        'oxygen', 'saturation', 'spo2', 'pulse', 'pressure', 'ink', 'toner',
+                        'cartridge', 'level', 'remaining', 'health', 'sensor', 'monitor'
+                    ]) or
                         device_class in ['battery', 'temperature', 'humidity', 'signal_strength', 'power'] or
-                        'update' in entity_lower or 'health' in entity_lower):
+                        'update' in entity_lower or 
+                        'health' in entity_lower or
+                        unit in ['%', 'percent', '°C', '°F', 'bpm', 'mmHg'] or
+                        ('hp_' in entity_lower and 'ink' in entity_lower) or  # HP ink sensors
+                        'oxygen' in entity_lower or 'saturation' in entity_lower):  # Health sensors
                         needs_thresholds = True
+                        _LOGGER.debug(f"Entity {entity_id} marked for thresholds: numeric sensor with relevant keywords")
                 except (ValueError, TypeError):
                     # Even non-numeric sensors might need thresholds if they're alert-related
-                    if any(keyword in entity_lower for keyword in ['battery', 'update', 'status', 'state', 'error', 'warning']):
+                    if any(keyword in entity_lower for keyword in ['battery', 'update', 'status', 'state', 'error', 'warning', 'ink', 'toner']):
                         needs_thresholds = True
+                        _LOGGER.debug(f"Entity {entity_id} marked for thresholds: non-numeric but alert-related")
             
             elif domain == 'update':
                 # Update entities should always have thresholds

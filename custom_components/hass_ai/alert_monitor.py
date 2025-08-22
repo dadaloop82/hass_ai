@@ -23,29 +23,8 @@ ALERT_LEVELS = {
     "CRITICAL": {"color": "#d32f2f", "icon": "🔥", "priority": 3}
 }
 
-# Default thresholds for different entity types
-DEFAULT_THRESHOLDS = {
-    "sensor": {
-        "temperature": {"WARNING": 25, "ALERT": 30, "CRITICAL": 35},
-        "humidity": {"WARNING": 70, "ALERT": 80, "CRITICAL": 90},
-        "battery": {"WARNING": 20, "ALERT": 10, "CRITICAL": 5},
-        "co2": {"WARNING": 1000, "ALERT": 1500, "CRITICAL": 2000},
-        "pressure": {"WARNING": 980, "ALERT": 960, "CRITICAL": 940}
-    },
-    "binary_sensor": {
-        "door": {"WARNING": True, "ALERT": True, "CRITICAL": True},
-        "window": {"WARNING": True, "ALERT": True, "CRITICAL": True},
-        "motion": {"WARNING": True, "ALERT": True, "CRITICAL": True},
-        "smoke": {"WARNING": True, "ALERT": True, "CRITICAL": True},
-        "gas": {"WARNING": True, "ALERT": True, "CRITICAL": True}
-    },
-    "switch": {
-        "security": {"WARNING": False, "ALERT": False, "CRITICAL": False}
-    },
-    "light": {
-        "emergency": {"WARNING": False, "ALERT": False, "CRITICAL": False}
-    }
-}
+# No default thresholds - all thresholds must come from AI analysis
+# This ensures intelligent, context-aware threshold generation for every entity type
 
 class AlertMonitor:
     """Monitors alert entities and manages notifications"""
@@ -336,19 +315,16 @@ input_text:
             _LOGGER.warning(f"REJECTING {entity_id} - domain '{domain}' is in excluded list or not suitable for alerts")
             return
             
-        domain = entity_id.split('.')[0]
-        entity_type = self._detect_entity_type(entity_id, entity_data)
-        
-        # Get default thresholds for this entity type
-        default_thresholds = DEFAULT_THRESHOLDS.get(domain, {}).get(entity_type, {})
-        
-        # Use custom thresholds if provided, otherwise defaults
-        thresholds = custom_thresholds or default_thresholds
+        # Use only custom thresholds (from AI analysis) - no defaults!
+        thresholds = custom_thresholds
         
         if not thresholds:
-            # Skip entities without specified thresholds - don't auto-generate
-            _LOGGER.debug(f"Skipping {entity_id} - no thresholds specified")
+            # If no AI-generated thresholds provided, we cannot configure this entity
+            _LOGGER.debug(f"Skipping {entity_id} - no AI-generated thresholds provided (AI analysis required)")
             return
+            
+        domain = entity_id.split('.')[0]
+        entity_type = self._detect_entity_type(entity_id, entity_data)
             
         self.monitored_entities[entity_id] = {
             "weight": entity_data.get("overall_weight", 3),
@@ -360,7 +336,7 @@ input_text:
         }
         
         await self._save_configuration()
-        _LOGGER.info(f"Configured alerts for {entity_id}: {thresholds}")
+        _LOGGER.info(f"Configured AI-generated alerts for {entity_id}: {thresholds}")
         
     def _detect_entity_type(self, entity_id: str, entity_data: Dict) -> str:
         """Detect entity type for threshold configuration"""

@@ -362,11 +362,23 @@ class HassAiPanel extends LitElement {
         'CRITICAL': isItalian ? 'Critico' : 'Critical'
       };
 
+      const levelIcons = {
+        'WARNING': '⚠️',
+        'ALERT': '🔔', 
+        'CRITICAL': '🚨'
+      };
+
+      const levelColors = {
+        'WARNING': '#ff9800',
+        'ALERT': '#f44336', 
+        'CRITICAL': '#d32f2f'
+      };
+
       const examples = this._getThresholdExamples(domain, deviceClass, unit, isItalian);
       
       // Extract current threshold value if exists
       let currentOperator = '<';
-      let currentValue = '';
+      let currentThresholdValue = '';
       let currentDescription = '';
       
       if (currentThreshold) {
@@ -375,14 +387,14 @@ class HassAiPanel extends LitElement {
           if (currentThreshold.operator && currentThreshold.value !== undefined) {
             // New format: {operator: "<", value: 50, description: "..."}
             currentOperator = currentThreshold.operator;
-            currentValue = currentThreshold.value.toString();
+            currentThresholdValue = currentThreshold.value.toString();
             currentDescription = currentThreshold.description || '';
           } else if (currentThreshold.condition) {
             // Old format: {condition: "< 50", description: "..."}  
             const match = currentThreshold.condition.match(/([<>=!]+)\s*(\d+)/);
             if (match) {
               currentOperator = match[1];
-              currentValue = match[2];
+              currentThresholdValue = match[2];
             }
             currentDescription = currentThreshold.description || '';
           }
@@ -391,106 +403,520 @@ class HassAiPanel extends LitElement {
           const match = currentThreshold.match(/([<>=!]+)\s*(\d+)/);
           if (match) {
             currentOperator = match[1];
-            currentValue = match[2];
+            currentThresholdValue = match[2];
           }
         }
       }
       
-      const dialogContent = document.createElement('div');
-      dialogContent.innerHTML = `
-        <div style="padding: 20px;">
-          <h3>${isItalian ? 'Imposta Soglia' : 'Set Threshold'} ${levelNames[level]}</h3>
-          <p><strong>${isItalian ? 'Entità' : 'Entity'}:</strong> ${entityId}</p>
-          <p><strong>${isItalian ? 'Valore attuale' : 'Current value'}:</strong> ${currentValue} ${unit}</p>
-          ${currentThreshold ? `<p><strong>${isItalian ? 'Soglia attuale' : 'Current threshold'}:</strong> ${currentOperator} ${currentValue}</p>` : ''}
-          
-          ${examples ? `<div style="background: #f5f5f5; padding: 10px; border-radius: 8px; margin: 10px 0;">
-            <strong>${isItalian ? 'Esempi suggeriti' : 'Suggested examples'}:</strong><br>
-            ${examples}
-          </div>` : ''}
-          
-          <div style="margin: 15px 0; display: flex; gap: 10px; align-items: end;">
-            <div style="flex: 0 0 80px;">
-              <label style="display: block; margin-bottom: 5px;">
-                <strong>${isItalian ? 'Operatore' : 'Operator'}:</strong>
-              </label>
-              <select id="operator-select" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-                <option value="<" ${currentOperator === '<' ? 'selected' : ''}>&lt; ${isItalian ? 'minore di' : 'less than'}</option>
-                <option value=">" ${currentOperator === '>' ? 'selected' : ''}>&gt; ${isItalian ? 'maggiore di' : 'greater than'}</option>
-                <option value="==" ${currentOperator === '==' ? 'selected' : ''}>=== ${isItalian ? 'uguale a' : 'equal to'}</option>
-                <option value="!=" ${currentOperator === '!=' ? 'selected' : ''}>!= ${isItalian ? 'diverso da' : 'not equal to'}</option>
-              </select>
+      // Create elegant modal with modern design
+      const dialog = document.createElement('div');
+      dialog.className = 'threshold-modal-overlay';
+      dialog.innerHTML = `
+        <div class="threshold-modal-dialog">
+          <div class="threshold-modal-header">
+            <div class="threshold-level-badge" style="background: ${levelColors[level]}">
+              <span class="threshold-level-icon">${levelIcons[level]}</span>
+              <span class="threshold-level-text">${levelNames[level]}</span>
             </div>
-            <div style="flex: 1;">
-              <label style="display: block; margin-bottom: 5px;">
-                <strong>${isItalian ? 'Valore soglia' : 'Threshold value'}:</strong>
-              </label>
-              <input type="text" id="threshold-input" 
-                     value="${currentValue}"
-                     placeholder="${isItalian ? 'es: 20, 80, offline' : 'e.g: 20, 80, offline'}"
-                     style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            <button class="threshold-close-btn" type="button">✕</button>
+          </div>
+          
+          <div class="threshold-modal-body">
+            <div class="entity-info-card">
+              <div class="entity-info-icon">🏠</div>
+              <div class="entity-info-details">
+                <h4 class="entity-name">${entityId}</h4>
+                <div class="entity-current-value">
+                  <span class="current-value-label">${isItalian ? 'Valore attuale' : 'Current value'}:</span>
+                  <span class="current-value-number">${currentValue}</span>
+                  <span class="current-value-unit">${unit}</span>
+                </div>
+                ${currentThreshold ? `
+                  <div class="entity-current-threshold">
+                    <span class="current-threshold-label">${isItalian ? 'Soglia attuale' : 'Current threshold'}:</span>
+                    <code class="current-threshold-value">${currentOperator} ${currentThresholdValue}</code>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+
+            ${examples ? `
+              <div class="examples-card">
+                <div class="examples-header">
+                  <span class="examples-icon">💡</span>
+                  <span class="examples-title">${isItalian ? 'Esempi suggeriti' : 'Suggested examples'}</span>
+                </div>
+                <div class="examples-content">${examples}</div>
+              </div>
+            ` : ''}
+            
+            <div class="threshold-form">
+              <div class="form-row">
+                <div class="form-group operator-group">
+                  <label class="form-label">
+                    <span class="label-icon">⚙️</span>
+                    ${isItalian ? 'Operatore' : 'Operator'}
+                  </label>
+                  <select id="operator-select" class="form-select">
+                    <option value="<" ${currentOperator === '<' ? 'selected' : ''}>&lt; ${isItalian ? 'minore di' : 'less than'}</option>
+                    <option value=">" ${currentOperator === '>' ? 'selected' : ''}>&gt; ${isItalian ? 'maggiore di' : 'greater than'}</option>
+                    <option value="==" ${currentOperator === '==' ? 'selected' : ''}>=== ${isItalian ? 'uguale a' : 'equal to'}</option>
+                    <option value="!=" ${currentOperator === '!=' ? 'selected' : ''}>!= ${isItalian ? 'diverso da' : 'not equal to'}</option>
+                  </select>
+                </div>
+                
+                <div class="form-group value-group">
+                  <label class="form-label">
+                    <span class="label-icon">🎯</span>
+                    ${isItalian ? 'Valore soglia' : 'Threshold value'}
+                  </label>
+                  <div class="input-with-unit">
+                    <input type="text" id="threshold-input" class="form-input"
+                           value="${currentThresholdValue}"
+                           placeholder="${isItalian ? 'es: 20, 80, offline' : 'e.g: 20, 80, offline'}">
+                    ${unit ? `<span class="input-unit">${unit}</span>` : ''}
+                  </div>
+                  <div class="input-feedback" id="value-feedback"></div>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label">
+                  <span class="label-icon">📝</span>
+                  ${isItalian ? 'Descrizione problema' : 'Problem description'}
+                  <span class="label-optional">(${isItalian ? 'opzionale' : 'optional'})</span>
+                </label>
+                <input type="text" id="description-input" class="form-input"
+                       value="${currentDescription}"
+                       placeholder="${isItalian ? 'es: Batteria scarica, Temperatura alta' : 'e.g: Battery low, Temperature high'}">
+              </div>
             </div>
           </div>
-          </div>
           
-          <div style="margin: 15px 0;">
-            <label style="display: block; margin-bottom: 5px;">
-              <strong>${isItalian ? 'Descrizione problema' : 'Problem description'}:</strong>
-            </label>
-            <input type="text" id="description-input" 
-                   value="${currentDescription}"
-                   placeholder="${isItalian ? 'es: Batteria scarica, Temperatura alta' : 'e.g: Battery low, Temperature high'}"
-                   style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
-          </div>
-          
-          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-            <button id="cancel-btn" style="padding: 8px 16px; background: #ccc; border: none; border-radius: 4px; cursor: pointer;">
+          <div class="threshold-modal-footer">
+            <button id="cancel-btn" class="btn-secondary">
+              <span class="btn-icon">↩️</span>
               ${isItalian ? 'Annulla' : 'Cancel'}
             </button>
-            <button id="save-btn" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">
-              ${isItalian ? 'Salva' : 'Save'}
+            <button id="save-btn" class="btn-primary" disabled>
+              <span class="btn-icon">💾</span>
+              ${isItalian ? 'Salva Soglia' : 'Save Threshold'}
             </button>
           </div>
         </div>
       `;
 
-      // Create and show dialog
-      const dialog = document.createElement('div');
-      dialog.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-        background: rgba(0,0,0,0.5); z-index: 10000; display: flex; 
-        align-items: center; justify-content: center;
+      // Add modern CSS styles
+      const styles = document.createElement('style');
+      styles.textContent = `
+        .threshold-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(8px);
+          z-index: 10000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          animation: modalFadeIn 0.3s ease-out;
+        }
+        
+        @keyframes modalFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        
+        @keyframes modalSlideIn {
+          from { 
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        
+        .threshold-modal-dialog {
+          background: var(--card-background-color, white);
+          border-radius: 16px;
+          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+          max-width: 560px;
+          width: 95%;
+          max-height: 90vh;
+          overflow: hidden;
+          animation: modalSlideIn 0.3s ease-out;
+          border: 1px solid var(--divider-color, #e0e0e0);
+        }
+        
+        .threshold-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 24px 24px 16px;
+          border-bottom: 1px solid var(--divider-color, #e0e0e0);
+        }
+        
+        .threshold-level-badge {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 16px;
+          border-radius: 20px;
+          color: white;
+          font-weight: 600;
+          font-size: 14px;
+        }
+        
+        .threshold-level-icon {
+          font-size: 16px;
+        }
+        
+        .threshold-close-btn {
+          background: none;
+          border: none;
+          font-size: 20px;
+          cursor: pointer;
+          padding: 8px;
+          border-radius: 50%;
+          color: var(--secondary-text-color, #666);
+          transition: all 0.2s ease;
+        }
+        
+        .threshold-close-btn:hover {
+          background: var(--divider-color, #f0f0f0);
+          transform: scale(1.1);
+        }
+        
+        .threshold-modal-body {
+          padding: 24px;
+          overflow-y: auto;
+          max-height: 60vh;
+        }
+        
+        .entity-info-card {
+          display: flex;
+          align-items: flex-start;
+          gap: 16px;
+          padding: 20px;
+          background: var(--primary-color, #2196f3);
+          background: linear-gradient(135deg, var(--primary-color, #2196f3) 0%, var(--accent-color, #03dac6) 100%);
+          border-radius: 12px;
+          color: white;
+          margin-bottom: 20px;
+        }
+        
+        .entity-info-icon {
+          font-size: 24px;
+          opacity: 0.9;
+        }
+        
+        .entity-info-details {
+          flex: 1;
+        }
+        
+        .entity-name {
+          margin: 0 0 8px 0;
+          font-size: 16px;
+          font-weight: 600;
+          opacity: 0.95;
+        }
+        
+        .entity-current-value {
+          display: flex;
+          align-items: baseline;
+          gap: 6px;
+          margin-bottom: 6px;
+        }
+        
+        .current-value-label {
+          font-size: 13px;
+          opacity: 0.8;
+        }
+        
+        .current-value-number {
+          font-size: 18px;
+          font-weight: 700;
+        }
+        
+        .current-value-unit {
+          font-size: 14px;
+          opacity: 0.9;
+        }
+        
+        .entity-current-threshold {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .current-threshold-label {
+          font-size: 13px;
+          opacity: 0.8;
+        }
+        
+        .current-threshold-value {
+          background: rgba(255, 255, 255, 0.2);
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-family: monospace;
+          font-size: 13px;
+        }
+        
+        .examples-card {
+          background: var(--secondary-background-color, #fafafa);
+          border-radius: 12px;
+          padding: 16px;
+          margin-bottom: 24px;
+          border-left: 4px solid var(--accent-color, #03dac6);
+        }
+        
+        .examples-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+        
+        .examples-icon {
+          font-size: 16px;
+        }
+        
+        .examples-title {
+          font-weight: 600;
+          color: var(--primary-text-color, #333);
+        }
+        
+        .examples-content {
+          color: var(--secondary-text-color, #666);
+          font-size: 14px;
+          line-height: 1.4;
+        }
+        
+        .threshold-form {
+          space-y: 20px;
+        }
+        
+        .form-row {
+          display: flex;
+          gap: 16px;
+          margin-bottom: 20px;
+        }
+        
+        .form-group {
+          flex: 1;
+        }
+        
+        .operator-group {
+          flex: 0 0 140px;
+        }
+        
+        .form-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: var(--primary-text-color, #333);
+          font-size: 14px;
+        }
+        
+        .label-icon {
+          font-size: 14px;
+        }
+        
+        .label-optional {
+          font-weight: 400;
+          color: var(--secondary-text-color, #666);
+          font-size: 12px;
+        }
+        
+        .form-select, .form-input {
+          width: 100%;
+          padding: 12px 16px;
+          border: 2px solid var(--divider-color, #e0e0e0);
+          border-radius: 8px;
+          font-size: 14px;
+          transition: all 0.2s ease;
+          background: var(--card-background-color, white);
+          color: var(--primary-text-color, #333);
+        }
+        
+        .form-select:focus, .form-input:focus {
+          outline: none;
+          border-color: var(--primary-color, #2196f3);
+          box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        }
+        
+        .input-with-unit {
+          position: relative;
+        }
+        
+        .input-unit {
+          position: absolute;
+          right: 16px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--secondary-text-color, #666);
+          font-size: 14px;
+          pointer-events: none;
+        }
+        
+        .input-with-unit .form-input {
+          padding-right: 50px;
+        }
+        
+        .input-feedback {
+          margin-top: 4px;
+          font-size: 12px;
+          min-height: 16px;
+        }
+        
+        .input-feedback.success {
+          color: #4caf50;
+        }
+        
+        .input-feedback.error {
+          color: #f44336;
+        }
+        
+        .threshold-modal-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 12px;
+          padding: 20px 24px;
+          border-top: 1px solid var(--divider-color, #e0e0e0);
+          background: var(--secondary-background-color, #fafafa);
+        }
+        
+        .btn-secondary, .btn-primary {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 24px;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          min-width: 120px;
+          justify-content: center;
+        }
+        
+        .btn-secondary {
+          background: var(--divider-color, #e0e0e0);
+          color: var(--secondary-text-color, #666);
+        }
+        
+        .btn-secondary:hover {
+          background: #d0d0d0;
+          transform: translateY(-1px);
+        }
+        
+        .btn-primary {
+          background: var(--primary-color, #2196f3);
+          color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+          background: #1976d2;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+        }
+        
+        .btn-primary:disabled {
+          background: #ccc;
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+        
+        .btn-icon {
+          font-size: 14px;
+        }
       `;
       
-      const dialogBox = document.createElement('div');
-      dialogBox.style.cssText = `
-        background: white; border-radius: 8px; max-width: 500px; 
-        width: 90%; max-height: 90vh; overflow-y: auto;
-      `;
-      
-      dialogBox.appendChild(dialogContent);
-      dialog.appendChild(dialogBox);
+      document.head.appendChild(styles);
       document.body.appendChild(dialog);
 
-      // Add event listeners
-      const operatorSelect = dialogContent.querySelector('#operator-select');
-      const thresholdInput = dialogContent.querySelector('#threshold-input');
-      const descriptionInput = dialogContent.querySelector('#description-input');
-      const cancelBtn = dialogContent.querySelector('#cancel-btn');
-      const saveBtn = dialogContent.querySelector('#save-btn');
+      // Add event listeners with enhanced validation
+      const operatorSelect = dialog.querySelector('#operator-select');
+      const thresholdInput = dialog.querySelector('#threshold-input');
+      const descriptionInput = dialog.querySelector('#description-input');
+      const cancelBtn = dialog.querySelector('#cancel-btn');
+      const saveBtn = dialog.querySelector('#save-btn');
+      const closeBtn = dialog.querySelector('.threshold-close-btn');
+      const valueFeedback = dialog.querySelector('#value-feedback');
 
-      cancelBtn.onclick = () => {
-        document.body.removeChild(dialog);
+      // Real-time validation
+      function validateInput() {
+        const value = thresholdInput.value.trim();
+        const operator = operatorSelect.value;
+        
+        if (!value) {
+          saveBtn.disabled = true;
+          valueFeedback.textContent = '';
+          valueFeedback.className = 'input-feedback';
+          return;
+        }
+        
+        // Validate numeric operators
+        if (['<', '>', '<=', '>='].includes(operator)) {
+          const numValue = parseFloat(value);
+          if (isNaN(numValue)) {
+            saveBtn.disabled = true;
+            valueFeedback.textContent = isItalian ? '⚠️ Valore numerico richiesto' : '⚠️ Numeric value required';
+            valueFeedback.className = 'input-feedback error';
+            return;
+          } else {
+            valueFeedback.textContent = isItalian ? '✅ Valore valido' : '✅ Valid value';
+            valueFeedback.className = 'input-feedback success';
+          }
+        } else {
+          valueFeedback.textContent = isItalian ? '✅ Valore accettato' : '✅ Value accepted';
+          valueFeedback.className = 'input-feedback success';
+        }
+        
+        saveBtn.disabled = false;
+      }
+
+      thresholdInput.addEventListener('input', validateInput);
+      operatorSelect.addEventListener('change', validateInput);
+
+      // Initial validation
+      validateInput();
+
+      // Close handlers
+      const closeDialog = () => {
+        dialog.style.animation = 'modalFadeIn 0.2s ease-out reverse';
+        setTimeout(() => {
+          document.body.removeChild(dialog);
+          document.head.removeChild(styles);
+        }, 200);
         resolve(null);
       };
 
+      cancelBtn.onclick = closeDialog;
+      closeBtn.onclick = closeDialog;
+      
+      // Click outside to close
+      dialog.onclick = (e) => {
+        if (e.target === dialog) {
+          closeDialog();
+        }
+      };
+
+      // Save handler
       saveBtn.onclick = () => {
         const operator = operatorSelect.value;
         const value = thresholdInput.value.trim();
         const description = descriptionInput.value.trim();
         
         if (!value) {
-          alert(isItalian ? 'Inserisci un valore per la soglia' : 'Please enter a threshold value');
+          thresholdInput.focus();
           return;
         }
 
@@ -503,16 +929,30 @@ class HassAiPanel extends LitElement {
           }
         }
 
-        document.body.removeChild(dialog);
+        dialog.style.animation = 'modalFadeIn 0.2s ease-out reverse';
+        setTimeout(() => {
+          document.body.removeChild(dialog);
+          document.head.removeChild(styles);
+        }, 200);
+
         resolve({
           operator: operator,
           value: finalValue,
-          description: description || `${levelNames[level]} threshold for ${entityId}`
+          description: description || levelNames[level] + ' threshold for ' + entityId
         });
       };
 
+      // Keyboard shortcuts
+      dialog.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeDialog();
+        } else if (e.key === 'Enter' && !saveBtn.disabled) {
+          saveBtn.click();
+        }
+      });
+
       // Focus on first input
-      thresholdInput.focus();
+      setTimeout(() => thresholdInput.focus(), 100);
     });
   }
 
