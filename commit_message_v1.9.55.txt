@@ -1,0 +1,28 @@
+🚨 CRITICAL FIX v1.9.55: Universal Alert Threshold Logic
+
+🐛 FIXED: Battery 57% incorrectly triggering CRITICAL alert
+- Universal threshold logic for all sensor types
+- Smart auto-detection: LOW vs HIGH value alert direction
+- Battery/Signal/Disk: Alert when value ≤ threshold  
+- Temperature/Humidity/CPU: Alert when value ≥ threshold
+
+🎯 ENHANCED: Alert System Intelligence
+- Automatic sensor type detection by name/class/unit
+- Visual monitoring indicators with WebSocket signals
+- Friendly AI message support with conversational tone
+- Weight-based filtering with configurable minimum
+- Improved error handling and cleanup
+
+🧪 TESTED: All sensor types validated
+- ✅ Batteries: 57% → No Alert (was CRITICAL)
+- ✅ Temperature: 75°C → WARNING (threshold 70°C)
+- ✅ Signal: -75dBm → WARNING (threshold -70dBm)
+- ✅ Disk: 15GB → WARNING (threshold 20GB)
+
+📦 TECHNICAL: 
+- Fixed _check_entity_alert() threshold comparison
+- Added _should_alert_on_low_value() detection method
+- Enhanced _send_cumulative_notification() with friendly prompts
+- Completed try/catch blocks with monitoring signals
+
+⚡ URGENT: Update immediately - fixes false positive alerts!

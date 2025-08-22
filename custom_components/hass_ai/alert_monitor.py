@@ -11,6 +11,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers import storage
 from homeassistant.util import dt as dt_util
 from homeassistant.const import STATE_UNKNOWN, STATE_UNAVAILABLE
+from .const import DOMAIN
 import json
 
 _LOGGER = logging.getLogger(__name__)
@@ -394,47 +395,88 @@ input_text:
         """Check all monitored entities for alert conditions"""
         current_time = dt_util.utcnow()
         alerts_to_notify = []
+        entities_checked = 0
         
-        for entity_id, config in self.monitored_entities.items():
-            if not config.get("enabled", True):
-                continue
-                
-            # Skip entities without valid thresholds
-            thresholds = config.get("thresholds", {})
-            if not thresholds or not any(thresholds.values()):
-                continue
-                
-            # Calculate check interval based on weight
-            weight = config.get("weight", 3)
-            interval_minutes = self._calculate_check_interval(weight)
+        try:
+            # Send monitoring start signal to frontend
+            self._send_monitoring_signal("start", {"count": len(self.monitored_entities)})
             
-            last_check = config.get("last_check")
-            if last_check and (current_time - datetime.fromisoformat(last_check)).total_seconds() < interval_minutes * 60:
-                continue
-                
-            # Check entity state
-            alert_level = await self._check_entity_alert(entity_id, config)
-            config["last_check"] = current_time.isoformat()
-            
-            if alert_level:
-                # Check if we should notify (throttling)
-                if self._should_notify(entity_id, alert_level):
-                    alerts_to_notify.append({
-                        "entity_id": entity_id,
-                        "level": alert_level,
-                        "weight": weight,
-                        "timestamp": current_time
-                    })
-                    self.last_notifications[entity_id] = current_time
+            for entity_id, config in self.monitored_entities.items():
+                if not config.get("enabled", True):
+                    continue
                     
-        # Send cumulative notification if there are alerts
-        if alerts_to_notify:
-            await self._send_cumulative_notification(alerts_to_notify)
+                # Skip entities without valid thresholds
+                thresholds = config.get("thresholds", {})
+                if not thresholds or not any(thresholds.values()):
+                    continue
+                    
+                # Filter by minimum weight if configured
+                weight = config.get("weight", 3)
+                min_weight = self._get_min_weight_filter()
+                if weight < min_weight:
+                    continue
+                    
+                entities_checked += 1
+                
+                # Calculate check interval based on weight
+                interval_minutes = self._calculate_check_interval(weight)
+                
+                last_check = config.get("last_check")
+                if last_check and (current_time - datetime.fromisoformat(last_check)).total_seconds() < interval_minutes * 60:
+                    continue
+                    
+                # Check entity state
+                alert_level = await self._check_entity_alert(entity_id, config)
+                config["last_check"] = current_time.isoformat()
+                
+                if alert_level:
+                    # Check if we should notify (throttling)
+                    if self._should_notify(entity_id, alert_level):
+                        alerts_to_notify.append({
+                            "entity_id": entity_id,
+                            "level": alert_level,
+                            "weight": weight,
+                            "timestamp": current_time
+                        })
+                        self.last_notifications[entity_id] = current_time
+            
+            # Send cumulative notification if there are alerts
+            if alerts_to_notify:
+                await self._send_cumulative_notification(alerts_to_notify)
+                
+        except Exception as e:
+            _LOGGER.error(f"Error during entity monitoring: {e}")
+        finally:
+            # Send monitoring end signal to frontend
+            self._send_monitoring_signal("end", {"entities_checked": entities_checked})
             
     def _calculate_check_interval(self, weight: int) -> float:
         """Calculate check interval based on weight: peso 5: 30 secondi, peso 4: 1 minuto, peso 3: 5 minuti, peso 2: 15 minuti, peso 1: 30 minuti"""
         weight_intervals = {5: 0.5, 4: 1.0, 3: 5.0, 2: 15.0, 1: 30.0}  # minutes
         return weight_intervals.get(weight, 5.0)  # Default to 5 minutes for invalid weights
+
+    def _send_monitoring_signal(self, signal_type: str, details=None):
+        """Send monitoring signal to frontend via websocket."""
+        try:
+            signal_data = {
+                "type": f"hass_ai_monitoring_{signal_type}",
+                "timestamp": datetime.now().isoformat(),
+                "details": details or {}
+            }
+            
+            # Send to all connected websocket clients
+            self.hass.loop.call_soon_threadsafe(
+                self.hass.bus.async_fire,
+                "hass_ai_monitoring_signal",
+                signal_data
+            )
+        except Exception as e:
+            _LOGGER.warning(f"Error sending monitoring signal: {e}")
+
+    def _get_min_weight_filter(self) -> int:
+        """Get minimum weight filter for current monitoring level."""
+        config = self.hass.data.get(DOMAIN, {})
+        return config.get("min_weight_filter", 3)  # Default to weight 3 and above
             
     async def _check_entity_alert(self, entity_id: str, config: Dict) -> Optional[str]:
         """Check if entity is in alert state"""
@@ -464,13 +506,67 @@ input_text:
                     if current_value == threshold:
                         return level
                 else:
-                    if current_value >= threshold:
-                        return level
+                    # Determine if this sensor should alert on LOW values or HIGH values
+                    should_alert_on_low = self._should_alert_on_low_value(entity_id, state)
+                    
+                    if should_alert_on_low:
+                        # Alert when value is BELOW or EQUAL to threshold (battery, signal strength, etc.)
+                        if current_value <= threshold:
+                            return level
+                    else:
+                        # Alert when value is ABOVE or EQUAL to threshold (temperature, humidity, etc.)
+                        if current_value >= threshold:
+                            return level
                         
         except (ValueError, TypeError):
             pass
             
         return None
+
+    def _should_alert_on_low_value(self, entity_id: str, state: State) -> bool:
+        """Determine if this sensor should alert when value is LOW (vs HIGH)"""
+        entity_lower = entity_id.lower()
+        device_class = state.attributes.get('device_class', '').lower()
+        unit = state.attributes.get('unit_of_measurement', '').lower()
+        
+        # Sensors that should alert on LOW values
+        low_value_indicators = [
+            # Battery related
+            'battery', 'batteria', 'power_level',
+            # Signal strength
+            'signal', 'rssi', 'wifi', 'segnale', 'strength',
+            # Storage/Disk space  
+            'available', 'free', 'remaining', 'libero', 'disponibile',
+            # Health/Performance indicators
+            'uptime', 'connectivity', 'connettivita',
+            # Ink/Toner
+            'ink', 'toner', 'cartridge', 'cartuccia',
+            # Air quality (sometimes lower is better)
+            'air_quality' if 'poor' not in entity_lower else None
+        ]
+        
+        # Device classes that typically alert on low values
+        low_value_device_classes = [
+            'battery', 'signal_strength', 'power'
+        ]
+        
+        # Units that typically indicate "low is bad"
+        low_value_units = ['%', 'percent', 'gb', 'mb', 'tb']
+        
+        # Check entity name for low-value keywords
+        if any(keyword and keyword in entity_lower for keyword in low_value_indicators):
+            return True
+            
+        # Check device class
+        if device_class in low_value_device_classes:
+            return True
+            
+        # Special case: if it's a percentage and looks like battery/signal/storage
+        if unit in ['%', 'percent'] and any(keyword in entity_lower for keyword in ['battery', 'signal', 'storage', 'disk', 'available', 'free']):
+            return True
+            
+        # Default: most sensors alert on HIGH values (temperature, humidity, CPU usage, etc.)
+        return False
         
     def _should_notify(self, entity_id: str, alert_level: str) -> bool:
         """Check if we should send notification (throttling logic)"""
@@ -556,8 +652,54 @@ input_text:
             language = self.hass.config.language or "en"
             is_italian = language.startswith('it')
             
-            if is_italian:
-                prompt = f"""Crea un messaggio di allerta conciso per la casa intelligente.
+            # Check if user prefers friendly messages
+            config = self.hass.data.get(DOMAIN, {})
+            use_friendly_messages = config.get("use_friendly_messages", False)
+            
+            if use_friendly_messages:
+                if is_italian:
+                    prompt = f"""Crea un messaggio informale e amichevole per allerte casa intelligente.
+
+ALLERTE ({len(alert_details)}):
+{chr(10).join([f"• {a['level']} - {a['name']}: {a['value']}{a['unit']}" for a in alert_details])}
+
+STILE:
+- Tono amichevole e rassicurante
+- Usa emoji divertenti 😊
+- Come se parlassi con un amico
+- Max 200 caratteri
+- Evita allarmismi
+- Suggerisci soluzioni semplici
+
+ESEMPI:
+"😊 Hey! La batteria del sensore è un po' scarica (12%), magari è ora di cambiarla!"
+"🔋 Piccolo promemoria: alcuni sensori potrebbero aver bisogno di nuove batterie"
+"🏠 Tutto ok in casa, solo qualche sensore che chiede attenzione!"
+
+FORMATO: [emoji amichevole] [messaggio rassicurante] + [suggerimento pratico]"""
+                else:
+                    prompt = f"""Create a friendly, informal smart home alert message.
+
+ALERTS ({len(alert_details)}):
+{chr(10).join([f"• {a['level']} - {a['name']}: {a['value']}{a['unit']}" for a in alert_details])}
+
+STYLE:
+- Friendly and reassuring tone
+- Use fun emojis 😊
+- Like talking to a friend
+- Max 200 characters
+- Avoid alarmist language
+- Suggest simple solutions
+
+EXAMPLES:
+"😊 Hey! Your sensor battery is getting low (12%), might be time for a change!"
+"🔋 Friendly reminder: a few sensors could use fresh batteries"
+"🏠 Everything's good at home, just some sensors asking for attention!"
+
+FORMAT: [friendly emoji] [reassuring message] + [practical suggestion]"""
+            else:
+                if is_italian:
+                    prompt = f"""Crea un messaggio di allerta conciso per la casa intelligente.
 
 ALLERTE ATTIVE ({len(alert_details)}):
 {chr(10).join([f"• {a['level']} - {a['name']}: {a['value']}{a['unit']} (peso {a['weight']})" for a in alert_details])}
@@ -570,8 +712,8 @@ REGOLE:
 - Suggerisci azione se necessario
 
 FORMATO: [emoji] [stato critico] + [dettaglio principale] + [azione consigliata]"""
-            else:
-                prompt = f"""Create a concise smart home alert message.
+                else:
+                    prompt = f"""Create a concise smart home alert message.
 
 ACTIVE ALERTS ({len(alert_details)}):
 {chr(10).join([f"• {a['level']} - {a['name']}: {a['value']}{a['unit']} (weight {a['weight']})" for a in alert_details])}

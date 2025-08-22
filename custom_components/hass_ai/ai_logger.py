@@ -13,12 +13,22 @@ _LOGGER = logging.getLogger(__name__)
 class AILogger:
     """Logger for AI prompts and responses with organized daily structure"""
     
-    def __init__(self, hass):
-        self.hass = hass
-        # Usa la cartella logs nella root del progetto
-        component_dir = os.path.dirname(__file__)
-        project_root = os.path.dirname(os.path.dirname(component_dir))  # Da custom_components/hass_ai alla root
-        self.log_dir = os.path.join(project_root, "logs")
+    def __init__(self, hass_or_path=None):
+        if hasattr(hass_or_path, 'config') and hasattr(hass_or_path.config, 'config_dir'):
+            # È un'istanza di Home Assistant
+            self.hass = hass_or_path
+            self.log_dir = os.path.join(hass_or_path.config.config_dir, "hass_ai_logs")
+        elif isinstance(hass_or_path, str):
+            # È un path diretto (per compatibilità)
+            self.hass = None
+            self.log_dir = hass_or_path
+        else:
+            # Fallback per sviluppo
+            self.hass = None
+            component_dir = os.path.dirname(__file__)
+            project_root = os.path.dirname(os.path.dirname(component_dir))
+            self.log_dir = os.path.join(project_root, "logs")
+        
         self._ensure_log_directory()
         
     def _ensure_log_directory(self):

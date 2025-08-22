@@ -41,7 +41,7 @@ class HassAiPanel extends LitElement {
     this.correlations = {}; // Store correlations for each entity
     this.isOperationActive = false; // Track if any operation is active
     this.currentOperation = null; // Track current operation type
-    this.componentVersion = '1.9.53'; // Default fallback version
+    this.componentVersion = '1.9.54'; // Default fallback version
     this.scanProgress = {
       show: false,
       message: '',
@@ -1146,38 +1146,22 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       }
     }
     
-    // Fallback to extracting from entity name using patterns
+    // Fallback SOLO per entità speciali senza area fisica
     const entity_lower = entityId.toLowerCase();
     
-    // Check for general/average sensors first
-    if (entity_lower.includes('media') || entity_lower.includes('average') || entity_lower.includes('mean') || entity_lower.includes('avg')) {
-      return 'Casa (Media)'; // General house average
+    // SOLO per entità globali/di sistema che non hanno area fisica
+    if (entity_lower.includes('sun.') || entity_lower.startsWith('sun.')) {
+      return null; // Entità sole non ha area
     }
     
-    // Common room patterns in Italian and English
-    const room_patterns = [
-      'soggiorno', 'living', 'salotto',
-      'cucina', 'kitchen', 
-      'camera', 'bedroom', 'letto',
-      'bagno', 'bathroom', 'toilet',
-      'ingresso', 'entrance', 'entrata',
-      'corridoio', 'hallway', 'corridor',
-      'studio', 'office', 'ufficio',
-      'lavanderia', 'laundry',
-      'garage', 'cantina', 'basement',
-      'terrazza', 'terrace', 'balcone', 'balcony',
-      'giardino', 'garden',
-      'taverna', 'mansarda', 'attic',
-      'casa', 'home', 'house'
-    ];
-    
-    for (const room of room_patterns) {
-      if (entity_lower.includes(room)) {
-        return room;
-      }
+    // SOLO per sensori che rappresentano medie/totali della casa
+    if ((entity_lower.includes('media') || entity_lower.includes('average') || entity_lower.includes('mean') || entity_lower.includes('avg')) && 
+        (entity_lower.includes('casa') || entity_lower.includes('house') || entity_lower.includes('home') || entity_lower.includes('temperatura'))) {
+      return 'Casa (Media)'; // Solo per medie reali della casa
     }
     
-    return 'Altro'; // Default area for unidentified rooms
+    // Per tutto il resto, non inventare aree!
+    return null; // Non area trovata
   }
 
   _getAvailableAreas() {
@@ -2223,15 +2207,37 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
             </div>
           </div>
               ${Object.keys(this.entities).length > 0 ? html`
-                <mwc-button 
-                  outlined
-                  @click=${(e) => this._confirmResetAll(e)}
-                  class="reset-button compact"
-                  ?disabled=${this.loading}
-                  style="margin-left: 10px;"
-                >
-                  ${isItalian ? 'Cancella Tutto' : 'Clear All'}
-                </mwc-button>
+                <div class="action-buttons-row">
+                  <mwc-button 
+                    outlined
+                    @click=${(e) => this._showLogsDialog(e)}
+                    class="action-button"
+                    ?disabled=${this.loading}
+                  >
+                    <ha-icon icon="mdi:file-document-outline" slot="icon"></ha-icon>
+                    ${isItalian ? 'Visualizza Log' : 'View Logs'}
+                  </mwc-button>
+                  
+                  <mwc-button 
+                    outlined
+                    @click=${(e) => this._showManualThresholdsDialog(e)}
+                    class="action-button"
+                    ?disabled=${this.loading}
+                  >
+                    <ha-icon icon="mdi:tune" slot="icon"></ha-icon>
+                    ${isItalian ? 'Soglie Manuali' : 'Manual Thresholds'}
+                  </mwc-button>
+                  
+                  <mwc-button 
+                    outlined
+                    @click=${(e) => this._confirmResetAll(e)}
+                    class="action-button reset"
+                    ?disabled=${this.loading}
+                  >
+                    <ha-icon icon="mdi:delete-sweep" slot="icon"></ha-icon>
+                    ${isItalian ? 'Cancella Tutto' : 'Clear All'}
+                  </mwc-button>
+                </div>
               ` : ''}
             </div>
           </div>
@@ -2282,13 +2288,16 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
                           <strong>${entity.entity_id}</strong>
                           <br><small>${entity.name || entity.entity_id.split('.')[1]}</small>
                           ${(() => {
-                            const area = entity.area || this._extractEntityArea(entity.entity_id);
                             if (entity.area) {
-                              // Area dal backend
-                              return area && area !== 'Altro' ? html`<br><small class="entity-area">📍 ${area}</small>` : '';
+                              // Area dal backend - sempre corretta
+                              return html`<br><small class="entity-area">📍 ${entity.area}</small>`;
                             } else {
-                              // Fallback frontend (da rimuovere quando backend funziona)
-                              return area && area !== 'Altro' ? html`<br><small class="entity-area">📍 ${area} (fallback)</small>` : '';
+                              // Prova fallback solo per entità speciali
+                              const fallbackArea = this._extractEntityArea(entity.entity_id);
+                              if (fallbackArea) {
+                                return html`<br><small class="entity-area">📍 ${fallbackArea} (fallback)</small>`;
+                              }
+                              return ''; // Nessuna area da mostrare
                             }
                           })()}
                           ${(() => {
@@ -2985,6 +2994,31 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
       }
       
       .reset-button:hover {
+        background-color: var(--error-color);
+        color: white;
+      }
+      
+      /* Action Buttons Styles */
+      .action-buttons-row {
+        display: flex;
+        gap: 12px;
+        margin-top: 15px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+      
+      .action-button {
+        --ha-button-border-radius: 6px;
+        min-width: 130px;
+        font-size: 13px;
+      }
+      
+      .action-button.reset {
+        --mdc-theme-primary: var(--error-color);
+        --mdc-theme-on-primary: white;
+      }
+      
+      .action-button.reset:hover {
         background-color: var(--error-color);
         color: white;
       }
@@ -4490,6 +4524,248 @@ Nothing dramatic, but worth checking when you have a minute! 😉`;
     } else {
       return isItalian ? 'Preparazione scansione...' : 'Preparing scan...';
     }
+  }
+
+  async _showLogsDialog(e) {
+    if (e) e.preventDefault();
+    const isItalian = this.language.includes('it');
+    
+    try {
+      // Get available log dates
+      const response = await this.hass.callWS({
+        type: 'hass_ai/get_ai_logs',
+        available_dates: true
+      });
+      
+      const availableDates = response.available_dates || [];
+      
+      if (availableDates.length === 0) {
+        alert(isItalian ? 'Nessun log disponibile.' : 'No logs available.');
+        return;
+      }
+      
+      // Show date selection dialog
+      const selectedDate = await this._showDateSelectionDialog(availableDates, isItalian);
+      if (!selectedDate) return;
+      
+      // Get logs for selected date
+      const logsResponse = await this.hass.callWS({
+        type: 'hass_ai/get_ai_logs',
+        date: selectedDate
+      });
+      
+      // Show logs dialog
+      await this._displayLogsDialog(logsResponse, selectedDate, isItalian);
+      
+    } catch (error) {
+      console.error('Error loading logs:', error);
+      alert(isItalian ? 'Errore nel caricamento dei log.' : 'Error loading logs.');
+    }
+  }
+
+  async _showDateSelectionDialog(availableDates, isItalian) {
+    return new Promise((resolve) => {
+      const dialog = document.createElement('div');
+      dialog.className = 'modal-overlay';
+      dialog.innerHTML = `
+        <div class="modal-dialog">
+          <h3>${isItalian ? 'Seleziona Data Log' : 'Select Log Date'}</h3>
+          <div class="date-list">
+            ${availableDates.map(date => `
+              <button class="date-option" data-date="${date}">
+                ${date}
+              </button>
+            `).join('')}
+          </div>
+          <div class="modal-buttons">
+            <button class="cancel-btn">${isItalian ? 'Annulla' : 'Cancel'}</button>
+          </div>
+        </div>
+      `;
+      
+      dialog.style.cssText = `
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5); z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+      `;
+      
+      const modalDialog = dialog.querySelector('.modal-dialog');
+      modalDialog.style.cssText = `
+        background: var(--card-background-color); border-radius: 8px;
+        padding: 20px; max-width: 400px; width: 90%;
+      `;
+      
+      const dateList = dialog.querySelector('.date-list');
+      dateList.style.cssText = `
+        display: flex; flex-direction: column; gap: 8px; margin: 15px 0;
+      `;
+      
+      const dateOptions = dialog.querySelectorAll('.date-option');
+      dateOptions.forEach(btn => {
+        btn.style.cssText = `
+          padding: 12px; border: 1px solid var(--divider-color);
+          border-radius: 6px; background: var(--card-background-color);
+          color: var(--primary-text-color); cursor: pointer;
+        `;
+        btn.onclick = () => {
+          document.body.removeChild(dialog);
+          resolve(btn.dataset.date);
+        };
+      });
+      
+      dialog.querySelector('.cancel-btn').onclick = () => {
+        document.body.removeChild(dialog);
+        resolve(null);
+      };
+      
+      document.body.appendChild(dialog);
+    });
+  }
+
+  async _displayLogsDialog(logs, date, isItalian) {
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-overlay';
+    
+    const logTypes = ['prompts', 'responses', 'errors', 'info'];
+    const logCounts = {};
+    logTypes.forEach(type => {
+      logCounts[type] = logs.filter(log => log.type === type).length;
+    });
+    
+    dialog.innerHTML = `
+      <div class="modal-dialog large">
+        <h3>${isItalian ? 'Log AI' : 'AI Logs'} - ${date}</h3>
+        <div class="log-stats">
+          ${logTypes.map(type => `
+            <div class="log-stat">
+              <strong>${type}:</strong> ${logCounts[type]}
+            </div>
+          `).join('')}
+        </div>
+        <div class="log-content">
+          <pre>${JSON.stringify(logs, null, 2)}</pre>
+        </div>
+        <div class="modal-buttons">
+          <button class="close-btn">${isItalian ? 'Chiudi' : 'Close'}</button>
+        </div>
+      </div>
+    `;
+    
+    dialog.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5); z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    `;
+    
+    const modalDialog = dialog.querySelector('.modal-dialog');
+    modalDialog.style.cssText = `
+      background: var(--card-background-color); border-radius: 8px;
+      padding: 20px; max-width: 80%; max-height: 80%; width: 90%;
+      overflow-y: auto;
+    `;
+    
+    const logContent = dialog.querySelector('.log-content');
+    logContent.style.cssText = `
+      max-height: 400px; overflow-y: auto; margin: 15px 0;
+      background: var(--code-editor-background-color, #f5f5f5);
+      border: 1px solid var(--divider-color); border-radius: 4px;
+      padding: 10px;
+    `;
+    
+    dialog.querySelector('.close-btn').onclick = () => {
+      document.body.removeChild(dialog);
+    };
+    
+    document.body.appendChild(dialog);
+  }
+
+  async _showManualThresholdsDialog(e) {
+    if (e) e.preventDefault();
+    const isItalian = this.language.includes('it');
+    
+    const alertEntities = Object.keys(this.entities).filter(entityId => {
+      const entity = this.entities[entityId];
+      return entity.category && entity.category.includes('ALERTS') && entity.overall_weight >= this.minWeight;
+    });
+    
+    if (alertEntities.length === 0) {
+      alert(isItalian ? 'Nessuna entità di allerta trovata con il peso minimo attuale.' : 'No alert entities found with current minimum weight.');
+      return;
+    }
+    
+    // Show entity selection dialog for manual thresholds
+    const selectedEntity = await this._showEntitySelectionDialog(alertEntities, isItalian);
+    if (!selectedEntity) return;
+    
+    // Show threshold configuration for selected entity
+    await this._showThresholdConfigDialog(selectedEntity, isItalian);
+  }
+
+  async _showEntitySelectionDialog(alertEntities, isItalian) {
+    return new Promise((resolve) => {
+      const dialog = document.createElement('div');
+      dialog.className = 'modal-overlay';
+      dialog.innerHTML = `
+        <div class="modal-dialog">
+          <h3>${isItalian ? 'Seleziona Entità per Soglie Manuali' : 'Select Entity for Manual Thresholds'}</h3>
+          <div class="entity-list">
+            ${alertEntities.map(entityId => {
+              const entity = this.entities[entityId];
+              return `
+                <button class="entity-option" data-entity="${entityId}">
+                  <div class="entity-info">
+                    <strong>${entityId}</strong>
+                    <br><small>Peso: ${entity.overall_weight} | ${entity.overall_reason}</small>
+                  </div>
+                </button>
+              `;
+            }).join('')}
+          </div>
+          <div class="modal-buttons">
+            <button class="cancel-btn">${isItalian ? 'Annulla' : 'Cancel'}</button>
+          </div>
+        </div>
+      `;
+      
+      dialog.style.cssText = `
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5); z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+      `;
+      
+      const modalDialog = dialog.querySelector('.modal-dialog');
+      modalDialog.style.cssText = `
+        background: var(--card-background-color); border-radius: 8px;
+        padding: 20px; max-width: 600px; width: 90%; max-height: 70%;
+        overflow-y: auto;
+      `;
+      
+      const entityList = dialog.querySelector('.entity-list');
+      entityList.style.cssText = `
+        display: flex; flex-direction: column; gap: 8px; margin: 15px 0;
+        max-height: 400px; overflow-y: auto;
+      `;
+      
+      const entityOptions = dialog.querySelectorAll('.entity-option');
+      entityOptions.forEach(btn => {
+        btn.style.cssText = `
+          padding: 12px; border: 1px solid var(--divider-color);
+          border-radius: 6px; background: var(--card-background-color);
+          color: var(--primary-text-color); cursor: pointer; text-align: left;
+        `;
+        btn.onclick = () => {
+          document.body.removeChild(dialog);
+          resolve(btn.dataset.entity);
+        };
+      });
+      
+      dialog.querySelector('.cancel-btn').onclick = () => {
+        document.body.removeChild(dialog);
+        resolve(null);
+      };
+      
+      document.body.appendChild(dialog);
+    });
   }
 
   async _confirmResetAll(e) {

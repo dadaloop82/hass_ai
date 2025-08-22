@@ -2,6 +2,69 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.55] - 2025-08-22
+
+### 🐛 **CRITICAL BUG FIX: Alert Threshold Logic**
+- **FIXED: Battery Alert False Positives**: Battery at 57% no longer triggers CRITICAL alert (thresholds: 20/10/5)
+- **FIXED: Universal Threshold Logic**: Implemented intelligent threshold direction detection for all sensor types
+- **ENHANCED: Sensor Type Detection**: System automatically detects if sensor should alert on LOW vs HIGH values
+
+#### 🔧 **Alert System Improvements**
+- **Battery/Signal/Disk**: Alert when value ≤ threshold (LOW values are bad)
+- **Temperature/Humidity/CPU**: Alert when value ≥ threshold (HIGH values are bad)  
+- **Automatic Detection**: Smart recognition based on entity name, device class, and unit
+- **Visual Monitoring**: Added frontend monitoring indicators with start/end signals
+- **Friendly Messages**: Implemented conversational AI-generated alert messages
+
+#### 📋 **What Was Fixed**
+```
+BEFORE (BROKEN):
+Battery 57% → CRITICAL (WRONG!)
+Temperature 20°C → No Alert (with threshold 70°C)
+
+AFTER (CORRECT):
+Battery 57% → No Alert ✅
+Battery 8% → ALERT ✅  
+Temperature 75°C → WARNING ✅
+```
+
+#### 🧪 **Tested Sensor Types**
+- 🔋 **Batteries**: Alert on low charge (≤ threshold)
+- 📶 **Signal Strength**: Alert on weak signal (≤ threshold) 
+- 💾 **Disk Space**: Alert on low space (≤ threshold)
+- 🌡️ **Temperature**: Alert on high temp (≥ threshold)
+- 💧 **Humidity**: Alert on high humidity (≥ threshold)
+
+### 🎯 **Enhanced Features**
+- **Weight-Based Monitoring**: Configurable minimum weight filter for monitoring
+- **Error Handling**: Improved try/catch blocks with proper cleanup
+- **WebSocket Signals**: Real-time monitoring indicators for frontend
+- **AI Message Styles**: Support for formal vs friendly notification messages
+
+## [1.9.54] - 2025-08-22
+
+### 🛠️ **Production Logging Path Fix**
+- **FIXED: Production Log Location**: AI logs now save to correct Home Assistant directory
+- **ENHANCED: Path Detection**: Smart path detection for development vs production environments
+- **IMPROVED: Directory Structure**: Logs saved to `/config/hass_ai_logs/` in production
+
+#### Technical Details
+- **Production Path**: `/config/hass_ai_logs/YYYY-MM-DD/` for organized daily logs
+- **Development Path**: `project_root/logs/YYYY-MM-DD/` for local development
+- **Backward Compatibility**: Still supports custom path configuration
+- **Auto-Detection**: Automatically detects Home Assistant environment vs development
+
+#### Log Structure in Production
+```
+/config/hass_ai_logs/
+├── README.md                     # Documentation
+└── YYYY-MM-DD/                  # Daily directories
+    ├── prompts.json             # AI prompts with context
+    ├── responses.json           # AI responses with results
+    ├── errors.json              # Error logs with context
+    └── info.json                # Analysis tracking & statistics
+```
+
 ## [1.9.53] - 2025-08-22
 
 ### 🔧 **Critical Bug Fixes & User Experience Improvements**
