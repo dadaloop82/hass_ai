@@ -16,8 +16,19 @@ from .const import (
 from homeassistant.core import HomeAssistant, State
 from homeassistant.components import conversation, websocket_api
 from homeassistant.exceptions import HomeAssistantError
+from .ai_logger import AILogger
 
 _LOGGER = logging.getLogger(__name__)
+
+# Global AI logger instance
+_ai_logger: Optional[AILogger] = None
+
+def _get_ai_logger(hass: HomeAssistant) -> AILogger:
+    """Get or create the global AI logger instance."""
+    global _ai_logger
+    if _ai_logger is None:
+        _ai_logger = AILogger(hass.config.path('ai_logs'))
+    return _ai_logger
 
 def _estimate_tokens(text: str) -> int:
     """Estimate token count for text (rough approximation: 1 token ≈ 4 characters)."""
@@ -245,7 +256,12 @@ def _auto_categorize_entity(state: State) -> tuple[list[str], str]:
         return ['CONTROL'], 'USER'
     elif domain in ['lock', 'alarm_control_panel']:
         return ['CONTROL'], 'SERVICE'
-    elif domain in ['input_boolean', 'input_select', 'input_number', 'input_text']:
+    elif domain in ['input_boolean', 'input_select', 'input_number']:
+        return ['CONTROL'], 'USER'
+    elif domain == 'input_text':
+        # Special case: HASS AI alerts entity should not be categorized as ALERT
+        if 'hass_ai_alerts' in entity_id.lower():
+            return ['CONTROL'], 'SERVICE'  # It's a service entity for HASS AI
         return ['CONTROL'], 'USER'
     elif domain in ['alert', 'automation']:
         return ['ALERTS'], 'SERVICE'
@@ -377,14 +393,35 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                     )
                 
                 try:
+                    # Initialize AI logger
+                    ai_logger = _get_ai_logger(hass)
+                    
                     # Send to AI for threshold generation with enhanced logging
-                    _LOGGER.info(f"🤖 Generating AI thresholds for {entity_id} (domain: {domain}, device_class: {device_class})")
+                    _LOGGER.debug(f"Generating AI thresholds for {entity_id} (domain: {domain}, device_class: {device_class})")
+                    
+                    # Log the threshold prompt
+                    ai_logger.log_prompt(threshold_prompt, context={
+                        "entity_id": entity_id,
+                        "domain": domain,
+                        "device_class": device_class,
+                        "current_state": str(state.state),
+                        "unit_of_measurement": attributes.get('unit_of_measurement', ''),
+                        "analysis_type": "threshold_generation"
+                    })
+                    
                     ai_response = await conversation_agent.async_process(threshold_prompt, None, None)
                     
                     if ai_response and hasattr(ai_response, 'response') and ai_response.response:
                         # Try to parse AI response
                         import json
                         response_text = ai_response.response.speech.get('plain', {}).get('speech', '') if hasattr(ai_response.response, 'speech') else str(ai_response.response)
+                        
+                        # Log the AI response
+                        ai_logger.log_response(response_text, context={
+                            "entity_id": entity_id,
+                            "analysis_type": "threshold_generation",
+                            "response_length": len(response_text)
+                        })
                         
                         _LOGGER.debug(f"🤖 AI Response for {entity_id}: {response_text[:200]}...")
                         
@@ -403,7 +440,7 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                                     _LOGGER.warning(f"❌ AI response for {entity_id} missing levels: {missing_levels}")
                                     _LOGGER.warning(f"❌ Partial response: {threshold_data}")
                                 else:
-                                    _LOGGER.info(f"✅ AI generated ALL 3 thresholds for {entity_id}: {threshold_data}")
+                                    _LOGGER.debug(f"AI generated ALL 3 thresholds for {entity_id}: {threshold_data}")
                                     result.update({
                                         "entity_type": "ai_generated",
                                         "thresholds": threshold_data
@@ -411,6 +448,14 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                                     return result
                                     
                             except json.JSONDecodeError as je:
+                                # Log JSON parse error
+                                ai_logger.log_error(f"JSON parse error for thresholds: {entity_id}", str(je), context={
+                                    "entity_id": entity_id,
+                                    "error_type": "json_decode_error",
+                                    "raw_response": response_text[json_start:json_end] if 'json_start' in locals() and 'json_end' in locals() else response_text,
+                                    "analysis_type": "threshold_generation"
+                                })
+                                
                                 _LOGGER.warning(f"❌ JSON parse error for {entity_id}: {je}")
                                 _LOGGER.warning(f"❌ Raw response: {response_text[json_start:json_end]}")
                         else:
@@ -419,6 +464,15 @@ async def _generate_auto_thresholds(hass: HomeAssistant, entity_id: str, state: 
                         _LOGGER.warning(f"❌ Empty AI response for {entity_id}")
                             
                 except Exception as e:
+                    # Log threshold generation error
+                    ai_logger.log_error(f"AI threshold generation failed: {entity_id}", str(e), context={
+                        "entity_id": entity_id,
+                        "domain": domain,
+                        "device_class": device_class,
+                        "error_type": "threshold_generation_error",
+                        "analysis_type": "threshold_generation"
+                    })
+                    
                     _LOGGER.warning(f"❌ AI threshold generation failed for {entity_id}: {e}")
         
         # Fallback to basic thresholds for obvious cases
@@ -926,7 +980,7 @@ async def get_entities_importance_batched(
             remaining_states = remaining_states[current_batch_size:]
             token_limit_retries = 0
             use_compact_mode = False  # Reset to full mode on success
-            _LOGGER.info(f"✅ Batch {overall_batch_num} completed successfully")
+            _LOGGER.debug(f"Batch {overall_batch_num} completed successfully")
             
         else:
             # Token limit exceeded - try different strategies
@@ -1055,11 +1109,52 @@ async def _process_single_batch(
     # Create detailed entity information for AI analysis
     entity_details = []
     
+    # Get registries for area information
+    try:
+        from homeassistant.helpers import entity_registry as er, device_registry as dr, area_registry as ar
+        
+        entity_registry = er.async_get(hass)
+        device_registry = dr.async_get(hass)
+        area_registry = ar.async_get(hass)
+    except Exception as e:
+        _LOGGER.warning(f"Could not access registries for area information: {e}")
+        entity_registry = None
+        device_registry = None
+        area_registry = None
+    
     # Create minimal entity information for AI analysis
     for state in batch_states:
-        # Just the basics: entity_id, domain, state, name
+        # Get area information
+        area_name = "Casa"  # Default fallback
+        
+        if entity_registry and device_registry and area_registry:
+            try:
+                # First try to get area from entity registry
+                entity_entry = entity_registry.async_get(state.entity_id)
+                area_id = None
+                
+                if entity_entry:
+                    # Entity can have area directly
+                    if entity_entry.area_id:
+                        area_id = entity_entry.area_id
+                    # Or get area from device
+                    elif entity_entry.device_id:
+                        device_entry = device_registry.async_get(entity_entry.device_id)
+                        if device_entry and device_entry.area_id:
+                            area_id = device_entry.area_id
+                
+                # Convert area_id to area name
+                if area_id:
+                    area_entry = area_registry.async_get_area(area_id)
+                    if area_entry:
+                        area_name = area_entry.name
+                        
+            except Exception as e:
+                _LOGGER.debug(f"Could not get area for {state.entity_id}: {e}")
+        
+        # Just the basics: entity_id, domain, state, name, area
         name = state.attributes.get('friendly_name', state.entity_id.split('.')[-1])
-        entity_description = f"{state.entity_id} ({state.domain}, {state.state}, {name[:20]})"
+        entity_description = f"{state.entity_id} ({state.domain}, {state.state}, {name[:20]}, {area_name})"
         entity_details.append(entity_description)
     
     # Add delay to make AI analysis visible
@@ -1070,7 +1165,10 @@ async def _process_single_batch(
     
     # Log prompt size for debugging
     prompt_size = len(prompt)
-    _LOGGER.info(f"📝 Batch {batch_num} prompt size: {prompt_size} chars ({'compact' if use_compact_prompt else 'full'} mode)")
+    _LOGGER.debug(f"Batch {batch_num} prompt size: {prompt_size} chars ({'compact' if use_compact_prompt else 'full'} mode)")
+
+    # Initialize AI logger
+    ai_logger = _get_ai_logger(hass)
 
     try:
         # Send simple progress info to frontend instead of full debug
@@ -1088,8 +1186,25 @@ async def _process_single_batch(
         
         # Use Local Agent only
         if ai_provider == AI_PROVIDER_LOCAL:
+            # Log the prompt
+            ai_logger.log_prompt(prompt, context={
+                "batch_number": batch_num,
+                "entities_count": len(batch_states),
+                "compact_mode": use_compact_prompt,
+                "analysis_type": analysis_type,
+                "prompt_size": prompt_size,
+                "entity_ids": [state.entity_id for state in batch_states]
+            })
+            
             response_text = await _query_local_agent(hass, prompt, conversation_agent)
             _LOGGER.debug(f"Local Agent response for batch {batch_num}: {response_text[:200]}...")
+            
+            # Log the response
+            ai_logger.log_response(response_text, context={
+                "batch_number": batch_num,
+                "response_size": len(response_text),
+                "analysis_type": analysis_type
+            })
             
             # Send simple response confirmation
             if connection and msg_id:
@@ -1106,6 +1221,14 @@ async def _process_single_batch(
             # Check for token limit exceeded
             if _check_token_limit_exceeded(response_text):
                 _LOGGER.error(f"🚨 Token limit exceeded in batch {batch_num} ({'compact' if use_compact_prompt else 'full'} mode)")
+                
+                # Log the error
+                ai_logger.log_error(f"Token limit exceeded in batch {batch_num}", {
+                    "batch_number": batch_num,
+                    "compact_mode": use_compact_prompt,
+                    "response_preview": response_text[:500],
+                    "analysis_type": analysis_type
+                })
                 
                 # Send token limit error to frontend
                 if connection and msg_id:
@@ -1270,6 +1393,13 @@ async def _process_single_batch(
         return True, batch_stats  # Fallback success with stats
 
     except json.JSONDecodeError as e:
+        # Log the error
+        ai_logger.log_error(f"JSON decode error in batch {batch_num}", str(e), context={
+            "batch_number": batch_num,
+            "response_text": response_text,
+            "error_type": "json_decode_error"
+        })
+        
         _LOGGER.warning(f"AI response is not valid JSON for batch {batch_num} - Raw response: {response_text} - Error: {e}")
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
@@ -1294,6 +1424,14 @@ async def _process_single_batch(
         
         return True, batch_stats  # Fallback success with stats
     except Exception as e:
+        # Log the error
+        ai_logger.log_error(f"Error querying AI for batch {batch_num}", str(e), context={
+            "batch_number": batch_num,
+            "entities_count": len(batch_states),
+            "error_type": "processing_error",
+            "prompt_size": prompt_size if 'prompt_size' in locals() else 0
+        })
+        
         _LOGGER.error(f"Error querying AI for batch {batch_num}: {e}")
         _LOGGER.info(f"Falling back to domain-based classification for batch {batch_num}")
         # Use fallback for all entities in this batch
@@ -1477,7 +1615,7 @@ def _create_fallback_result(entity_id: str, batch_num: int, reason: str = "domai
 async def _query_local_agent(hass: HomeAssistant, prompt: str, conversation_agent: str = None) -> str:
     """Query Home Assistant local conversation agent using HA services."""
     try:
-        _LOGGER.info(f"🤖 Querying local conversation agent via HA services...")
+        _LOGGER.debug(f"Querying local conversation agent via HA services...")
         
         # Determine which agent to use
         agent_id = None
@@ -1499,7 +1637,7 @@ async def _query_local_agent(hass: HomeAssistant, prompt: str, conversation_agen
             _LOGGER.info(f"🎯 Using configured agent: {agent_id}")
         
         if agent_id:
-            _LOGGER.info(f"✅ Using conversation agent: {agent_id}")
+            _LOGGER.debug(f"Using conversation agent: {agent_id}")
         else:
             _LOGGER.warning(f"⚠️ No custom conversation agents found, using default (may not work well)")
         

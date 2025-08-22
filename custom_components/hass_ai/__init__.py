@@ -54,7 +54,7 @@ async def _save_ai_results(hass: HomeAssistant, results) -> None:
             results_data = results
         
         await ai_results_store.async_save(results_data)
-        _LOGGER.info(f"💾 Saved AI analysis results for {results_data['total_entities']} entities")
+        _LOGGER.debug(f"Saved AI analysis results for {results_data['total_entities']} entities")
         
     except Exception as e:
         _LOGGER.error(f"Error saving AI results: {e}")
@@ -72,7 +72,7 @@ async def _save_correlations(hass: HomeAssistant, correlations) -> None:
         }
         
         await correlations_store.async_save(correlations_data)
-        _LOGGER.info(f"💾 Saved correlations for {correlations_data['total_entities']} entities")
+        _LOGGER.debug(f"Saved correlations for {correlations_data['total_entities']} entities")
         
     except Exception as e:
         _LOGGER.error(f"Error saving correlations: {e}")
@@ -171,6 +171,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     websocket_api.async_register_command(hass, handle_update_filtered_alerts)
     websocket_api.async_register_command(hass, handle_clear_storage)
     websocket_api.async_register_command(hass, handle_stop_operation)
+    websocket_api.async_register_command(hass, handle_get_ai_logs)
 
     # Store the storage object for later use
     store = storage.Store(hass, STORAGE_VERSION, INTELLIGENCE_DATA_KEY)
@@ -1325,4 +1326,34 @@ async def handle_configure_alert_service(hass: HomeAssistant, connection: websoc
         _LOGGER.error(f"Error configuring alert service: {e}")
         connection.send_message(websocket_api.error_message(
             msg["id"], "config_error", str(e)
+        ))
+
+
+@websocket_api.websocket_command({
+    "type": "hass_ai/get_ai_logs",
+    vol.Optional("limit", default=100): int,
+    vol.Optional("level", default="all"): str
+})
+@websocket_api.async_response
+async def handle_get_ai_logs(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Handle request to get AI interaction logs."""
+    from .intelligence import _get_ai_logger
+    
+    try:
+        ai_logger = _get_ai_logger(hass)
+        limit = msg.get("limit", 100)
+        level = msg.get("level", "all")
+        
+        logs = ai_logger.get_logs(limit=limit, level=level)
+        
+        connection.send_message(websocket_api.result_message(msg["id"], {
+            "logs": logs,
+            "total_logs": len(logs),
+            "log_directory": ai_logger.log_dir
+        }))
+        
+    except Exception as e:
+        _LOGGER.error(f"Error getting AI logs: {e}")
+        connection.send_message(websocket_api.error_message(
+            msg["id"], "log_error", str(e)
         ))
